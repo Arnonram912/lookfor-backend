@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pyodbc
+python-dotenv
+python-jose
+passlib[bcrypt]
+bcrypt
+python-multipart
+jinja2
+pydantic[email]
+pillow
+numpy
+torch
+transformers
