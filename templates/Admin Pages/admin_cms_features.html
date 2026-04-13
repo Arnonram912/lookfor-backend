@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LookFor CMS - Features</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='landing.css') }}?v=5.1">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        .cms-controls {
+            position: fixed;
+            top: 88px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+
+        .cms-editable {
+            transition: border-color 0.2s ease;
+        }
+
+        .cms-image-editing {
+            border: 4px dashed #ffc107 !important;
+            cursor: pointer !important;
+        }
+    </style>
+</head>
+<body>
+    <header class="navbar">
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav>
+             <ul>
+                <li><a href="/admin/Content-management">Content Management</a></li>
+                <li><a href="/admin/Content-Editor">Home</a></li>
+                <li><a href="/admin/Content-management/features" class="active">Features</a></li>
+                <li><a href="/admin/Content-management/about">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script&display=swap" rel="stylesheet">
+
+    <div id="cms-controls" class="cms-controls">
+        <button id="edit-mode-btn" onclick="toggleEditMode()" class="btn-primary" style="background: #ffc107; color: #000; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+            Edit Content
+        </button>
+        <button id="save-cms-btn" onclick="saveExploreChanges()" class="btn-primary" style="display: none; background: #28a745; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+            Save Changes
+        </button>
+    </div>
+
+    <section id="explore-features-section" class="explore-container">
+        <div class="features-grid-section" data-aos="fade-up">
+            <h1 id="cms-explore-hero-title" class="explore-title cms-editable">Explore <span>Features</span></h1>
+            <p id="cms-explore-hero-desc" class="explore-description cms-editable">
+                Discover how LookFor innovates the lost and found process of STI College Novaliches with AI-powered image-text matching that is efficient, reliable, and secure.
+            </p>
+            <a href="/login" class="btn-get-started">Get Started</a>
+        </div>
+    </section>
+
+    <section class="student-features" data-aos="fade-up">
+        <div class="container">
+            <h2 id="cms-explore-student-title" class="main-headline center cms-editable">Student-focused <span>Features</span></h2>
+            <p id="cms-explore-student-desc" class="sub-description center cms-editable">Find what is yours with AI-powered image-text matching and a user-friendly interface for successful lost and found processes.</p>
+
+            <div class="features-row">
+                <div class="feature-card-item js-tilt" data-tilt>
+                    <div class="icon-circle">
+                        <input type="file" id="cms-explore-student-1-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-explore-student-1-img')">
+                        <img id="cms-explore-student-1-img" src="/static/images/stilogo.png" alt="Student feature 1" onclick="triggerFileWindow('cms-explore-student-1-file')">
+                    </div>
+                    <h3 id="cms-explore-student-1-title" class="cms-editable">Report Lost Items</h3>
+                    <p id="cms-explore-student-1-desc" class="cms-editable">Submit lost item reports with clear details and photos so the community can help you faster.</p>
+                </div>
+
+                <div class="feature-card-item js-tilt" data-tilt>
+                    <div class="icon-circle">
+                        <input type="file" id="cms-explore-student-2-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-explore-student-2-img')">
+                        <img id="cms-explore-student-2-img" src="/static/images/stilogo.png" alt="Student feature 2" onclick="triggerFileWindow('cms-explore-student-2-file')">
+                    </div>
+                    <h3 id="cms-explore-student-2-title" class="cms-editable">Track Match Progress</h3>
+                    <p id="cms-explore-student-2-desc" class="cms-editable">Monitor possible matches and claim updates in one organized place.</p>
+                </div>
+
+                <div class="feature-card-item js-tilt" data-tilt>
+                    <div class="icon-circle">
+                        <input type="file" id="cms-explore-student-3-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-explore-student-3-img')">
+                        <img id="cms-explore-student-3-img" src="/static/images/stilogo.png" alt="Student feature 3" onclick="triggerFileWindow('cms-explore-student-3-file')">
+                    </div>
+                    <h3 id="cms-explore-student-3-title" class="cms-editable">Chat With Admin</h3>
+                    <p id="cms-explore-student-3-desc" class="cms-editable">Coordinate with the admin office when you need verification or claim assistance.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="student-features" data-aos="fade-up">
+        <div class="container">
+            <h2 id="cms-explore-admin-title" class="main-headline center cms-editable">Admin-focused <span>Features</span></h2>
+            <p id="cms-explore-admin-desc" class="sub-description center cms-editable">Give administrators the tools to review reports, monitor activity, and keep the lost and found process organized.</p>
+
+            <div class="features-row">
+                <div class="feature-card-item js-tilt" data-tilt>
+                    <div class="icon-circle">
+                        <input type="file" id="cms-explore-admin-1-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-explore-admin-1-img')">
+                        <img id="cms-explore-admin-1-img" src="/static/images/stilogo.png" alt="Admin feature 1" onclick="triggerFileWindow('cms-explore-admin-1-file')">
+                    </div>
+                    <h3 id="cms-explore-admin-1-title" class="cms-editable">Monitor Activities</h3>
+                    <p id="cms-explore-admin-1-desc" class="cms-editable">Review user and system activity while enforcing school policies inside the platform.</p>
+                </div>
+
+                <div class="feature-card-item js-tilt" data-tilt>
+                    <div class="icon-circle">
+                        <input type="file" id="cms-explore-admin-2-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-explore-admin-2-img')">
+                        <img id="cms-explore-admin-2-img" src="/static/images/stilogo.png" alt="Admin feature 2" onclick="triggerFileWindow('cms-explore-admin-2-file')">
+                    </div>
+                    <h3 id="cms-explore-admin-2-title" class="cms-editable">Manage Reports</h3>
+                    <p id="cms-explore-admin-2-desc" class="cms-editable">Handle lost and found submissions efficiently from a centralized dashboard.</p>
+                </div>
+
+                <div class="feature-card-item js-tilt" data-tilt>
+                    <div class="icon-circle">
+                        <input type="file" id="cms-explore-admin-3-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-explore-admin-3-img')">
+                        <img id="cms-explore-admin-3-img" src="/static/images/stilogo.png" alt="Admin feature 3" onclick="triggerFileWindow('cms-explore-admin-3-file')">
+                    </div>
+                    <h3 id="cms-explore-admin-3-title" class="cms-editable">Generate Summaries</h3>
+                    <p id="cms-explore-admin-3-desc" class="cms-editable">Generate summaries and semester reports for better oversight and decision-making.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="improve-section">
+        <div class="container" data-aos="zoom-in" data-aos-duration="1000">
+            <h2 id="cms-explore-cta-title" class="cta-headline cms-editable">Improve the process<br>with <span>Look<span>for</span></span></h2>
+            <p id="cms-explore-cta-desc" class="cta-subtext cms-editable">
+                Join the community to enhance the lost and found system of STI College Novaliches from reporting and surrendering found items to finding and retrieving lost ones.
+            </p>
+            <div class="cta-buttons-row">
+                <a href="/login" class="btn-solid-blue animate-pulse">Start Reporting Now</a>
+                <a href="/admin/Content-management/about" class="btn-outline-blue">About Page</a>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tilt.js/1.2.1/tilt.jquery.min.js"></script>
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        let isEditMode = false;
+
+        function setImagePath(img, path) {
+            if (!img || !path) return;
+            img.src = path.startsWith("/") ? path : `/${path}`;
+        }
+
+        async function loadExploreContent() {
+            try {
+                const response = await fetch("/api/content/landing");
+                const data = await response.json();
+
+                if (data.explore_hero) {
+                    document.getElementById("cms-explore-hero-title").innerHTML = data.explore_hero.title || "Explore <span>Features</span>";
+                    document.getElementById("cms-explore-hero-desc").innerText = data.explore_hero.description || "Discover how LookFor innovates the lost and found process of STI College Novaliches with AI-powered image-text matching that is efficient, reliable, and secure.";
+                }
+
+                if (data.explore_student_section) {
+                    document.getElementById("cms-explore-student-title").innerHTML = data.explore_student_section.title || "Student-focused <span>Features</span>";
+                    document.getElementById("cms-explore-student-desc").innerText = data.explore_student_section.description || "Find what is yours with AI-powered image-text matching and a user-friendly interface for successful lost and found processes.";
+                }
+
+                if (Array.isArray(data.explore_student_cards)) {
+                    const fallbackTitles = [
+                        "Report Lost Items",
+                        "Track Match Progress",
+                        "Chat With Admin"
+                    ];
+                    const fallbackDescs = [
+                        "Submit lost item reports with clear details and photos so the community can help you faster.",
+                        "Monitor possible matches and claim updates in one organized place.",
+                        "Coordinate with the admin office when you need verification or claim assistance."
+                    ];
+                    data.explore_student_cards.forEach((card, index) => {
+                        const n = index + 1;
+                        document.getElementById(`cms-explore-student-${n}-title`).innerText = card.title || fallbackTitles[index];
+                        document.getElementById(`cms-explore-student-${n}-desc`).innerText = card.description || fallbackDescs[index];
+                        setImagePath(document.getElementById(`cms-explore-student-${n}-img`), card.image_path);
+                    });
+                }
+
+                if (data.explore_admin_section) {
+                    document.getElementById("cms-explore-admin-title").innerHTML = data.explore_admin_section.title || "Admin-focused <span>Features</span>";
+                    document.getElementById("cms-explore-admin-desc").innerText = data.explore_admin_section.description || "Give administrators the tools to review reports, monitor activity, and keep the lost and found process organized.";
+                }
+
+                if (Array.isArray(data.explore_admin_cards)) {
+                    const fallbackTitles = [
+                        "Monitor Activities",
+                        "Manage Reports",
+                        "Generate Summaries"
+                    ];
+                    const fallbackDescs = [
+                        "Review user and system activity while enforcing school policies inside the platform.",
+                        "Handle lost and found submissions efficiently from a centralized dashboard.",
+                        "Generate summaries and semester reports for better oversight and decision-making."
+                    ];
+                    data.explore_admin_cards.forEach((card, index) => {
+                        const n = index + 1;
+                        document.getElementById(`cms-explore-admin-${n}-title`).innerText = card.title || fallbackTitles[index];
+                        document.getElementById(`cms-explore-admin-${n}-desc`).innerText = card.description || fallbackDescs[index];
+                        setImagePath(document.getElementById(`cms-explore-admin-${n}-img`), card.image_path);
+                    });
+                }
+
+                if (data.explore_cta) {
+                    document.getElementById("cms-explore-cta-title").innerHTML = data.explore_cta.title || "Improve the process<br>with <span>Look<span>for</span></span>";
+                    document.getElementById("cms-explore-cta-desc").innerText = data.explore_cta.description || "Join the community to enhance the lost and found system of STI College Novaliches from reporting and surrendering found items to finding and retrieving lost ones.";
+                }
+            } catch (error) {
+                console.error("Failed to load explore CMS content:", error);
+            }
+        }
+
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+
+            document.querySelectorAll(".cms-editable").forEach((el) => {
+                el.contentEditable = isEditMode ? "true" : "false";
+                el.style.border = isEditMode ? "2px dashed #ffc107" : "none";
+            });
+
+            document.querySelectorAll('[id$="-img"]').forEach((img) => {
+                if (!img.id.startsWith("cms-explore-")) return;
+                img.classList.toggle("cms-image-editing", isEditMode);
+                img.title = isEditMode ? "Click to change image" : "";
+            });
+
+            document.getElementById("edit-mode-btn").innerText = isEditMode ? "Cancel" : "Edit Content";
+            document.getElementById("save-cms-btn").style.display = isEditMode ? "block" : "none";
+        }
+
+        function triggerFileWindow(targetId) {
+            if (!isEditMode) return;
+            const input = document.getElementById(targetId);
+            if (input) input.click();
+        }
+
+        function previewImage(event, outputId) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                const output = document.getElementById(outputId);
+                if (output) output.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function saveExploreChanges() {
+            const saveBtn = document.getElementById("save-cms-btn");
+            saveBtn.innerText = "Saving...";
+            saveBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append("explore_hero_title", document.getElementById("cms-explore-hero-title").innerHTML);
+            formData.append("explore_hero_desc", document.getElementById("cms-explore-hero-desc").innerText);
+            formData.append("explore_student_title", document.getElementById("cms-explore-student-title").innerHTML);
+            formData.append("explore_student_desc", document.getElementById("cms-explore-student-desc").innerText);
+            formData.append("explore_admin_title", document.getElementById("cms-explore-admin-title").innerHTML);
+            formData.append("explore_admin_desc", document.getElementById("cms-explore-admin-desc").innerText);
+            formData.append("explore_cta_title", document.getElementById("cms-explore-cta-title").innerHTML);
+            formData.append("explore_cta_desc", document.getElementById("cms-explore-cta-desc").innerText);
+
+            for (let i = 1; i <= 3; i++) {
+                formData.append(`explore_student_${i}_title`, document.getElementById(`cms-explore-student-${i}-title`).innerText);
+                formData.append(`explore_student_${i}_desc`, document.getElementById(`cms-explore-student-${i}-desc`).innerText);
+                const studentFile = document.getElementById(`cms-explore-student-${i}-file`);
+                if (studentFile && studentFile.files[0]) {
+                    formData.append(`explore_student_${i}_img`, studentFile.files[0]);
+                }
+
+                formData.append(`explore_admin_${i}_title`, document.getElementById(`cms-explore-admin-${i}-title`).innerText);
+                formData.append(`explore_admin_${i}_desc`, document.getElementById(`cms-explore-admin-${i}-desc`).innerText);
+                const adminFile = document.getElementById(`cms-explore-admin-${i}-file`);
+                if (adminFile && adminFile.files[0]) {
+                    formData.append(`explore_admin_${i}_img`, adminFile.files[0]);
+                }
+            }
+
+            try {
+                const response = await fetch("/admin/api/update-content/bulk", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${localStorage.getItem("admin_token") || ""}`,
+                    },
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const result = await response.json();
+                    throw new Error(result.detail || "Save failed");
+                }
+
+                alert("Explore page content saved.");
+                toggleEditMode();
+                await loadExploreContent();
+            } catch (error) {
+                alert(`Save failed: ${error.message}`);
+            } finally {
+                saveBtn.innerText = "Save Changes";
+                saveBtn.disabled = false;
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadExploreContent();
+
+            $(".js-tilt").tilt({
+                scale: 1.05,
+                perspective: 1000,
+                speed: 400,
+            });
+
+            AOS.init({ once: true });
+        });
+    </script>
+</body>
+</html>

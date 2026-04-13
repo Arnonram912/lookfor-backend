@@ -1,0 +1,876 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Admin Panel | LookFor STI</title> 
+
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+    <style>
+        .content-scroll-shell {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .content-scroll-shell .action-bar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: #fff;
+            padding-top: 24px;
+            padding-bottom: 18px;
+            margin-bottom: 0;
+        }
+
+        .content-admin-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+
+        .content-admin-toolbar p {
+            margin: 0;
+            opacity: 0.92;
+        }
+
+        .content-admin-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .mini-action-btn {
+            padding: 10px 14px;
+            background: #ffe000;
+            color: #111;
+            border: 2px solid #1a1a1a;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 3px 3px 0 #000;
+        }
+
+        .mini-action-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0 #000;
+        }
+
+        .content-data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .content-data-table thead {
+            background: #f8f9fa;
+            text-align: left;
+        }
+
+        .content-data-table th {
+            padding: 10px;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .section-click-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+
+        .section-click-header h3 {
+            margin: 0;
+        }
+
+        .section-open-hint {
+            padding: 8px 12px;
+            background: #eef5ff;
+            border: 1px solid #b8d4f0;
+            border-radius: 999px;
+            color: #0056b3;
+            font-size: 0.9rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .content-modal-card {
+            max-width: 460px;
+            border-radius: 16px;
+            border: 3px solid #0056b3;
+            box-shadow: 0 20px 40px rgba(0, 44, 102, 0.24);
+            pointer-events: auto;
+        }
+
+        .content-modal-card h2 {
+            color: #0056b3;
+            margin-bottom: 12px;
+        }
+
+        .content-modal-card p {
+            color: #4f5d75;
+            margin-bottom: 18px;
+        }
+
+        .content-modal-card label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .content-modal-card input[type="text"] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #d6dbe4;
+            border-radius: 10px;
+            margin-bottom: 18px;
+        }
+
+        .content-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .content-cancel-btn {
+            padding: 10px 14px;
+            border: 1px solid #ced4da;
+            border-radius: 10px;
+            background: #fff;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .content-submit-btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 10px;
+            background: #0056b3;
+            color: #fff;
+            cursor: pointer;
+            font-weight: 700;
+        }
+    </style>
+
+</head> 
+
+<body> 
+
+  
+
+    <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+          <ul class="nav-links"> 
+
+           <li>
+                <a href="/admin/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li data-permission="Messages">
+                <a href= "#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+             <li data-permission="User-Management">
+                <a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" 
+                style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/userw.png" class="side-icon"> User Management
+                </a>
+            </li>
+
+
+            <li data-permission="Lost-Reports">
+                <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
+                
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                </a>
+            </li>
+
+            <li >
+                 <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrender Item
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Claim Management
+                </a>
+            </li>
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Confiscated Items
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/folderw.png" class="side-icon">  Reports
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+             <li class="active">
+                <a href="#" onclick="checkAccess('/admin/Content-management', 'Content-management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/form.png" class="side-icon">  Content Management
+                </a>
+            </li>
+
+        </ul> 
+    </nav> 
+    
+
+  
+  <main class="main-content"> 
+
+       
+    <header class="top-bar navbar">
+    <div class="search-container">
+        
+    </div>
+
+   <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/admin/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+         <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/admin/Profile'">My Profile</li>
+                    <li onclick="window.location.href='/admin/Settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+</header>
+<div class="page-scroll-area">
+        <section class="content-body">
+            <div class="profile-page-card">
+            <h2 class="section-title">Content <span>Management</span></h2> 
+               <div class="action-bar">
+        
+        <button class="upload-btn" onclick="openModal('announcementModal')">
+            <span class="plus">+</span> Replace Announcement
+        </button upload-btn >
+        <a class="upload-btn" href="/admin/Content-Editor"  style="color: black; text-decoration: none; display: inline-flex; align-items: center;">
+            <span class="plus">+</span> Landing Page Update
+        </a>
+    </div>
+
+<div id="announcementModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-modal" onclick="closeAnnouncementModal()">&times;</span>
+        <h2 id="modalTitle" style="color: #0056b3; margin-bottom: 20px;">📢 Replace Current Announcement</h2>
+        
+        <form id="announcementForm">
+            <input type="hidden" id="editAnnouncementId">
+
+            <div style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:600; margin-bottom:5px;">Title</label>
+                <input type="text" id="announceTitle" placeholder="e.g., Campus Maintenance" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px;">
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:600; margin-bottom:5px;">Content / Message</label>
+                <textarea id="announceContent" placeholder="Describe the news or update..." style="width:100%; height:100px; padding:10px; border:1px solid #ddd; border-radius:5px;"></textarea>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display:block; font-weight:600; margin-bottom:5px;">Update Image (Optional)</label>
+                <input type="file" id="announceImageFile" accept="image/*" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px;">
+                <div id="imagePreviewContainer" style="margin-top: 10px; display: none;">
+                    <p style="font-size: 0.8em; color: #666;">Current Image:</p>
+                    <img id="currentImagePreview" src="" style="width: 100px; border-radius: 5px; border: 1px solid #ccc;">
+                </div>
+            </div>
+
+            <button type="button" id="submitBtn" class="btn-primary" onclick="submitAnnouncement()" style="width:100%; padding:12px; background:#0056b3; color:white; border:none; border-radius:5px; font-weight:600; cursor:pointer;">
+                Replace Announcement
+            </button>
+        </form>
+    </div>
+</div>
+<div id="categoryModal" class="modal">
+    <div class="modal-content content-modal-card">
+        <span class="close-modal" onclick="closeModal('categoryModal')">&times;</span>
+        <h2>Add Category</h2>
+        <p>Create a new category that can be used across item reports and matching.</p>
+        <label for="newCategoryName">Category Name</label>
+        <input type="text" id="newCategoryName" placeholder="Enter category name">
+        <div class="content-modal-actions">
+            <button type="button" class="content-cancel-btn" onclick="closeModal('categoryModal')">Cancel</button>
+            <button type="button" class="content-submit-btn" onclick="createCategory()">Save Category</button>
+        </div>
+    </div>
+</div>
+<div id="departmentModal" class="modal">
+    <div class="modal-content content-modal-card">
+        <span class="close-modal" onclick="closeModal('departmentModal')">&times;</span>
+        <h2>Add Department</h2>
+        <p>Create a new department that can be selected for users and reports.</p>
+        <label for="newDepartmentName">Department Name</label>
+        <input type="text" id="newDepartmentName" placeholder="Enter department name">
+        <div class="content-modal-actions">
+            <button type="button" class="content-cancel-btn" onclick="closeModal('departmentModal')">Cancel</button>
+            <button type="button" class="content-submit-btn" onclick="createDepartment()">Save Department</button>
+        </div>
+    </div>
+</div>
+<section class="content-body">
+<div style="margin: 12px 0 24px; padding: 18px 20px; background: linear-gradient(135deg, #003366, #0056b3); color: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,51,102,0.18);">
+    <div class="content-admin-toolbar">
+        <div>
+            <h3 style="margin: 0 0 6px; font-size: 1.4rem;">Manage Categories & Departments</h3>
+            <p>Add or delete the category list and department list used across the system.</p>
+        </div>
+        <div class="content-admin-actions">
+            <button type="button" class="mini-action-btn" onclick="openModal('categoryModal')">+ Add Category</button>
+            <button type="button" class="mini-action-btn" onclick="openModal('departmentModal')">+ Add Department</button>
+        </div>
+    </div>
+</div>
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 24px;">
+    <div class="content-section" style="padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+        <div class="section-click-header" onclick="openModal('categoryModal')" title="Add category">
+            <h3 style="color: #2c3e50;">Categories</h3>
+            <span class="section-open-hint">Click to add</span>
+        </div>
+        <table class="content-data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th style="width:100px;">Action</th>
+                </tr>
+            </thead>
+            <tbody id="categoryTableBody"></tbody>
+        </table>
+    </div>
+
+    <div class="content-section" style="padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+        <div class="section-click-header" onclick="openModal('departmentModal')" title="Add department">
+            <h3 style="color: #2c3e50;">Departments</h3>
+            <span class="section-open-hint">Click to add</span>
+        </div>
+        <table class="content-data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th style="width:100px;">Action</th>
+                </tr>
+            </thead>
+            <tbody id="departmentTableBody"></tbody>
+        </table>
+    </div>
+</div>
+ <div class="announcement-section">
+            <div class="carousel-container" id="announcementDisplay">
+                <div class="loading-spinner" style="text-align: center; padding: 50px;">
+                    Loading updates...
+                </div>
+            </div>
+        </div>
+
+<div class="content-section" style="margin-top: 30px; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+    <h3 style="color: #2c3e50; margin-bottom: 15px;">📢 Current Announcement</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead style="background: #f8f9fa; text-align: left;">
+            <tr>
+                <th style="padding: 12px; border-bottom: 2px solid #dee2e6;">Title</th>
+                <th style="padding: 12px; border-bottom: 2px solid #dee2e6;">Date Posted</th>
+                <th style="padding: 12px; border-bottom: 2px solid #dee2e6;">Action</th>
+            </tr>
+        </thead>
+        <tbody id="announcementTableBody">
+            </tbody>
+    </table>
+</div>
+<div id="confirmPublishModal" class="modal" style="z-index: 2000;">
+    <div class="modal-content" style="max-width: 350px; text-align: center; padding: 30px;">
+        <h3>Replace Announcement?</h3>
+        <p>This will replace the current announcement for all students immediately.</p>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button onclick="closeModal('confirmPublishModal')" style="flex:1; padding:10px; border-radius:5px; border:1px solid #ddd; cursor:pointer;">Cancel</button>
+            <button id="finalConfirmBtn" onclick="executeSubmitAnnouncement()" style="flex:1; padding:10px; border-radius:5px; background:#0056b3; color:white; border:none; cursor:pointer; font-weight:600;">Confirm & Publish</button>
+        </div>
+    </div>
+</div>
+</section>
+ </div>
+  </main>
+
+
+<script>
+function closeAllDropdowns() {
+        const dropdowns = [
+            "notificationDropdown",
+            "messageDropdown",
+            "profileDropdown"
+        ];
+
+        dropdowns.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = "none";
+        });
+    }
+    // --- NOTIFICATION LOGIC ---
+    function toggleNotifications() {
+        const dropdown = document.getElementById("notificationDropdown");
+        dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
+    }
+
+    function toggleProfile(event) {
+        event?.stopPropagation?.();
+        const dropdown = document.getElementById("profileDropdown");
+        const isOpen = dropdown.style.display === "block";
+        closeAllDropdowns();
+        dropdown.style.display = isOpen ? "none" : "block";
+    }
+
+// Helper to prevent XSS and crashes
+function escapeHtml(text) {
+    if (!text) return "";
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+function getAdminAuthHeader() {
+    const token = localStorage.getItem("admin_token");
+    return token ? { "Authorization": `Bearer ${token}` } : {};
+}
+
+function renderAnnouncementTable(announcements) {
+    const tbody = document.getElementById('announcementTableBody');
+    if (!tbody) return;
+
+    if (!announcements || announcements.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" style="padding:16px; text-align:center; color:#666;">No announcements yet.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = announcements.map(anno => `
+        <tr>
+            <td style="padding: 12px; border-bottom: 1px solid #eee;">${escapeHtml(anno.title)}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee;">${new Date(anno.created_at).toLocaleString()}</td>
+            <td style="padding: 12px; border-bottom: 1px solid #eee;">Current</td>
+        </tr>
+    `).join('');
+}
+
+function renderSimpleTableRows(items, tbodyId, deleteHandlerName, emptyLabel) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+
+    if (!items || items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="2" style="padding:14px; text-align:center; color:#666;">No ${emptyLabel} found.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = items.map(item => `
+        <tr>
+            <td style="padding: 10px; border-bottom: 1px solid #eee;">${escapeHtml(item.name)}</td>
+            <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                <button type="button" onclick="${deleteHandlerName}(${item.id}, '${escapeHtml(item.name).replace(/'/g, "\\'")}')" style="padding:8px 12px; background:#dc3545; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:600;">Delete</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function loadCategoriesTable() {
+    const response = await fetch('/admin/category', { headers: getAdminAuthHeader() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to load categories.');
+    renderSimpleTableRows(data, 'categoryTableBody', 'deleteCategory', 'categories');
+}
+
+async function loadDepartmentsTable() {
+    const response = await fetch('/admin/departments', { headers: getAdminAuthHeader() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to load departments.');
+    renderSimpleTableRows(data, 'departmentTableBody', 'deleteDepartment', 'departments');
+}
+
+async function createCategory() {
+    const input = document.getElementById('newCategoryName');
+    const name = String(input?.value || '').trim();
+    if (!name) {
+        alert('Please enter a category name.');
+        return;
+    }
+
+    const response = await fetch('/admin/categories', {
+        method: 'POST',
+        headers: {
+            ...getAdminAuthHeader(),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Failed to create category.');
+    input.value = '';
+    await loadCategoriesTable();
+    closeModal('categoryModal');
+}
+
+async function createDepartment() {
+    const input = document.getElementById('newDepartmentName');
+    const name = String(input?.value || '').trim();
+    if (!name) {
+        alert('Please enter a department name.');
+        return;
+    }
+
+    const response = await fetch('/admin/departments', {
+        method: 'POST',
+        headers: {
+            ...getAdminAuthHeader(),
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Failed to create department.');
+    input.value = '';
+    await loadDepartmentsTable();
+    closeModal('departmentModal');
+}
+
+async function deleteCategory(categoryId, name) {
+    if (!confirm(`Delete category "${name}"?`)) return;
+    const response = await fetch(`/admin/categories/${categoryId}`, {
+        method: 'DELETE',
+        headers: getAdminAuthHeader()
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Failed to delete category.');
+    await loadCategoriesTable();
+}
+
+async function deleteDepartment(departmentId, name) {
+    if (!confirm(`Delete department "${name}"?`)) return;
+    const response = await fetch(`/admin/departments/${departmentId}`, {
+        method: 'DELETE',
+        headers: getAdminAuthHeader()
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Failed to delete department.');
+    await loadDepartmentsTable();
+}
+    
+     async function checkAccess(targetUrl, permission) {
+    const token = localStorage.getItem("admin_token");
+    
+    if (!token) {
+        window.location.href = "/login";
+        return;
+    }
+
+    try {
+        // Fetch fresh permissions from the backend
+        const response = await fetch("/admin/my-permissions", {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error("Unauthorized");
+
+        const permissions = await response.json();
+
+        // Check if the required permission exists in the user's list
+        if (permissions.includes(permission)) {
+            window.location.href = targetUrl;
+        } else {
+            showAccessDeniedPopup(permission);
+        }
+    } catch (error) {
+        console.error("Access check failed:", error);
+        showAccessDeniedPopup(permission);
+    }
+}
+
+function showAccessDeniedPopup(permName) {
+    // Create the overlay
+    const overlay = document.createElement('div');
+    overlay.id = "access-denied-modal";
+    overlay.style = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.7); display: flex; 
+        justify-content: center; align-items: center; z-index: 9999;
+        backdrop-filter: blur(4px);
+    `;
+
+    // Create the modal box
+    overlay.innerHTML = `
+        <div style="background: white; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="font-size: 50px; margin-bottom: 20px;">🔒</div>
+            <h2 style="color: #d9534f; margin-bottom: 10px; font-family: 'Montserrat', sans-serif;">Access Denied</h2>
+            <p style="color: #555; line-height: 1.5;">
+                Your account does not have the <strong>${permName}</strong> permission required to view this page.
+            </p>
+            <button onclick="document.getElementById('access-denied-modal').remove()" 
+                style="margin-top: 25px; padding: 12px 30px; background: #003366; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                Close
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
+    // Function to open the modal
+function openModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = "flex"; // Using flex to help with centering
+        if (modalId === 'categoryModal') {
+            setTimeout(() => document.getElementById('newCategoryName')?.focus(), 50);
+        } else if (modalId === 'departmentModal') {
+            setTimeout(() => document.getElementById('newDepartmentName')?.focus(), 50);
+        }
+    }
+}
+
+// Function to close the modal
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = "none";
+    }
+}
+
+// Close modal if user clicks outside the content area
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = "none";
+    }
+}
+
+document.addEventListener('keydown', function(event) {
+    if (event.key !== 'Escape') return;
+    document.querySelectorAll('.modal').forEach(modal => {
+        if (modal.style.display === 'flex') {
+            modal.style.display = 'none';
+        }
+    });
+});
+function filterUsers() {
+    const input = document.getElementById("searchInput").value.toLowerCase();
+    const rows = document.querySelectorAll("#userTable tbody tr");
+
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(input) ? "" : "none";
+    });
+}
+
+function toggleStatus(button) {
+    const row = button.closest("tr");
+    const statusCell = row.querySelector(".status");
+
+    if (statusCell.classList.contains("active")) {
+        statusCell.classList.remove("active");
+        statusCell.classList.add("disabled");
+        statusCell.textContent = "Disabled";
+        button.textContent = "Enable";
+        button.style.background = "#28a745";
+    } else {
+        statusCell.classList.remove("disabled");
+        statusCell.classList.add("active");
+        statusCell.textContent = "Active";
+        button.textContent = "Disable";
+        button.style.background = "#dc3545";
+    }
+}
+
+// --- 1. Reset Form ---
+function clearAnnouncementForm() {
+    document.getElementById('announceTitle').value = "";
+    document.getElementById('announceContent').value = "";
+    document.getElementById('announceImageFile').value = "";
+    if(document.getElementById('imagePreviewContainer')) {
+        document.getElementById('imagePreviewContainer').style.display = "none";
+    }
+}
+async function loadAnnouncements() {
+    try {
+        const response = await fetch('/api/announcements');
+        const announcements = await response.json();
+        const container = document.getElementById('announcementDisplay');
+        renderAnnouncementTable(announcements);
+        
+        if (!announcements || announcements.length === 0) {
+            container.innerHTML = `<p style="text-align:center; padding:20px; color: #666;">No active announcements found.</p>`;
+            return;
+        }
+
+        const anno = announcements[0];
+        const imgSrc = anno.image_url.startsWith('/') ? anno.image_url : `/${anno.image_url}`;
+
+        container.innerHTML = `
+            <div style="position: relative;">
+                <img src="${imgSrc}" 
+                     alt="${escapeHtml(anno.title)}" 
+                     style="width:100%; height:300px; object-fit:cover; border-radius:10px;"
+                     onerror="this.src='/static/photos/default_news.jpg'">
+                <div style="background: rgba(0,0,0,0.6); padding: 15px; border-radius: 0 0 10px 10px; position:absolute; left:0; right:0; bottom:0;">
+                    <h2 style="color: #ffc107; margin:0;">${escapeHtml(anno.title)}</h2>
+                    <p style="color: white; margin: 5px 0 0 0;">${escapeHtml(anno.content)}</p>
+                </div>
+            </div>
+        `;
+
+    } catch (err) {
+        console.error("Failed to load announcements:", err);
+        document.getElementById('announcementDisplay').innerHTML = "Error loading announcements.";
+    }
+}
+// --- 2. Handle "X" Close Button ---
+function closeAnnouncementModal() {
+    const title = document.getElementById('announceTitle').value;
+    const content = document.getElementById('announceContent').value;
+    const file = document.getElementById('announceImageFile').files[0];
+
+    // Check if user has input anything
+    if (title || content || file) {
+        if (confirm("⚠️ Warning: The information you entered will disappear. Are you sure you want to close?")) {
+            executeClose();
+        }
+    } else {
+        executeClose();
+    }
+}
+
+function executeClose() {
+    document.getElementById('announcementModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    clearAnnouncementForm(); // Wipe the info
+}
+
+// --- 3. Step-by-Step Submission ---
+function submitAnnouncement() {
+    // Basic validation before even showing confirm modal
+    if (!document.getElementById('announceTitle').value || !document.getElementById('announceImageFile').files[0]) {
+        alert("Please provide at least a title and an image.");
+        return;
+    }
+    openModal('confirmPublishModal'); // Open the small confirmation box
+}
+
+async function executeSubmitAnnouncement() {
+    const token = localStorage.getItem("admin_token");
+    const confirmBtn = document.getElementById('finalConfirmBtn');
+    
+    confirmBtn.innerText = "Publishing...";
+    confirmBtn.disabled = true;
+
+    const formData = new FormData();
+    formData.append("title", document.getElementById('announceTitle').value);
+    formData.append("content", document.getElementById('announceContent').value);
+    formData.append("file", document.getElementById('announceImageFile').files[0]);
+
+    try {
+        const response = await fetch('/admin/create-announcement', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+
+        if (response.ok) {
+            // Success: Close everything
+            document.getElementById('confirmPublishModal').style.display = 'none';
+            document.getElementById('announcementModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+
+            clearAnnouncementForm(); // Remove information
+            alert("✅ Announcement replaced!");
+            await loadAnnouncements(); 
+        } else {
+            alert("Upload failed. Check if keys 'title', 'content', and 'file' match exactly.");
+            document.getElementById('confirmPublishModal').style.display = 'none';
+        }
+    } catch (err) {
+        alert("Server error.");
+        document.getElementById('confirmPublishModal').style.display = 'none';
+    } finally {
+        confirmBtn.innerText = "Confirm & Publish";
+        confirmBtn.disabled = false;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+    await loadAnnouncements();
+    try {
+        await Promise.all([loadCategoriesTable(), loadDepartmentsTable()]);
+    } catch (error) {
+        console.error("Failed to load content management tables:", error);
+    }
+});
+
+</script>
+
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/force-password-change.js"></script>
+<script src="/static/admin-notifications.js"></script>
+</body>
+</html>

@@ -1,0 +1,737 @@
+/* --- BULK REGISTER MODAL SPECIFIC --- */
+
+/* ===============================
+   SweetAlert Cute Theme
+================================ */
+
+/* Modal */
+/* Default cute modal */
+.swal-wide {
+  width: 600px !important;
+  border-radius: 22px !important;
+}
+
+/* Soft & round */
+.swal-soft {
+  border-radius: 30px !important;
+}
+
+/* Medium round */
+.swal-medium {
+  border-radius: 18px !important;
+}
+
+/* Sharp cute */
+.swal-sharp {
+  border-radius: 12px !important;
+}
+
+/* Extra bubbly */
+.swal-bubble {
+  border-radius: 40px !important;
+}
+
+/* Title */
+.swal-title {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  color: #fe0000 !important;
+}
+
+/* Text */
+.swal-text {
+  font-size: 16px !important;
+  color: #f3d302 !important;
+}
+
+/* Buttons Wrapper */
+.swal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+
+/* Confirm Button */
+.swal-confirm-btn {
+  background-color: #49fb35 !important;
+  color: white !important;
+  border-radius: 30px !important;
+  padding: 10px 22px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 6px 0 #3ea552 !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+/* Cancel Button */
+.swal-cancel-btn {
+  background-color: #ff8fab !important;
+  color: white !important;
+  border-radius: 30px !important;
+  padding: 10px 22px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 6px 0 #e36886 !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+/* Hover Effects */
+.swal-confirm-btn:hover,
+.swal-cancel-btn:hover {
+  transform: translateY(-2px) scale(1.05);
+}
+
+/* Click Effect */
+.swal-confirm-btn:active,
+.swal-cancel-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 3px 0 rgba(0,0,0,0.2) !important;
+}
+
+/* Sweet Icon Animation */
+.swal-icon--success,
+.swal-icon--warning,
+.swal-icon--error {
+  transform: scale(1.15);
+}
+
+.swal2-container,
+body.swal2-shown > .swal2-container,
+body.swal2-height-auto > .swal2-container {
+  z-index: 30000 !important;
+}
+
+.swal2-popup {
+  z-index: 30001 !important;
+}
+/* Modal Backdrop */
+
+
+.modal {
+    display: none; 
+    position: fixed;
+    z-index: 3000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 33, 71, 0.8); /* Dark STI Blue with transparency */
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+/* Modal Box */
+#bulkRegisterModal .modal-content {
+    background: var(--white);
+    padding: 35px;
+    border-radius: 20px; /* Matching your dashboard cards */
+    width: 100%;
+    max-width: 550px;
+    border-top: 8px solid var(--sti-blue); /* Strong branding accent */
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    position: relative;
+}
+
+#resetStudentPasswordModal .modal-content {
+    background: var(--white);
+    padding: 35px;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 550px;
+    border-top: 8px solid var(--sti-blue);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    position: relative;
+}
+
+#resetPasswordResultModal .modal-content {
+    background: var(--white);
+    padding: 35px;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 550px;
+    border-top: 8px solid var(--sti-blue);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    position: relative;
+}
+
+/* Textarea for Emails */
+#bulkEmails {
+    width: 100%;
+    height: 200px;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 15px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 14px;
+    margin: 20px 0;
+    resize: none;
+    transition: all 0.3s ease;
+}
+
+#bulkEmails:focus {
+    border-color: var(--sti-blue);
+    outline: none;
+    box-shadow: 0 0 8px rgba(0, 91, 171, 0.2);
+}
+
+/* Modal Action Button (Matches your upload-btn) */
+#bulkRegisterModal .success-btn,
+#resetStudentPasswordModal .success-btn,
+#resetPasswordResultModal .success-btn {
+    background-color: var(--sti-yellow);
+    color: var(--dark-blue);
+    border: 2px solid #333;
+    padding: 15px;
+    width: 100%;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: 4px 4px 0px #000;
+    transition: 0.1s;
+}
+
+#confirmResetStudentPasswordBtn {
+    background-color: var(--sti-yellow) !important;
+    color: var(--dark-blue) !important;
+    border: 2px solid #333 !important;
+    padding: 15px !important;
+    width: 100% !important;
+    border-radius: 12px !important;
+    font-weight: 800 !important;
+    font-size: 18px !important;
+    cursor: pointer !important;
+    box-shadow: 4px 4px 0px #000 !important;
+    transition: 0.1s !important;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+#bulkRegisterModal .success-btn:active,
+#resetStudentPasswordModal .success-btn:active,
+#resetPasswordResultModal .success-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px #000;
+}
+
+#confirmResetStudentPasswordBtn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0px #000 !important;
+}
+
+/* Close Button (X) */
+.close-modal {
+    position: absolute;
+    right: 25px;
+    top: 20px;
+    font-size: 28px;
+    color: #bbb;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-modal:hover {
+    color: var(--sti-blue);
+}
+
+/* --- DARK MODE SUPPORT --- */
+body.dark-theme .modal-content {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+    border-color: #333;
+}
+
+body.dark-theme #bulkEmails {
+    background-color: #2a2a2a;
+    color: white;
+    border-color: #444;
+}
+
+.form-group {
+    margin-bottom: 15px;
+    text-align: left;
+}
+
+.form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: var(--sti-blue);
+}
+
+.admin-input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.admin-input:focus {
+    outline: 2px solid var(--sti-yellow);
+    border-color: transparent;
+}
+.tab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 10px 20px;
+    border: none;
+    background: #e0e0e0;
+    cursor: pointer;
+    border-radius: 5px;
+    font-weight: 600;
+    transition: 0.3s;
+    color: #333;
+    line-height: 1;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.tab-btn.active {
+    background: #003366; /* STI Blue */
+    color: white;
+}
+
+.tab-btn:hover:not(.active) {
+    background: #ccc;
+}
+.table-header-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    margin-bottom: 25px;
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.table-header-top {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+}
+
+.table-filter-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 16px;
+    flex-wrap: nowrap;
+    width: 100%;
+    margin-top: 12px;
+}
+
+.tab-group, .spacer {
+    display: flex;
+    gap: 10px;
+}
+
+.user-tabs {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 10px;
+}
+
+.tab-divider {
+    width: 2px;
+    height: 30px;
+    margin: 0 10px;
+    background: #ddd;
+    align-self: center;
+}
+
+.tab-btn i {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.batch-filter-container {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.select-all-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid #cfd8e3;
+    border-radius: 999px;
+    background: #fff;
+    color: #0f3d66;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.select-all-control input {
+    width: 16px;
+    height: 16px;
+    accent-color: #003366;
+}
+
+.batch-filter-select {
+    width: 180px;
+    max-width: 180px;
+}
+
+.batch-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    white-space: nowrap;
+}
+
+.table-header-actions > .search-container,
+.search-container-wide {
+    flex: 0 0 360px;
+    display: flex;
+    justify-content: flex-start;
+    min-width: 300px;
+    max-width: 360px;
+}
+
+.action-bar-below {
+    display: flex;
+    justify-content: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+    border-top: 1px solid #e2e6ea;
+    padding-top: 18px;
+    margin-bottom: 18px;
+}
+
+.action-bar-below .upload-btn {
+    margin-bottom: 0;
+    margin-left: 0;
+}
+
+.row-select {
+    width: 16px;
+    height: 16px;
+    accent-color: #003366;
+}
+
+.Srch {
+    width: 100%;
+    max-width: 400px; /* Limits how wide it gets */
+    padding: 10px 15px;
+    border-radius: 25px; /* Rounded look */
+    border: 1px solid #003366; /* STI Blue border */
+    outline: none;
+    transition: 0.3s;
+}
+
+.Srch:focus {
+    box-shadow: 0 0 8px rgba(0, 51, 102, 0.2);
+    border-color: #0055aa;
+}
+
+@media (min-width: 1100px) {
+    .user-tabs {
+        flex-wrap: nowrap;
+    }
+}
+
+@media (max-width: 1200px) {
+    .table-filter-row {
+        flex-wrap: wrap;
+    }
+
+    .search-container-wide {
+        flex: 1 1 100%;
+        max-width: 100%;
+    }
+
+    .batch-filter-container {
+        width: 100%;
+    }
+}
+
+/* ============ PERMISSIONS SECTION ============ */
+.permissions-container {
+    background: #f9f9f9;
+    padding: 15px 18px;
+    border-radius: 10px;
+    border: 1px solid #e5e5e5;
+}
+
+.permissions-container p {
+    margin: 0;
+    font-size: 16px;
+}
+
+/* GRID OF PERMISSIONS */
+.permissions-grid {
+    margin-top: 15px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.perm-item {
+    background: white;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: 0.2s ease;
+}
+
+.perm-item:hover {
+    background: #eef4ff;
+    border-color: #003366;
+}
+
+.disabled-permission {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background: #f3f4f6;
+    border-color: #d4d7dc;
+}
+
+.disabled-permission:hover {
+    background: #f3f4f6;
+    border-color: #d4d7dc;
+}
+
+/* Checkbox size */
+.perm-item input[type="checkbox"] {
+    transform: scale(1.15);
+}
+
+.permission-modal-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.permission-modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.permission-state-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 110px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: #eef1f4;
+    color: #5b6570;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.permission-state-badge.active {
+    background: #e8f7ee;
+    color: #1f7a42;
+}
+
+.permission-helper-text {
+    margin: 0 0 12px;
+    color: #667085;
+    font-size: 13px;
+}
+
+.perm-item.professional {
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid #d9e2ec;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.perm-item.professional:hover {
+    background: #f5f9ff;
+    border-color: #9bb8d3;
+}
+
+.nested-permission-group {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 10px;
+    padding-left: 18px;
+    border-left: 2px solid #d6e4f0;
+}
+
+.perm-item.professional.nested {
+    background: #fbfdff;
+    border-style: dashed;
+}
+
+.user-management-access-panel {
+    grid-column: 1 / -1;
+    margin-top: -2px;
+    margin-bottom: 4px;
+    padding: 14px 16px 4px;
+    border-radius: 12px;
+    background: #f7fbff;
+    border: 1px solid #d7e4f1;
+}
+
+.user-management-access-title {
+    color: #12344d;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.user-management-access-help {
+    color: #667085;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.perm-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.perm-title {
+    color: #12344d;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.perm-desc {
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.permission-summary-panel {
+    margin-top: 18px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #dde7f0;
+}
+
+.permission-summary-title {
+    color: #12344d;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.permission-summary-text {
+    color: #52606d;
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+.permission-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.permission-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: #e8eef7;
+    color: #0f3d66;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* ============ BUTTONS ============ */
+.btn-primary {
+    background: #003366;
+    color: white;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: .25s;
+}
+
+.btn-primary:hover {
+    background: #004b99;
+}
+
+.btn-secondary {
+    background: #ccc;
+    color: #333;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: .25s;
+}
+
+.btn-secondary:hover {
+    background: #b5b5b5;
+}
+
+/* Styling for your own account row */
+.self-row {
+    background-color: #f0f7ff !important; /* Soft blue tint */
+}
+
+.you-badge {
+    background-color: #003366; /* STI Blue */
+    color: white;
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 5px;
+    font-weight: bold;
+}
+
+.locked-btn {
+    background-color: #6c757d;
+    color: #fff;
+    cursor: not-allowed;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    opacity: 0.6;
+}
+
+@media print {
+    /* Hide everything except the result modal content */
+    body * { visibility: hidden; }
+    #bulkResultModal, #bulkResultModal * { visibility: visible; }
+    #bulkResultModal { position: absolute; left: 0; top: 0; width: 100%; border: none; }
+    
+    /* Hide buttons so they don't show up on the printed paper */
+    .btn-primary, .close-modal, #printListBtn { display: none !important; }
+    
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid black; padding: 8px; text-align: left; }
+}

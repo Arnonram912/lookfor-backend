@@ -1,0 +1,1035 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Admin Panel | LookFor STI</title> 
+
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=12"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+
+</head> 
+
+<body> 
+
+  
+
+    <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+        <ul class="nav-links"> 
+
+           <li class="active">
+                <a href="/admin/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li data-permission="Messages">
+                <a href= "#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+             <li data-permission="User-Management">
+                <a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" 
+                style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/userw.png" class="side-icon"> User Management
+                </a>
+            </li>
+
+
+            <li data-permission="Lost-Reports">
+                <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
+                
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                 </a>
+            </li>
+
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Claim Management
+                </a>
+            </li>
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Confiscated Items
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/folderw.png" class="side-icon">  Reports
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+             <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Content-management', 'Content-management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/form.png" class="side-icon">  Content Management
+                </a>
+            </li>
+
+        </ul> 
+
+    </nav> 
+
+    <main class="main-content"> 
+
+       <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/admin/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/admin/Profile'">My Profile</li>
+                    <li onclick="window.location.href='/admin/Settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+     
+
+</header>
+
+    <div class="page-scroll-area">
+
+  
+
+        <section class="content-body dashboard-content-body"> 
+            <div class="profile-page-card dashboard-home-card">
+                <h1 class="section-title">Admin <span>Dashboard</span></h1>
+
+                <div class="dashboard-home-stack">
+                    <div class="announcement-section dashboard-announcement">
+                        <div class="carousel-container" id="adminAnnouncementDisplay">
+                            <div class="loading-spinner" style="text-align: center; padding: 50px;">
+                                Loading current announcement...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid dashboard-stats-grid"> 
+                        <div class="card" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;">
+                            <h3 id="foundCount">0</h3>
+                            <p>Surrendered Items</p>
+                        </div>
+
+                        <div class="card" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;"> 
+                            <h3>12</h3> 
+                            <p>Lost Items</p> 
+                        </div> 
+
+                        <div class="card" onclick="openPendingSurrenderWithAccess(); return false;">
+                            <h3 id="pendingCount">0</h3>
+                            <p>Pending Surrendered Items</p> 
+                        </div>
+
+                        <div class="card" onclick="openClaimedItemsWithAccess(); return false;"> 
+                            <h3 id="claimedCount">0</h3>
+                            <p>Successfully Claimed Items</p> 
+                        </div> 
+                    </div>
+                </div>
+            </div>
+        </section> 
+
+        </div>
+</main> 
+
+    <div id="bulkRegisterModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('bulkRegisterModal')">&times;</span>
+            <h2>Bulk Register Users</h2>
+            <p>Enter STI Emails (one per line):</p>
+            <textarea id="bulkEmails" placeholder="user@novaliches.sti.edu.ph" style="width: 100%; height: 150px; margin: 15px 0; padding: 10px;"></textarea>
+            <button class="btn-primary success-btn" onclick="submitBulk()" style="width: 100%;">Generate Accounts</button>
+        </div>
+    </div>
+
+    <div id="foundItemsModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                <h2>Found Items Inventory</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button class="refresh-btn" onclick="loadFoundItems()" style="padding: 5px 15px;">🔄 Sync AI</button>
+                    <span class="close-modal" onclick="closeModal('foundItemsModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="filter-bar" style="display: flex; gap: 10px; margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+                    <input type="text" id="filterCategory" placeholder="Category..." oninput="loadFoundItems()">
+                    <input type="text" id="filterLocation" placeholder="Location..." oninput="loadFoundItems()">
+                    <input type="date" id="filterDate" onchange="loadFoundItems()">
+                    <button onclick="clearFilters()" class="btn-secondary">Reset</button>
+                </div>
+                <div class="items-grid" id="itemsGrid">
+                    </div>
+            </div>
+            <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
+                <button class="btn-secondary" onclick="closeModal('foundItemsModal')">Close Window</button>
+            </div>
+        </div>
+    </div>
+        <div id="adminActionModal" class="modal">
+            <div class="modal-content" style="max-width: 760px; width: min(760px, 92vw);">
+                <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                    <h2 id="adminModalTitle">Pending Surrender Items</h2>
+                    <span class="close-modal" onclick="closeModal('adminActionModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
+                </div>
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    <div id="adminModalList">
+                        <p style="text-align:center; padding:20px;">Loading items...</p>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
+                    <button class="btn-secondary" onclick="closeModal('adminActionModal')" style="padding: 8px 20px; cursor: pointer;">Close</button>
+                </div>
+            </div>
+        </div>
+        <div id="claimedItemsModal" class="modal">
+            <div class="modal-content" style="max-width: 860px; width: min(860px, 94vw);">
+                <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                    <h2 id="claimedItemsModalTitle">Approved Claimed Items</h2>
+                    <span class="close-modal" onclick="closeModal('claimedItemsModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
+                </div>
+                <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
+                    <div id="claimedItemsList">
+                        <p style="text-align:center; padding:20px;">Loading approved claimed items...</p>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
+                    <button class="btn-secondary" onclick="closeModal('claimedItemsModal')" style="padding: 8px 20px; cursor: pointer;">Close</button>
+                </div>
+            </div>
+        </div>
+  <script>
+    // --- GLOBAL STATE ---
+    let notifications = [];
+    window.allPending = []; // Initialize to prevent "undefined" errors
+    window.allFound = [];
+    window.allApprovedClaims = [];
+    function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+}
+    function closeAllDropdowns() {
+        const dropdowns = [
+            "notificationDropdown",
+            "messageDropdown",
+            "profileDropdown"
+        ];
+
+        dropdowns.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = "none";
+        });
+    }
+    // --- NOTIFICATION LOGIC ---
+    function toggleNotifications() {
+        const dropdown = document.getElementById("notificationDropdown");
+        dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
+    }
+    // 💬 Messages
+    function toggleMessages(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById("messageDropdown");
+        const isOpen = dropdown.style.display === "block";
+        closeAllDropdowns();
+        dropdown.style.display = isOpen ? "none" : "block";
+    }
+    // 👤 Profile
+    function toggleProfile(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById("profileDropdown");
+        const isOpen = dropdown.style.display === "block";
+        closeAllDropdowns();
+        dropdown.style.display = isOpen ? "none" : "block";
+    }
+    async function loadNotifications() {
+        const token = localStorage.getItem("admin_token");
+        try {
+            const res = await fetch("/admin/notifications", {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to fetch");
+            const data = await res.json();
+            notifications = data; 
+            updateNotificationUI();
+        } catch (err) {
+            console.error("Notification Sync Error:", err);
+        }
+    }
+    async function checkAccess(targetUrl, permission) {
+    const token = localStorage.getItem("admin_token");
+    
+    if (!token) {
+        window.location.href = "/login";
+        return;
+    }
+
+    try {
+        // Fetch fresh permissions from the backend
+        const response = await fetch("/admin/my-permissions", {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error("Unauthorized");
+
+        const permissions = await response.json();
+
+        // Check if the required permission exists in the user's list
+        if (permissions.includes(permission)) {
+            window.location.href = targetUrl;
+        } else {
+            showAccessDeniedPopup(permission);
+        }
+    } catch (error) {
+        console.error("Access check failed:", error);
+        showAccessDeniedPopup(permission);
+    }
+}
+
+function showAccessDeniedPopup(permName) {
+    // Create the overlay
+    const overlay = document.createElement('div');
+    overlay.id = "access-denied-modal";
+    overlay.style = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.7); display: flex; 
+        justify-content: center; align-items: center; z-index: 9999;
+        backdrop-filter: blur(4px);
+    `;
+
+    // Create the modal box
+    overlay.innerHTML = `
+        <div style="background: white; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="font-size: 50px; margin-bottom: 20px;">🔒</div>
+            <h2 style="color: #d9534f; margin-bottom: 10px; font-family: 'Montserrat', sans-serif;">Access Denied</h2>
+            <p style="color: #555; line-height: 1.5;">
+                Your account does not have the <strong>${permName}</strong> permission required to view this page.
+            </p>
+            <button onclick="document.getElementById('access-denied-modal').remove()" 
+                style="margin-top: 25px; padding: 12px 30px; background: #003366; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                Close
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
+    async function updateUnreadBadge() {
+    try {
+        const token = localStorage.getItem("admin_token");
+        const response = await fetch("/admin/api/messages/unread-count", { 
+            headers: { 'Authorization': `Bearer ${token}` } 
+        });
+        const data = await response.json();
+        
+        const badge = document.getElementById("totalUnreadBadge");
+        
+        // Use ?? 0 to ensure if the API fails, it defaults to 0
+        const count = data.unread_count ?? 0;
+
+        badge.textContent = count; 
+        badge.style.display = "flex"; // Always keep it visible as a flexbox
+        badge.style.color = "white";  
+        
+    } catch (error) {
+        console.error("Badge error:", error);
+        // Optional: show 0 even on error so it's not blank
+        document.getElementById("totalUnreadBadge").textContent = "0";
+    }
+}
+
+// Update the badge every 10 seconds
+setInterval(updateUnreadBadge, 10000);
+
+// Also run it immediately when the page loads
+window.addEventListener('DOMContentLoaded', updateUnreadBadge);
+
+    function updateNotificationUI() {
+    const list = document.getElementById("notificationList");
+    const countBadge = document.getElementById("notificationCount");
+    if (!list) return;
+
+    list.innerHTML = "";
+
+    notifications.forEach(n => {
+        const li = document.createElement("li");
+        // Add 'unread' class ONLY if is_read is false
+        const readStatusClass = !n.is_read ? "unread" : "";
+
+        li.innerHTML = `
+            <div class="notif-item ${readStatusClass}" 
+                 onclick="handleNotifClick(${n.id})" 
+                 style="cursor:pointer; border-bottom:1px solid #eee; padding: 12px 10px; display: flex; gap: 10px;">
+                <span style="font-size: 1.2em;">${n.type === 'match' ? '🔥' : '🔔'}</span>
+                <div style="flex: 1;">
+                    <span class="notif-text" style="font-size: 13px; display: block; line-height: 1.2;">${n.message}</span>
+                    <small style="color:gray; font-size: 11px;">${new Date(n.created_at).toLocaleTimeString()}</small>
+                </div>
+            </div>
+        `;
+        list.appendChild(li);
+    });
+
+    const unreadCount = notifications.filter(n => !n.is_read).length;
+    countBadge.innerText = unreadCount;
+    countBadge.style.display = unreadCount > 0 ? "block" : "none";
+}
+// Simple Toast function
+function showToast(text) {
+    const toast = document.createElement("div");
+    toast.style = "position:fixed; bottom:20px; right:20px; background:#333; color:white; padding:12px 20px; border-radius:8px; z-index:10000; box-shadow: 0 4px 12px rgba(0,0,0,0.2);";
+    toast.innerText = text;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+
+
+async function handleNotifClick(notifId) {
+    const token = localStorage.getItem("admin_token");
+    
+    // 1. Find the specific notification object
+    const notif = notifications.find(n => n.id === notifId);
+    if (!notif) {
+        console.error("Notification not found in local array for ID:", notifId);
+        return;
+    }
+
+    console.log("Clicked Notification:", notif.message);
+    notif.is_read = true;
+    updateNotificationUI();
+
+    // 2. Mark as read on backend
+    try {
+        await fetch(`/admin/notifications/read/${notifId}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+    } catch (err) {
+        console.error("Failed to mark read:", err);
+    }
+
+    // 3. Close the dropdown first
+    document.getElementById("notificationDropdown").style.display = "none";
+
+    // 4. Direction Logic (Checking the message content)
+    const msg = notif.message.toLowerCase();
+
+    if (notif.type === "user_management_students") {
+        window.location.href = "/admin/User-Management?tab=student";
+        return;
+    }
+
+    if (notif.type === "user_management_admin") {
+        window.location.href = "/admin/User-Management?tab=admin";
+        return;
+    }
+
+    if (msg.includes("found")) {
+        console.log("Directing to Found Items Modal");
+        openFoundItemsModal(); // Make sure this function exists exactly like this
+    } 
+    else if (msg.includes("pending") || msg.includes("surrender") || msg.includes("reported")) {
+        console.log("Directing to Pending Surrender Modal");
+        openPendingSurrenderModal(); // Make sure this function exists exactly like this
+    }
+    else if (msg.includes("message")) {
+        window.location.href = "/admin/Messages";
+    }
+    else {
+        console.warn("No route found for this message content.");
+    }
+
+    // 5. Refresh the UI to update the red badge
+    loadNotifications(); 
+}
+
+  function notifyNewFoundItem(itemName, finderName, itemId) {
+    const newNotif = {
+        id: Date.now(),
+        message: `New Found Item: "${itemName}" reported by ${finderName}`,
+        type: "pending_surrender", // Matches your logic below
+        related_id: itemId,        // Matches your DB column
+        created_at: new Date().toISOString(),
+        is_read: false
+    };
+    notifications.unshift(newNotif);
+    updateNotificationUI();
+}
+   
+ // --- NOTIFICATION LOGIC ---
+    function toggleProfile() {
+        const dropdown = document.getElementById("profileDropdown");
+        dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
+    }
+
+
+
+    // --- DASHBOARD STATS & ACTIONS ---
+    async function updateDashboardStats() {
+        const token = localStorage.getItem("admin_token");
+        try {
+            const resPending = await fetch('/admin/pending-items', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const pendingItems = await resPending.json();
+            document.getElementById('pendingCount').innerText = pendingItems.length;
+            window.allPending = pendingItems;
+
+            const resFound = await fetch('/admin/items/found', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const foundItems = await resFound.json();
+            document.getElementById('foundCount').innerText = foundItems.length;
+            window.allFound = foundItems;
+
+            const resClaims = await fetch('/api/admin/claims', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const claims = await resClaims.json();
+            const approvedClaims = Array.isArray(claims)
+                ? claims.filter(claim => String(claim.status || '').toLowerCase() === 'approved')
+                : [];
+            document.getElementById('claimedCount').innerText = approvedClaims.length;
+            window.allApprovedClaims = approvedClaims;
+        } catch (err) {
+            console.error("Stats sync failed");
+        }
+    }
+
+    async function openPendingSurrenderWithAccess() {
+        const token = localStorage.getItem("admin_token");
+
+        if (!token) {
+            window.location.href = "/login";
+            return;
+        }
+
+        try {
+            const response = await fetch("/admin/my-permissions", {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error("Unauthorized");
+
+            const permissions = await response.json();
+
+            if (permissions.includes("Found-Reports")) {
+                openPendingSurrenderModal();
+            } else {
+                showAccessDeniedPopup("Found-Reports");
+            }
+        } catch (error) {
+            console.error("Pending modal access check failed:", error);
+            showAccessDeniedPopup("Found-Reports");
+        }
+    }
+
+    async function openClaimedItemsWithAccess() {
+        const token = localStorage.getItem("admin_token");
+
+        if (!token) {
+            window.location.href = "/login";
+            return;
+        }
+
+        try {
+            const response = await fetch("/admin/my-permissions", {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error("Unauthorized");
+
+            const permissions = await response.json();
+
+            if (permissions.includes("Claim-Management")) {
+                openClaimedItemsModal();
+            } else {
+                showAccessDeniedPopup("Claim-Management");
+            }
+        } catch (error) {
+            console.error("Claimed items access check failed:", error);
+            showAccessDeniedPopup("Claim-Management");
+        }
+    }
+
+    async function openPendingSurrenderModal() {
+    const container = document.getElementById('adminModalList');
+    const title = document.getElementById('adminModalTitle');
+    const token = localStorage.getItem("admin_token");
+
+    // 1. Set UI to loading state and show modal
+    title.innerText = "Pending Surrender Items";
+    container.innerHTML = `<div style="text-align:center; padding:30px;">
+        <p>Fetching pending items...</p>
+    </div>`;
+    openModal('adminActionModal');
+
+    try {
+        // 2. Fetch fresh data specifically for this action
+        const res = await fetch('/admin/pending-items', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!res.ok) throw new Error("Server error");
+        const items = await res.json();
+        
+        // 3. Update global state and dashboard count
+        window.allPending = items;
+        const countEl = document.getElementById('pendingCount');
+        if (countEl) countEl.innerText = items.length;
+
+        // 4. Render the list
+        if (!items || items.length === 0) {
+            container.innerHTML = "<p style='text-align:center; padding:20px;'>No pending approvals found.</p>";
+        } else {
+            container.innerHTML = items.map(item => {
+                const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+                const imageUrl = cleanPath
+                    ? (cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`)
+                    : 'https://via.placeholder.com/80?text=No+Img';
+                const itemName = escapeHtml(item.item_name || item.category || 'Pending Item');
+                const itemCategory = escapeHtml(item.category || 'Uncategorized');
+                const itemDescription = escapeHtml(item.description || 'No description provided.');
+                const itemLocation = escapeHtml(item.location || 'No location provided');
+                const itemDate = item.date ? new Date(item.date).toLocaleDateString() : 'No date';
+                
+                return `
+                <div class="modal-item-row" style="display:flex; align-items:center; gap:15px; padding:14px 10px; border-bottom:1px solid #eee;">
+                    <img src="${imageUrl}" style="width:72px; height:72px; object-fit:cover; border-radius:10px; border:1px solid #d9e3ef;" onerror="this.src='https://via.placeholder.com/80?text=No+Img'">
+                    <div style="flex:1;">
+                        <strong style="display:block; color:var(--sti-blue); font-size:15px; margin-bottom:4px;">${itemName}</strong>
+                        <p style="font-size:12px; margin:0 0 4px; color:#666;"><strong>Category:</strong> ${itemCategory}</p>
+                        <p style="font-size:12px; margin:0 0 4px; color:#666;"><strong>Location:</strong> ${itemLocation}</p>
+                        <p style="font-size:12px; margin:0 0 4px; color:#666;"><strong>Date:</strong> ${itemDate}</p>
+                        <p style="font-size:12px; margin:0; color:#666;">${itemDescription}</p>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:8px; min-width:120px;">
+                        <button onclick="processAction(${item.id}, 'approve')" style="background:#28a745; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:600;">Approve</button>
+                        <button onclick="processAction(${item.id}, 'archive')" style="background:#dc3545; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; font-weight:600;">Reject</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+    } catch (err) {
+        container.innerHTML = `<p style="text-align:center; color:red; padding:20px;">Failed to load data. Please try again.</p>`;
+    }
+}
+
+async function openClaimedItemsModal() {
+    const container = document.getElementById('claimedItemsList');
+    const title = document.getElementById('claimedItemsModalTitle');
+    const token = localStorage.getItem("admin_token");
+
+    title.innerText = "Approved Claimed Items";
+    container.innerHTML = `<div style="text-align:center; padding:30px;">
+        <p>Loading approved claimed items...</p>
+    </div>`;
+    openModal('claimedItemsModal');
+
+    try {
+        const res = await fetch('/api/admin/claims', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error("Server error");
+
+        const claims = await res.json();
+        const approvedClaims = Array.isArray(claims)
+            ? claims.filter(claim => String(claim.status || '').toLowerCase() === 'approved')
+            : [];
+
+        window.allApprovedClaims = approvedClaims;
+        const countEl = document.getElementById('claimedCount');
+        if (countEl) countEl.innerText = approvedClaims.length;
+
+        if (!approvedClaims.length) {
+            container.innerHTML = "<p style='text-align:center; padding:20px;'>No approved claimed items found.</p>";
+            return;
+        }
+
+        container.innerHTML = approvedClaims.map(claim => {
+            const report = claim.report || {};
+            const claimant = report.claimant || claim.claimant || {};
+            const itemDetails = report.item_description || {};
+            const matchedItem = report.matched_item || claim.found_item || {};
+            const itemName = escapeHtml(report.item_name || itemDetails.item_name || matchedItem.category || claim.lost_item?.category || 'Claimed Item');
+            const claimantName = escapeHtml(claimant.full_name || claimant.name || 'Unknown claimant');
+            const claimantId = escapeHtml(claimant.student_employee_id || claimant.student_no || 'Not available');
+            const location = escapeHtml(itemDetails.location_lost || 'Not specified');
+            const brand = escapeHtml(itemDetails.brand || 'Not specified');
+            const color = escapeHtml(itemDetails.color || 'Not specified');
+            const status = escapeHtml(report.status || claim.status || 'Approved');
+            const dateClaimed = report.date_claimed
+                ? new Date(report.date_claimed).toLocaleDateString()
+                : 'No date available';
+            const cleanPath = String(matchedItem.image || claim.found_item?.image || claim.lost_item?.image || '').replace(/\\/g, '/');
+            const imageUrl = cleanPath
+                ? (cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`)
+                : 'https://via.placeholder.com/96?text=No+Img';
+
+            return `
+                <div class="modal-item-row" style="display:flex; align-items:flex-start; gap:16px; padding:16px 10px; border-bottom:1px solid #e7eef7;">
+                    <img src="${imageUrl}" alt="${itemName}" style="width:88px; height:88px; object-fit:cover; border-radius:12px; border:1px solid #d9e3ef; flex-shrink:0;" onerror="this.onerror=null; this.src='https://via.placeholder.com/96?text=No+Img';">
+                    <div style="flex:1; min-width:0;">
+                        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                            <strong style="color:var(--sti-blue); font-size:16px;">${itemName}</strong>
+                            <span style="display:inline-flex; align-items:center; justify-content:center; padding:5px 12px; border-radius:999px; background:#e8f6ee; color:#1c7c45; font-size:12px; font-weight:700;">${status}</span>
+                        </div>
+                        <p style="font-size:13px; margin:0 0 4px; color:#475569;"><strong>Claimant:</strong> ${claimantName}</p>
+                        <p style="font-size:13px; margin:0 0 4px; color:#475569;"><strong>ID Number:</strong> ${claimantId}</p>
+                        <p style="font-size:13px; margin:0 0 4px; color:#475569;"><strong>Location:</strong> ${location}</p>
+                        <p style="font-size:13px; margin:0 0 4px; color:#475569;"><strong>Brand / Color:</strong> ${brand} / ${color}</p>
+                        <p style="font-size:13px; margin:0; color:#475569;"><strong>Date Claimed:</strong> ${dateClaimed}</p>
+                    </div>
+                    <div style="display:flex; align-items:center; min-width:140px; justify-content:flex-end;">
+                        <button onclick="goToClaimReportDetails(${Number(claim.id || 0)})" style="background:var(--sti-blue); color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:600;">
+                            View Details
+                        </button>
+                    </div>
+                </div>`;
+        }).join('');
+    } catch (err) {
+        console.error("Claimed items modal load failed:", err);
+        container.innerHTML = `<p style="text-align:center; color:red; padding:20px;">Failed to load approved claimed items. Please try again.</p>`;
+    }
+}
+
+function goToClaimReportDetails(claimId) {
+    const params = new URLSearchParams({ report_type: 'claim' });
+    if (claimId) params.set('claim_id', String(claimId));
+    window.location.href = `/admin/Reports?${params.toString()}`;
+}
+
+
+
+async function processAction(itemId, actionType) {
+    const token = localStorage.getItem("admin_token");
+    const confirmMsg = actionType === 'approve' ? "Approve this item and move to inventory?" : "Reject/Archive this report?";
+    
+    if (!confirm(confirmMsg)) return;
+
+    try {
+        // This matches the FastAPI route we created: /admin/approve-item/{id}
+        const endpoint = actionType === 'approve' 
+            ? `/admin/approve-item/${itemId}` 
+            : `/admin/archive-pending/${itemId}`;
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            alert(actionType === 'approve' ? "✅ Item Approved!" : "❌ Item Rejected.");
+            
+            // Refresh the modal and the dashboard stats
+            openPendingSurrenderModal(); 
+            updateDashboardStats();
+        } else {
+            const errorData = await res.json();
+            alert("Error: " + (errorData.detail || "Action failed"));
+        }
+    } catch (err) {
+        console.error("Connection error:", err);
+        alert("Could not connect to server.");
+    }
+}
+    // --- FOUND ITEMS LOGIC ---
+    function openFoundItemsModal() {
+        openModal('foundItemsModal');
+        loadFoundItems();
+    }
+
+    async function loadFoundItems() {
+        const grid = document.getElementById("itemsGrid");
+        if (!grid) return;
+
+        // 1. Capture the filter values from your HTML inputs
+        const category = document.getElementById("filterCategory")?.value || "";
+        const location = document.getElementById("filterLocation")?.value || "";
+        const date = document.getElementById("filterDate")?.value || "";
+
+        grid.innerHTML = '<p class="loading-text">Loading...</p>';
+
+        try {
+            // 2. Append the filters as Query Parameters to the URL
+            const url = `/admin/items/found?category=${encodeURIComponent(category)}&location=${encodeURIComponent(location)}&date=${date}`;
+            
+            const res = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            });
+
+            const items = await res.json();
+            
+            if (!items?.length) {
+                grid.innerHTML = '<p class="empty-state">No items match your filters.</p>';
+                return;
+            }
+
+            // 3. Render the grid (Same logic as your original code)
+            grid.innerHTML = items.map(item => {
+                const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+                const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+                
+                return `
+                <div class="item-card" data-item-id="${item.id}">
+                    <div class="item-image-wrapper">
+                        <img src="${imageUrl}" alt="${item.category || 'Item'}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150?text=No+Image';">
+                    </div>
+                    <div class="item-content">
+                        <h4>${escapeHtml(item.category)}</h4>
+                        <p><strong>Location:</strong> ${escapeHtml(item.location || 'N/A')}</p>
+                        <p>${escapeHtml(item.description)}</p>
+                        <div class="item-footer">
+                            <span>${item.date ? new Date(item.date).toLocaleDateString() : 'No Date'}</span>
+                            <button onclick="archiveFound(${item.id})">Archive</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (err) {
+            grid.innerHTML = `<p class="error-state">Error: ${err.message}</p>`;
+        }
+    }
+    async function archiveFound(itemId) {
+        if (!confirm('Archive this item?')) return;
+        const token = localStorage.getItem("admin_token");
+        try {
+            const res = await fetch(`/admin/archive/${itemId}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const card = document.querySelector(`[data-item-id="${itemId}"]`);
+                if (card) card.remove();
+                const grid = document.getElementById("itemsGrid");
+                if (grid.children.length === 0) grid.innerHTML = '<p class="empty-state">No found items yet.</p>';
+            }
+        } catch (err) {
+            alert('Error archiving item');
+        }
+    }
+
+    // --- BULK REGISTRATION & UTILS ---
+    async function submitBulk() {
+        const btn = document.querySelector("#bulkRegisterModal .success-btn");
+        const modalContent = document.querySelector("#bulkRegisterModal .modal-content");
+        const textArea = document.getElementById('bulkEmails');
+        const token = localStorage.getItem("admin_token");
+        const rawEmails = textArea.value.split('\n').map(e => e.trim()).filter(e => e !== "");
+        const validEmails = rawEmails.filter(e => e.endsWith("@novaliches.sti.edu.ph"));
+
+        if (validEmails.length === 0) {
+            modalContent.classList.add('shake');
+            setTimeout(() => modalContent.classList.remove('shake'), 400);
+            return alert("Please enter valid STI emails.");
+        }
+        btn.innerText = "Processing...";
+        try {
+            const response = await fetch('/admin/bulk-register-students', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(validEmails)
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const tbody = document.getElementById('bulkResultBody');
+                tbody.innerHTML = data.map((item, index) => {
+                    const isRegistered = item.temp_password === "Already Registered";
+                    return `
+                        <tr>
+                            <td>${item.email}</td>
+                            <td id="pass-cell-${index}">
+                                ${isRegistered ? `<button class="btn-primary" style="font-size:10px; padding:2px 5px;" onclick="resetSingle('${item.email}', ${index})">Reset</button>` : `<code>${item.temp_password}</code>`}
+                            </td>
+                        </tr>`;
+                }).join('');
+                closeModal('bulkRegisterModal');
+                setTimeout(() => openModal('bulkResultModal'), 300);
+                textArea.value = "";
+            }
+        } catch (err) { alert("Bulk registration failed."); }
+        finally { btn.innerText = "Generate Accounts"; }
+    }
+
+    async function resetSingle(email, index) {
+        const token = localStorage.getItem("admin_token");
+        const cell = document.getElementById(`pass-cell-${index}`);
+        if (!confirm(`Reset password for ${email}?`)) return;
+        cell.innerHTML = "Processing...";
+        try {
+            const response = await fetch('/admin/reset-student-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ email: email })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                cell.innerHTML = `<code style="color: #28a745;">${result.new_temp_password}</code>`;
+                alert("Password reset successfully!");
+            }
+        } catch (err) { cell.innerHTML = "Failed"; }
+    }
+
+    function openModal(id) {
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = "flex";
+    }
+
+    function closeModal(id) {
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = 'none';
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async function loadAnnouncements() {
+        const container = document.getElementById('adminAnnouncementDisplay');
+        if (!container) return;
+
+        try {
+            const response = await fetch('/api/announcements');
+            const announcements = await response.json();
+
+            if (!announcements || announcements.length === 0) {
+                container.innerHTML = `<p style="text-align:center; padding:20px;">No active announcements.</p>`;
+                return;
+            }
+
+            container.innerHTML = announcements.map((announcement, index) => {
+                const imgSrc = announcement.image_url && announcement.image_url.startsWith('/')
+                    ? announcement.image_url
+                    : `/${announcement.image_url || 'static/photos/default_news.jpg'}`;
+
+                return `
+                    <div class="carousel-slide ${index === 0 ? 'active' : ''}">
+                        <img src="${imgSrc}"
+                             alt="${escapeHtml(announcement.title || 'Announcement')}"
+                             onerror="this.src='/static/photos/default_news.jpg'">
+                        <div class="carousel-caption" style="position:absolute; left:0; right:0; bottom:0; padding:20px 40px; background:linear-gradient(transparent, rgba(0,0,0,0.8)); color:#fff; z-index:2;">
+                            <h2 style="margin:0 0 8px; color:#ffc107;">${escapeHtml(announcement.title || 'Current Announcement')}</h2>
+                            <p style="margin:0; color:#fff; white-space:pre-wrap;">${escapeHtml(announcement.content || '')}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (error) {
+            console.error("Failed to load admin announcement:", error);
+            container.innerHTML = `<p style="text-align:center; padding:20px;">Unable to load announcement.</p>`;
+        }
+    }
+
+    function toggleChat() {
+        const chat = document.getElementById('chatWidget');
+        chat.style.display = (chat.style.display === 'none') ? 'flex' : 'none';
+    }
+
+    function logout() {
+        localStorage.clear();
+        window.location.href = "/";
+    }
+
+    // --- LIFECYCLE HANDLERS ---
+    window.onload = function() {
+        initAdminNotifications();
+        loadFoundItems();
+        loadAnnouncements();
+    };
+
+    window.addEventListener("DOMContentLoaded", () => {
+        if (!localStorage.getItem("admin_token")) window.location.href = "/";
+        updateDashboardStats();
+        setInterval(updateDashboardStats, 30000);
+    });
+
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.style.display = 'none';
+        }
+    };
+</script>
+
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/admin-notifications.js?v=2"></script>
+<script src="/static/force-password-change.js"></script>
+</body> 
+
+</html> 
+

@@ -1,0 +1,3215 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Admin Panel | LookFor STI</title> 
+
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='User_Management.css') }}?v=9"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head> 
+
+<body> 
+
+  
+
+   <nav class="sidebar"> 
+
+            <div class="logow">Look<span>For</span></div>  
+
+            <ul class="nav-links"> 
+
+           <li >
+                <a href="/admin/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li  data-permission="Messages">
+                <a href= "#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+             <li class="active" data-permission="User-Management">
+                <a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" 
+                style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/userw.png" class="side-icon"> User Management
+                </a>
+            </li>
+
+
+            <li data-permission="Lost-Reports">
+                <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
+                
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Claim Management
+                </a>
+            </li>
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Confiscated Items
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/folderw.png" class="side-icon">  Reports
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+             <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Content-management', 'Content-management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/form.png" class="side-icon">  Content Management
+                </a>
+            </li>
+
+        </ul> 
+
+        </nav>
+            
+
+  
+  <main class="main-content"> 
+
+       <header class="top-bar navbar">
+    <div class="search-container">
+        
+    </div>
+
+   <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/admin/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/admin/Profile'">My Profile</li>
+                    <li onclick="window.location.href='/admin/Settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+</header>
+
+<div class="page-scroll-area">
+<h1 class="section-title">User <span>Management</span></h1>
+
+
+<div id="bulkJobStatusCard" style="display:none; margin: 12px 0 20px; padding: 16px 18px; border-radius: 14px; background: linear-gradient(135deg, #0f2f57, #1e4f86); color: white; box-shadow: 0 10px 24px rgba(0, 51, 102, 0.18);">
+    <div style="display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+        <div>
+            <div id="bulkJobTitle" style="font-weight:700; font-size:16px;">Background registration is idle</div>
+            <div id="bulkJobMessage" style="font-size:13px; opacity:0.9; margin-top:4px;">Start a user upload to process it in the background.</div>
+        </div>
+        <button id="bulkJobDismissBtn" class="btn-secondary" style="display:none; padding:8px 14px;" onclick="dismissBulkJobCard()">Dismiss</button>
+    </div>
+    <div style="margin-top:12px; width:100%; height:10px; border-radius:999px; background:rgba(255,255,255,0.18); overflow:hidden;">
+        <div id="bulkJobProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #f7b500, #ffd95a); transition: width 0.3s ease;"></div>
+    </div>
+    <div id="bulkJobMeta" style="margin-top:10px; font-size:13px; opacity:0.95;">No active background job.</div>
+    <div id="bulkJobActions" style="display:none; margin-top:14px; gap:10px; flex-wrap:wrap;">
+        <button id="bulkJobDownloadBtn" class="btn-success" type="button" style="background-color:#28a745; color:white;" onclick="downloadBulkJobExcel()">
+            Download Excel (.xlsx)
+        </button>
+    </div>
+</div>
+<div class="table-header-actions">
+    <div class="table-header-top">
+        <div class="tab-group user-tabs">
+        <button id="btnShowAdmin" class="tab-btn active" onclick="filterTable('admin')">Admin Staff</button>
+        <button id="btnShowStudent" class="tab-btn" onclick="filterTable('student')">Users</button>
+
+        <div class="tab-divider" aria-hidden="true"></div>
+
+        <button id="btnShowArchive" class="tab-btn archive-style" onclick="filterTable('archive')">
+            <i class="fas fa-box-archive"></i> Archive
+        </button>
+        <button id="btnShowDelete" class="tab-btn archive-style" onclick="filterTable('delete')">
+            <i class="fas fa-trash"></i> Trash
+        </button>
+    </div>
+        <div class="table-filter-row">
+            <div class="search-container search-container-wide">
+                <input type="text" class="Srch" id="userSearch" placeholder="Search by name or ID..." 
+                    onkeyup="searchUsers()">
+            </div>
+            <div id="batchFilterContainer" class="batch-filter-container">
+                <div id="userTypeToggle" class="tab-group user-tabs" style="display:none;">
+                    <button id="btnShowAllUsers" class="tab-btn active" type="button" onclick="setUserTypeFilter('all')">All</button>
+                    <button id="btnShowStudentsOnly" class="tab-btn" type="button" onclick="setUserTypeFilter('student')">Students</button>
+                    <button id="btnShowFacultyOnly" class="tab-btn" type="button" onclick="setUserTypeFilter('faculty')">Faculty</button>
+                </div>
+                <select id="batchFilterInput" class="Srch" onchange="searchUsers()" style="max-width: 220px; display:none;">
+                    <option value="">All filters</option>
+                </select>
+                <label id="selectAllControl" class="select-all-control" style="display:none;">
+                    <input type="checkbox" id="selectAllRows" onchange="toggleSelectAllVisible(this.checked)">
+                    <span>Select all visible</span>
+                </label>
+                <div id="userCountBadge" class="status-pill status-active" style="display: inline-flex;">Total: 0</div>
+            </div>
+        </div>
+    </div>
+    <div class="action-bar action-bar-below">
+        <button id="openBulkRegisterBtn" class="upload-btn" onclick="openModal('bulkRegisterModal')"> 
+            + Register Users
+        </button> 
+         <button id="openCreateAdminBtn" class="upload-btn" onclick="openModal('createAdminModal')"> 
+            + Create an Admin
+        </button>
+        <button id="openResetStudentPasswordBtn" class="upload-btn" onclick="openModal('resetStudentPasswordModal')">
+            + Reset User Password
+        </button>
+        <button id="btnArchiveSelected" class="tab-btn archive-style batch-action-btn" style="color: #ff4d4d; border-color: #ff4d4d; display: none;" onclick="archiveSelectedUsers()">
+            <i class="fas fa-box-archive"></i> Move to Archive 
+        </button>
+        <button id="btnActivateSelected" class="tab-btn archive-style batch-action-btn" style="color: #0d6efd; border-color: #0d6efd; display: none;" onclick="activateSelectedUsers()">
+            <i class="fas fa-user-check"></i> Activate All
+        </button>
+        <button id="btnDeactivateSelected" class="tab-btn archive-style batch-action-btn" style="color: #ff8c00; border-color: #ff8c00; display: none;" onclick="deactivateSelectedUsers()">
+            <i class="fas fa-user-slash"></i> Deactivate All
+        </button>
+        <button id="btnRecoverSelected" class="tab-btn archive-style batch-action-btn" style="color: #28a745; border-color: #28a745; display: none;" onclick="recoverSelectedUsers()">
+            <i class="fas fa-rotate-left"></i> Recover All
+        </button>
+        <button id="btnDeleteSelected" class="tab-btn archive-style batch-action-btn" style="color: #dc3545; border-color: #dc3545; display: none;" onclick="deleteSelectedUsers()">
+            <i class="fas fa-trash"></i> Delete Permanently
+        </button>
+    </div>
+</div>
+
+<div id="adminContainer" class="table-box">
+    <table class="user-table">
+        <thead><tr><th>Select</th><th>ID</th><th>Full Name</th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="adminTableBody"></tbody>
+    </table>
+</div>
+
+<div id="studentContainer" class="table-box">
+    <table class="user-table">
+        <thead><tr><th>Select</th><th>User ID</th><th>Full Name</th><th>Course/Section</th><th>Last Login</th><th>Status</th><th>Actions</th><th>Batch ID</th></tr></thead>
+        <tbody id="studentTableBody"></tbody>
+    </table>
+</div>
+
+<div id="archiveContainer" class="table-box archive-theme" style="display:none;">
+    <h3 id="archiveTitle"><i class="fas fa-box-archive"></i> Archived Users</h3>
+    <table class="user-table">
+        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th><th>Batch ID</th></tr></thead>
+        <tbody id="archiveTableBody"></tbody>
+    </table>
+</div>
+
+<div id="deleteContainer" class="table-box archive-theme" style="display:none;">
+    <h3 id="deleteTitle"><i class="fas fa-trash"></i> Trash</h3>
+    <table class="user-table">
+        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th><th>Batch ID</th></tr></thead>
+        <tbody id="deleteTableBody"></tbody>
+    </table>
+</div>
+</div>
+  <div id="bulkRegisterModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="closeModal('bulkRegisterModal')">&times;</span>
+        <h2>Bulk Register Users</h2>
+
+        <p>Upload Excel/CSV File:</p>
+        <div class="form-group" style="margin-bottom: 18px;">
+            <label for="bulkImportType">Import Type</label>
+            <select id="bulkImportType" class="admin-input" onchange="handleBulkImportTypeChange()">
+                <option value="student">Student</option>
+                <option value="employee">Faculty</option>
+            </select>
+            <p id="bulkImportHint" style="margin-top: 6px; font-size: 13px; color: #555;">
+                Expected file format: Student ID, Last Name, First Name, Middle Name, Program, Level
+            </p>
+        </div>
+        <div class="form-group" style="margin-bottom: 18px;">
+            <label for="bulkEntryMode">Entry Mode</label>
+            <select id="bulkEntryMode" class="admin-input" onchange="handleBulkEntryModeChange()">
+                <option value="upload">Upload File</option>
+                <option value="manual">Manual Entry</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 18px;">
+            <label for="batchYear">Batch Year</label>
+            <input type="number" id="batchYear" class="admin-input" min="2020" max="2100" oninput="updateBatchPreview()">
+        </div>
+        <div class="form-group" style="margin-bottom: 18px;">
+            <label for="batchTerm">Term / Semester</label>
+            <select id="batchTerm" class="admin-input" onchange="updateBatchPreview()">
+                <option value="1st Semester">1st Semester</option>
+                <option value="2nd Semester">2nd Semester</option>
+                <option value="Summer">Summer</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 18px;">
+            <label for="duplicateAction">If duplicate user exists</label>
+            <select id="duplicateAction" class="admin-input">
+                <option value="ignore">Ignore duplicate user</option>
+                <option value="replace">Replace existing user record</option>
+            </select>
+        </div>
+        <p style="margin-top: -5px; font-size: 13px; color: #555;">
+            Batch preview: <strong id="batchPreview">BATCH-2026 1st Semester</strong>
+        </p>
+        <div id="bulkUploadSection" class="file-upload-wrapper">
+            <input type="file" id="excelFile" accept=".xlsx, .xls, .csv" onchange="handleExcel(this)">
+            <label for="excelFile" class="file-label">
+                <img src="/static/photos/folderw.png" style="width:20px; filter:invert(0);"> 
+                Choose Excel File
+            </label>
+            <span id="fileNameDisplay">No file chosen</span>
+        </div>
+        <div id="bulkManualSection" style="display:none; margin-top: 18px;">
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label for="manualUserId">Student ID / Employee No.</label>
+                <input type="text" id="manualUserId" class="admin-input" placeholder="Enter the ID number">
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label for="manualLastName">Last Name</label>
+                <input type="text" id="manualLastName" class="admin-input" placeholder="Enter last name">
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label for="manualFirstName">First Name</label>
+                <input type="text" id="manualFirstName" class="admin-input" placeholder="Enter first name">
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+                <label for="manualMiddleName">Middle Name</label>
+                <input type="text" id="manualMiddleName" class="admin-input" placeholder="Enter middle name">
+            </div>
+            <div id="manualStudentFields">
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="manualProgram">Program / Course</label>
+                    <input type="text" id="manualProgram" class="admin-input" placeholder="Example: BSIT">
+                </div>
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="manualLevel">Level</label>
+                    <input type="text" id="manualLevel" class="admin-input" placeholder="Example: 1Y1 or G12">
+                </div>
+            </div>
+            <div id="manualFacultyFields" style="display:none;">
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="manualDisplayName">Display Name</label>
+                    <input type="text" id="manualDisplayName" class="admin-input" placeholder="Optional display name">
+                </div>
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label for="manualDepartment">Role / Department</label>
+                    <input type="text" id="manualDepartment" class="admin-input" placeholder="Auto-detected from employee no. if left blank">
+                </div>
+            </div>
+            <p id="bulkManualHint" style="font-size: 13px; color: #555; margin-top: 6px;">
+                Fill in all student fields, then click Generate Accounts.
+            </p>
+        </div>
+
+        <button class="btn-primary success-btn" onclick="submitBulk()" style="width: 100%; margin-top: 20px;">Generate Accounts</button>
+    </div>
+</div>
+
+<div id="bulkResultModal" class="modal">
+    <div class="modal-content report-style" style="width: 80%; max-width: 1000px;">
+        <div class="modal-header">
+            <span class="close-modal" onclick="closeModal('bulkResultModal')">&times;</span>
+            <h2>Registration Report</h2>
+            <p style="font-size: 0.9em; color: #666;">Total Users processed: <span id="totalBatchCount">0</span></p>
+            <p id="bulkSummaryText" style="font-size: 0.9em; color: #555; margin-top: 6px;">Created: 0 | Replaced: 0 | Ignored: 0</p>
+            <p id="bulkFailureText" style="font-size: 0.85em; color: #b02a37; margin-top: 6px;"></p>
+            <p id="bulkPreviewNote" style="font-size: 0.85em; color: #777; margin-top: 6px;"></p>
+        </div>
+        <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>User ID</th>
+                        <th>Full Name</th>
+                        <th>Batch ID</th>
+                        <th>User Email</th>
+                        <th>Status</th>
+                        <th>Temporary Password</th>
+                    </tr>
+                </thead>
+                <tbody id="bulkResultBody"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button class="btn-success" onclick="exportToExcelFromModal()" style="background-color: #28a745; color: white;">
+                Download Excel (.xlsx)
+            </button>
+            <button class="btn-primary" onclick="window.print()">Print Slips</button>
+            <button class="btn-secondary" onclick="closeModal('bulkResultModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<div id="studentAccessModal" class="modal">
+    <div class="modal-content permission-modal-card" style="max-width: 460px; border-radius: 15px; border-top: 8px solid #003366;">
+        <span class="close-modal" onclick="closeModal('studentAccessModal')">&times;</span>
+        <div class="permission-modal-header">
+            <div>
+                <h2 style="color: #003366; margin-bottom: 5px;">User Access Control</h2>
+                <p id="studentAccessUserDisplay" style="color: #666; font-style: italic;"></p>
+            </div>
+            <div id="studentAccessState" class="permission-state-badge">Deactivated</div>
+        </div>
+
+        <input type="hidden" id="studentAccessUserId">
+        <input type="hidden" id="studentAccessTargetState">
+        <input type="hidden" id="studentAccessIsFaculty">
+
+        <div class="permission-summary-panel" style="margin-top: 16px;">
+            <div class="permission-summary-title">Access Action</div>
+            <div id="studentAccessSummaryText" class="permission-summary-text">
+                Choose whether this user account should stay active or deactivated.
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 30px;">
+            <button class="btn-secondary" onclick="closeModal('studentAccessModal')" style="flex: 1;">Cancel</button>
+            <button id="studentGrantAdminBtn" class="btn-success" onclick="openGrantAdminModal()" style="display: none; flex: 1; background-color: #198754; color: white;">Grant Admin Access</button>
+            <button id="studentAccessActionBtn" class="btn-primary" onclick="confirmStudentAccessChange()" style="flex: 2;">Activate</button>
+        </div>
+    </div>
+</div>
+<div id="grantAdminModal" class="modal">
+    <div class="modal-content permission-modal-card" style="max-width: 460px; border-radius: 15px; border-top: 8px solid #198754;">
+        <span class="close-modal" onclick="closeModal('grantAdminModal')">&times;</span>
+        <div class="permission-modal-header">
+            <div>
+                <h2 style="color: #198754; margin-bottom: 5px;">Grant Admin Access</h2>
+                <p id="grantAdminUserDisplay" style="color: #666; font-style: italic;"></p>
+            </div>
+            <div class="permission-state-badge active" style="background: rgba(25, 135, 84, 0.15); color: #198754;">Faculty</div>
+        </div>
+
+        <input type="hidden" id="grantAdminUserId">
+
+        <div class="permission-summary-panel" style="margin-top: 16px;">
+            <div class="permission-summary-title">Confirmation</div>
+            <div class="permission-summary-text">
+                This will move the faculty account to the admin side and remove normal user dashboard access. You can edit admin permissions after granting access.
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 30px;">
+            <button class="btn-secondary" onclick="closeModal('grantAdminModal')" style="flex: 1;">Cancel</button>
+            <button id="confirmGrantAdminBtn" class="btn-success" onclick="confirmGrantAdminAccess()" style="flex: 1; background-color: #198754; color: white;">Confirm Grant</button>
+        </div>
+    </div>
+</div>
+    <div id="editPermissionsModal" class="modal">
+    <div class="modal-content permission-modal-card" style="max-width: 760px; border-radius: 15px; border-top: 8px solid #003366;">
+        <span class="close-modal" onclick="cancelPermissionEdit()">&times;</span>
+        
+        <div class="permission-modal-header">
+            <div>
+                <h2 style="color: #003366; margin-bottom: 5px;">Access Control</h2>
+                <p id="editUserDisplay" style="color: #666; font-style: italic;"></p>
+            </div>
+            <div id="permissionAccessState" class="permission-state-badge">No Access</div>
+        </div>
+
+        <input type="hidden" id="editUserId">
+        <input type="hidden" id="editOriginalPermissions">
+
+        <div class="permissions-container">
+            <p style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Module Access</p>
+            <p class="permission-helper-text">Choose which modules this account can open from the admin panel.</p>
+            <div class="permissions-grid">
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Messages" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Messages</span>
+                        <span class="perm-desc">Chat with students and reply to inquiries.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" id="permUserManagement" value="User-Management" onchange="toggleUserManagementActions(); updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">User Management</span>
+                        <span class="perm-desc">Manage accounts, permissions, archive, and delete actions.</span>
+                    </span>
+                </label>
+                <div id="userManagementActionsGroupWrapper" class="user-management-access-panel" style="display: none;">
+                    <div class="user-management-access-title">User Management Access</div>
+                    <div class="user-management-access-help">These permissions only apply inside the User Management page.</div>
+                <div id="userManagementActionsGroup" class="nested-permission-group">
+                    <label class="perm-item professional nested">
+                        <input type="checkbox" class="edit-perm user-management-action" id="permUserManagementCreate" value="User-Management-Create" onchange="handleUserManagementActionChange(); updatePermissionSummary()">
+                        <span class="perm-copy">
+                            <span class="perm-title">User Management: Create Accounts</span>
+                            <span class="perm-desc">Can create new admins and bulk register students inside User Management.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional nested">
+                        <input type="checkbox" class="edit-perm user-management-action" id="permUserManagementEdit" value="User-Management-Edit" onchange="handleUserManagementActionChange(); updatePermissionSummary()">
+                        <span class="perm-copy">
+                            <span class="perm-title">User Management: Edit Access</span>
+                            <span class="perm-desc">Can update account permissions and access inside User Management only.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional nested">
+                        <input type="checkbox" class="edit-perm user-management-action" id="permUserManagementReset" value="User-Management-Reset" onchange="handleUserManagementActionChange(); updatePermissionSummary()">
+                        <span class="perm-copy">
+                            <span class="perm-title">User Management: Reset Password</span>
+                            <span class="perm-desc">Can reset student passwords and reveal temporary passwords inside User Management.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional nested">
+                        <input type="checkbox" class="edit-perm user-management-action" id="permUserManagementArchive" value="User-Management-Archive" onchange="handleUserManagementActionChange(); updatePermissionSummary()">
+                        <span class="perm-copy">
+                            <span class="perm-title">User Management: Archive / Recover</span>
+                            <span class="perm-desc">Can archive users and restore archived accounts inside User Management only.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional nested">
+                        <input type="checkbox" class="edit-perm user-management-action" id="permUserManagementDelete" value="User-Management-Delete" onchange="handleUserManagementActionChange(); updatePermissionSummary()">
+                        <span class="perm-copy">
+                            <span class="perm-title">User Management: Delete</span>
+                            <span class="perm-desc">Can permanently delete archived users and delete batches inside User Management only.</span>
+                        </span>
+                    </label>
+                </div>
+                </div>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Lost-Reports" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Lost Item Reports</span>
+                        <span class="perm-desc">Review and manage submitted lost item reports.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Found-Reports" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Surrendered Item Reports</span>
+                        <span class="perm-desc">Handle found or surrendered item submissions.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Claim-Management" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Claim Management</span>
+                        <span class="perm-desc">Approve and monitor item claim requests.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Reports" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Reports</span>
+                        <span class="perm-desc">Access reporting dashboards and summaries.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Confiscated-items" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Confiscated Items</span>
+                        <span class="perm-desc">View and process confiscated item records.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Content-management" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Content Management</span>
+                        <span class="perm-desc">Publish announcements and update landing content.</span>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <div class="permission-summary-panel">
+            <div class="permission-summary-title">Access Review</div>
+            <div id="permissionSummaryText" class="permission-summary-text">No access selected. This account will stay deactivated.</div>
+            <div id="permissionSummaryList" class="permission-chip-list"></div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 30px;">
+            <button class="btn-secondary" onclick="cancelPermissionEdit()" style="flex: 1;">Cancel</button>
+            <button class="btn-primary" onclick="confirmSavePermissions()" style="flex: 2;">Update Permissions</button>
+        </div>
+    </div>
+</div>
+
+   <div id="createAdminModal" class="modal">
+        <div class="modal-content permission-modal-card" style="max-width: 760px; border-top: 8px solid var(--dark-blue);">
+            <span class="close-modal" onclick="closeModal('createAdminModal')">&times;</span>
+            <div class="permission-modal-header">
+                <div>
+                    <h2 style="color: var(--sti-blue);">Create New Admin</h2>
+                    <p style="font-size: 13px; color: #666;">A secure temporary password will be generated automatically.</p>
+                </div>
+                <div class="permission-state-badge active">New Access</div>
+            </div>
+
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="adminName" placeholder="Juan Dela Cruz" class="admin-input">
+            </div>
+
+            <div class="form-group">
+                <label>STI Email</label>
+                <input type="email" id="adminEmail" placeholder="juan.delacruz@sti.edu.ph" class="admin-input">
+            </div>
+            
+            <div class="form-group">
+                <label>Department / Office</label>
+                <select id="adminCourse" class="admin-input" required>
+                    <option value="">-- Select Office --</option>
+                    </select>
+            </div>
+            <div class="permissions-container" style="margin-top: 10px;">
+                <p style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Module Access</p>
+                <p class="permission-helper-text">Choose which modules this new admin can open from the admin panel.</p>
+                <div class="permissions-grid">
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Confiscated-items">
+                        <span class="perm-copy">
+                            <span class="perm-title">Confiscated Items</span>
+                            <span class="perm-desc">View and process confiscated item records.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Messages">
+                        <span class="perm-copy">
+                            <span class="perm-title">Messages</span>
+                            <span class="perm-desc">Chat with students and reply to inquiries.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" id="createAdminUserManagement" value="User-Management" onchange="toggleCreateAdminUserManagementActions()">
+                        <span class="perm-copy">
+                            <span class="perm-title">User Management</span>
+                            <span class="perm-desc">Control what this admin can do inside User Management.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Lost-Reports">
+                        <span class="perm-copy">
+                            <span class="perm-title">Lost Item Reports</span>
+                            <span class="perm-desc">Review and manage submitted lost item reports.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Found-Reports">
+                        <span class="perm-copy">
+                            <span class="perm-title">Surrendered Item Reports</span>
+                            <span class="perm-desc">Handle found or surrendered item submissions.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Claim-Management">
+                        <span class="perm-copy">
+                            <span class="perm-title">Claim Management</span>
+                            <span class="perm-desc">Approve and monitor item claim requests.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Content-management">
+                        <span class="perm-copy">
+                            <span class="perm-title">Content Management</span>
+                            <span class="perm-desc">Publish announcements and update landing content.</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <div id="createAdminUserManagementActionsWrapper" class="user-management-access-panel" style="display: none; margin-top: 14px;">
+                <div class="user-management-access-title">User Management Access</div>
+                <div class="user-management-access-help">These permissions only apply inside the User Management page.</div>
+            <div id="createAdminUserManagementActions" class="nested-permission-group">
+                <label class="perm-item professional nested">
+                    <input type="checkbox" class="perm-check create-admin-user-management-action" value="User-Management-Create" onchange="handleCreateAdminUserManagementActionChange()">
+                    <span class="perm-copy">
+                        <span class="perm-title">User Management: Create Accounts</span>
+                        <span class="perm-desc">Lets this admin create new admins and bulk register students inside User Management.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional nested">
+                    <input type="checkbox" class="perm-check create-admin-user-management-action" value="User-Management-Edit" onchange="handleCreateAdminUserManagementActionChange()">
+                    <span class="perm-copy">
+                        <span class="perm-title">User Management: Edit Access</span>
+                        <span class="perm-desc">Lets this admin update account permissions and access inside User Management.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional nested">
+                    <input type="checkbox" class="perm-check create-admin-user-management-action" value="User-Management-Reset" onchange="handleCreateAdminUserManagementActionChange()">
+                    <span class="perm-copy">
+                        <span class="perm-title">User Management: Reset Password</span>
+                        <span class="perm-desc">Lets this admin reset student passwords and view temporary passwords inside User Management.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional nested">
+                    <input type="checkbox" class="perm-check create-admin-user-management-action" value="User-Management-Archive" onchange="handleCreateAdminUserManagementActionChange()">
+                    <span class="perm-copy">
+                        <span class="perm-title">User Management: Archive / Recover</span>
+                        <span class="perm-desc">Lets this admin archive users and recover archived accounts inside User Management.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional nested">
+                    <input type="checkbox" class="perm-check create-admin-user-management-action" value="User-Management-Delete" onchange="handleCreateAdminUserManagementActionChange()">
+                    <span class="perm-copy">
+                        <span class="perm-title">User Management: Delete</span>
+                        <span class="perm-desc">Lets this admin permanently delete archived users inside User Management.</span>
+                    </span>
+                </label>
+            </div>
+            </div>
+
+            <button class="upload-btn" onclick="submitAdminCreate()" id="createBtn" style="width: 100%; margin-top: 15px;">
+                Generate & Confirm Access
+            </button>
+            
+            <div id="adminResult" style="margin-top: 15px; display: none; text-align: center;">
+                <p style="font-size: 14px;">Generated Password:</p>
+                <code id="generatedAdminPass" style="font-size: 18px; color: #28a745; font-weight: bold;"></code>
+            </div>
+        </div>
+
+    </div>
+    <div id="resetStudentPasswordModal" class="modal">
+        <div class="modal-content reset-student-password-content">
+            <span class="close-modal" onclick="closeModal('resetStudentPasswordModal')">&times;</span>
+            <h2>Reset Student Password</h2>
+            <p style="margin-bottom: 18px; color: #555; font-size: 13px;">
+                Enter the student's STI email and the system will generate a new temporary password.
+            </p>
+
+            <div class="form-group">
+                <label for="resetStudentEmail">Student Email</label>
+                <input type="email" id="resetStudentEmail" placeholder="student@novaliches.sti.edu.ph" class="admin-input">
+            </div>
+
+            <button id="confirmResetStudentPasswordBtn" class="success-btn" onclick="submitHeaderPasswordReset()" style="width: 100%; margin-top: 20px;">
+                Reset Password
+            </button>
+            <button class="btn-secondary" onclick="closeModal('resetStudentPasswordModal')" style="width: 100%; margin-top: 10px;">
+                Cancel
+            </button>
+        </div>
+    </div>
+    <div id="resetPasswordResultModal" class="modal">
+        <div class="modal-content reset-password-result-content">
+            <span class="close-modal" onclick="closeModal('resetPasswordResultModal')">&times;</span>
+            <h2>Password Reset Complete</h2>
+            <p style="margin-bottom: 16px; color: #555; font-size: 13px;">
+                Share this temporary password with the student and ask them to change it after logging in.
+            </p>
+            <div class="form-group">
+                <label>Student Email</label>
+                <input type="text" id="resetResultEmail" class="admin-input" readonly>
+            </div>
+            <div class="form-group">
+                <label>Temporary Password</label>
+                <input type="text" id="resetResultPassword" class="admin-input" readonly>
+            </div>
+            <button class="success-btn" onclick="closeModal('resetPasswordResultModal')" style="width: 100%; margin-top: 20px;">
+                Done
+            </button>
+        </div>
+    </div>
+<div id="loadingOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9999; flex-direction:column; align-items:center; justify-content:center; color:white;">
+    <div class="loader"></div> <h2 style="margin-top:20px;"></h2>
+    <p>Please wait, generating secure accounts and STI emails.</p>
+    <div id="progressBarContainer" style="width:300px; height:10px; background:#444; border-radius:5px; margin-top:10px; overflow:hidden;">
+        <div id="progressBar" style="width:0%; height:100%; background:var(--sti-yellow); transition: width 0.3s;"></div>
+    </div>
+</div>
+
+<script>
+
+const PERMISSION_LABELS = {
+    "Messages": "Messages",
+    "User-Management": "User Management",
+    "User-Management-Create": "User Management Create",
+    "User-Management-Edit": "User Management Edit",
+    "User-Management-Reset": "User Management Reset Password",
+    "User-Management-Archive": "User Management Archive",
+    "User-Management-Delete": "User Management Delete",
+    "Lost-Reports": "Lost Item Reports",
+    "Found-Reports": "Surrendered Item Reports",
+    "Claim-Management": "Claim Management",
+    "Reports": "Reports",
+    "Confiscated-items": "Confiscated Items",
+    "Content-management": "Content Management",
+    "Student-Portal-Access": "Student Portal Access"
+};
+const BULK_JOB_STORAGE_KEY = "active_bulk_registration_job_id";
+const BULK_JOB_AUTO_OPEN_STORAGE_KEY = "active_bulk_registration_job_auto_open";
+
+let currentAdminPermissions = [];
+let activeBulkJobId = null;
+let bulkJobPoller = null;
+let bulkJobAutoOpenResult = false;
+let lastKnownBulkJobStatus = null;
+let lastCompletedBulkJob = null;
+
+function hasAccessPermission(permission) {
+    return currentAdminPermissions.includes(permission);
+}
+
+function canGrantPermission(permission) {
+    return hasAccessPermission(permission);
+}
+
+function syncPermissionGrantLocks() {
+    document.querySelectorAll('.edit-perm').forEach(cb => {
+        const allowed = canGrantPermission(cb.value);
+        cb.disabled = !allowed;
+        cb.closest('.perm-item')?.classList.toggle('disabled-permission', !allowed);
+    });
+}
+
+function syncCreateAdminGrantLocks() {
+    document.querySelectorAll('.perm-check').forEach(cb => {
+        const allowed = canGrantPermission(cb.value);
+        cb.disabled = !allowed;
+        cb.checked = allowed ? cb.checked : false;
+        cb.closest('.perm-item')?.classList.toggle('disabled-permission', !allowed);
+    });
+    toggleCreateAdminUserManagementActions();
+}
+
+function dismissBulkJobCard() {
+    const card = document.getElementById('bulkJobStatusCard');
+    const dismissBtn = document.getElementById('bulkJobDismissBtn');
+    if (card) card.style.display = 'none';
+    if (dismissBtn) dismissBtn.style.display = 'none';
+    if (lastKnownBulkJobStatus === 'completed' || lastKnownBulkJobStatus === 'failed') {
+        localStorage.removeItem(BULK_JOB_STORAGE_KEY);
+        localStorage.removeItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY);
+        activeBulkJobId = null;
+    }
+}
+
+function renderBulkJobCard(job, options = {}) {
+    const { autoOpenResult = false } = options;
+    const card = document.getElementById('bulkJobStatusCard');
+    const title = document.getElementById('bulkJobTitle');
+    const message = document.getElementById('bulkJobMessage');
+    const meta = document.getElementById('bulkJobMeta');
+    const progressBar = document.getElementById('bulkJobProgressBar');
+    const dismissBtn = document.getElementById('bulkJobDismissBtn');
+    const actions = document.getElementById('bulkJobActions');
+    const downloadBtn = document.getElementById('bulkJobDownloadBtn');
+
+    if (!card || !title || !message || !meta || !progressBar || !dismissBtn || !actions || !downloadBtn || !job) return;
+
+    card.style.display = 'block';
+    progressBar.style.width = `${job.progress || 0}%`;
+    lastKnownBulkJobStatus = job.status || null;
+    actions.style.display = 'none';
+    downloadBtn.style.display = 'none';
+
+    const summary = job.summary || {};
+    const processed = job.processed || 0;
+    const total = job.total || 0;
+
+    if (job.status === 'completed') {
+        lastCompletedBulkJob = job;
+        title.innerText = 'Background registration completed';
+        message.innerText = 'The upload finished and the report is ready.';
+        meta.innerText = `Processed ${processed}/${total} users. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
+        dismissBtn.style.display = 'inline-flex';
+        actions.style.display = 'flex';
+        downloadBtn.style.display = 'inline-flex';
+
+        if (bulkJobPoller) {
+            clearInterval(bulkJobPoller);
+            bulkJobPoller = null;
+        }
+
+        if (autoOpenResult || bulkJobAutoOpenResult) {
+            bulkJobAutoOpenResult = false;
+            localStorage.removeItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY);
+            showBulkResults(job);
+        }
+        const bulkBtn = document.getElementById('openBulkRegisterBtn');
+        const createBtn = document.getElementById('openCreateAdminBtn');
+        if (bulkBtn) bulkBtn.style.display = '';
+        if (createBtn) createBtn.style.display = '';
+        return;
+    }
+
+    if (job.status === 'failed') {
+        title.innerText = 'Background registration failed';
+        message.innerText = job.error || job.message || 'The upload failed before completion.';
+        meta.innerText = `Processed ${processed}/${total} students before the job stopped.`;
+        dismissBtn.style.display = 'inline-flex';
+
+        if (bulkJobPoller) {
+            clearInterval(bulkJobPoller);
+            bulkJobPoller = null;
+        }
+        return;
+    }
+
+    title.innerText = job.status === 'queued' ? 'Background registration queued' : 'Background registration in progress';
+    message.innerText = job.message || 'The user upload is running in the background. You can keep using the system.';
+    meta.innerText = `Processed ${processed}/${total} users. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
+    dismissBtn.style.display = 'none';
+}
+
+function showBulkResults(job) {
+    const results = Array.isArray(job?.results) ? job.results : [];
+    window.lastBulkResults = results;
+
+    const tbody = document.getElementById('bulkResultBody');
+    const previewLimit = 200;
+    const previewRows = results.slice(0, previewLimit);
+    tbody.innerHTML = previewRows.map(item => `
+        <tr>
+            <td>${item.student_no}</td>
+            <td>${item.full_name}</td>
+            <td>${item.batch_id || 'N/A'}</td>
+            <td>${item.email}</td>
+            <td>${item.status}</td>
+            <td>${item.temp_password ? `<code style="color:var(--sti-yellow)">${item.temp_password}</code>` : 'N/A'}</td>
+        </tr>`).join('');
+
+    const summary = job.summary || {};
+    document.getElementById('totalBatchCount').innerText = summary.total || results.length;
+    document.getElementById('bulkSummaryText').innerText =
+        `Total: ${summary.total || results.length} | Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
+    document.getElementById('bulkFailureText').innerText =
+        job.status === 'failed' ? (job.error || job.message || 'Background registration failed.') : '';
+    document.getElementById('bulkPreviewNote').innerText =
+        results.length > previewLimit
+            ? `Showing first ${previewLimit} rows only to keep the page responsive. Use Download Excel for the full result.`
+            : 'Showing all processed rows.';
+
+    openModal('bulkResultModal');
+}
+
+async function pollBulkJobStatus() {
+    if (!activeBulkJobId) return;
+
+    const token = localStorage.getItem("admin_token");
+    if (!token) return;
+
+    try {
+        const response = await fetch(`/admin/bulk-register-students/status/${activeBulkJobId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        const job = await response.json();
+        if (!response.ok) {
+            throw new Error(job.detail || 'Failed to fetch background registration status.');
+        }
+
+        renderBulkJobCard(job);
+
+        if (job.status === 'completed') {
+            loadUsers(currentView);
+        }
+    } catch (error) {
+        console.error('Bulk job polling failed:', error);
+        const card = document.getElementById('bulkJobStatusCard');
+        const title = document.getElementById('bulkJobTitle');
+        const message = document.getElementById('bulkJobMessage');
+        const dismissBtn = document.getElementById('bulkJobDismissBtn');
+        if (card && title && message && dismissBtn) {
+            card.style.display = 'block';
+            title.innerText = 'Background registration status unavailable';
+            message.innerText = error.message || 'We could not refresh the upload status right now.';
+            dismissBtn.style.display = 'inline-flex';
+        }
+        if (bulkJobPoller) {
+            clearInterval(bulkJobPoller);
+            bulkJobPoller = null;
+        }
+        localStorage.removeItem(BULK_JOB_STORAGE_KEY);
+        localStorage.removeItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY);
+    }
+}
+
+function startBulkJobPolling(jobId, options = {}) {
+    activeBulkJobId = jobId;
+    bulkJobAutoOpenResult = options.autoOpenResult === true
+        ? true
+        : localStorage.getItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY) === 'true';
+    localStorage.setItem(BULK_JOB_STORAGE_KEY, jobId);
+    if (bulkJobAutoOpenResult) {
+        localStorage.setItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY, 'true');
+    }
+
+    if (bulkJobPoller) {
+        clearInterval(bulkJobPoller);
+    }
+
+    pollBulkJobStatus();
+    bulkJobPoller = setInterval(pollBulkJobStatus, 2000);
+}
+
+function resumePersistedBulkJob() {
+    const persistedBulkJobId = localStorage.getItem(BULK_JOB_STORAGE_KEY);
+    if (persistedBulkJobId) {
+        startBulkJobPolling(persistedBulkJobId, {
+            autoOpenResult: localStorage.getItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY) === 'true'
+        });
+    }
+}
+
+function toggleUserManagementActions() {
+    const masterCheckbox = document.getElementById('permUserManagement');
+    const actionsGroup = document.getElementById('userManagementActionsGroupWrapper');
+    const actionCheckboxes = document.querySelectorAll('.user-management-action');
+
+    if (!actionsGroup) return;
+
+    const enabled = !!masterCheckbox?.checked;
+    actionsGroup.style.display = enabled ? 'grid' : 'none';
+
+    if (!enabled) {
+        actionCheckboxes.forEach(cb => cb.checked = false);
+    }
+}
+
+function handleUserManagementActionChange() {
+    const masterCheckbox = document.getElementById('permUserManagement');
+    const actionCheckboxes = document.querySelectorAll('.user-management-action');
+    const hasSelectedAction = Array.from(actionCheckboxes).some(cb => cb.checked);
+
+    if (masterCheckbox) {
+        masterCheckbox.checked = hasSelectedAction || masterCheckbox.checked;
+    }
+
+    toggleUserManagementActions();
+}
+
+function toggleCreateAdminUserManagementActions() {
+    const masterCheckbox = document.getElementById('createAdminUserManagement');
+    const actionsGroup = document.getElementById('createAdminUserManagementActionsWrapper');
+    const actionCheckboxes = document.querySelectorAll('.create-admin-user-management-action');
+
+    if (!actionsGroup) return;
+
+    const enabled = !!masterCheckbox?.checked;
+    actionsGroup.style.display = enabled ? 'grid' : 'none';
+
+    if (!enabled) {
+        actionCheckboxes.forEach(cb => cb.checked = false);
+        return;
+    }
+
+    actionCheckboxes.forEach(cb => {
+        if (cb.disabled) {
+            cb.checked = false;
+        }
+    });
+}
+
+function handleCreateAdminUserManagementActionChange() {
+    const masterCheckbox = document.getElementById('createAdminUserManagement');
+    const actionCheckboxes = document.querySelectorAll('.create-admin-user-management-action');
+    const hasSelectedAction = Array.from(actionCheckboxes).some(cb => cb.checked);
+
+    if (masterCheckbox) {
+        masterCheckbox.checked = hasSelectedAction || masterCheckbox.checked;
+    }
+
+    toggleCreateAdminUserManagementActions();
+}
+
+function normalizePermissionSelection(permissions) {
+    const normalized = Array.from(new Set(permissions || []));
+    if (normalized.some(permission => permission.startsWith('User-Management-')) && !normalized.includes('User-Management')) {
+        normalized.unshift('User-Management');
+    }
+    return normalized;
+}
+
+    function openEditModal(userId, fullName, currentPermissions) {
+    if (!hasAccessPermission('User-Management-Edit')) {
+        showAccessDeniedPopup('User Management Edit');
+        return;
+    }
+    document.getElementById('editUserId').value = userId;
+    document.getElementById('editUserDisplay').innerText = `User: ${fullName}`;
+    
+    // Clear all checkboxes first
+    const checkboxes = document.querySelectorAll('.edit-perm');
+    checkboxes.forEach(cb => cb.checked = false);
+
+    // Parse perms (handles stringified JSON or raw arrays)
+    const permsArray = Array.isArray(currentPermissions) ? currentPermissions : JSON.parse(currentPermissions || "[]");
+    document.getElementById('editOriginalPermissions').value = JSON.stringify(permsArray);
+    
+    // Check the active ones
+    checkboxes.forEach(cb => {
+        if (permsArray.includes(cb.value)) {
+            cb.checked = true;
+        }
+    });
+
+    syncPermissionGrantLocks();
+    toggleUserManagementActions();
+    updatePermissionSummary();
+    document.getElementById('editPermissionsModal').style.display = 'flex';
+}
+
+function cancelPermissionEdit() {
+    // 1. Clear the inputs so nothing stays in memory
+    document.querySelectorAll('.edit-perm').forEach(cb => {
+        cb.checked = false;
+        cb.disabled = false;
+        cb.closest('.perm-item')?.classList.remove('disabled-permission');
+    });
+    document.getElementById('editUserId').value = "";
+    document.getElementById('editOriginalPermissions').value = "";
+    document.getElementById('permissionSummaryList').innerHTML = "";
+    document.getElementById('permissionSummaryText').innerText = "No access selected. This account will stay deactivated.";
+    document.getElementById('permissionAccessState').innerText = "No Access";
+    document.getElementById('permissionAccessState').className = "permission-state-badge";
+    document.getElementById('userManagementActionsGroupWrapper').style.display = 'none';
+    
+    // 2. Hide the modal
+    document.getElementById('editPermissionsModal').style.display = 'none';
+}
+
+function updatePermissionSummary() {
+    const selected = normalizePermissionSelection(
+        Array.from(document.querySelectorAll('.edit-perm:checked')).map(cb => cb.value)
+    );
+    const summaryText = document.getElementById('permissionSummaryText');
+    const summaryList = document.getElementById('permissionSummaryList');
+    const stateBadge = document.getElementById('permissionAccessState');
+
+    summaryList.innerHTML = '';
+
+    if (selected.length === 0) {
+        summaryText.innerText = "No access selected. This account will stay deactivated.";
+        stateBadge.innerText = "No Access";
+        stateBadge.className = "permission-state-badge";
+        return;
+    }
+
+    summaryText.innerText = `${selected.length} access ${selected.length === 1 ? 'permission is' : 'permissions are'} selected for this account.`;
+    stateBadge.innerText = "Access Granted";
+    stateBadge.className = "permission-state-badge active";
+
+    selected.forEach(permission => {
+        const chip = document.createElement('span');
+        chip.className = 'permission-chip';
+        chip.innerText = PERMISSION_LABELS[permission] || permission;
+        summaryList.appendChild(chip);
+    });
+}
+
+function confirmSavePermissions() {
+    const selected = normalizePermissionSelection(
+        Array.from(document.querySelectorAll('.edit-perm:checked')).map(cb => cb.value)
+    );
+    const original = JSON.parse(document.getElementById('editOriginalPermissions').value || "[]");
+    const granted = selected.filter(permission => !original.includes(permission));
+    const removed = original.filter(permission => !selected.includes(permission));
+
+    const messageParts = [];
+    let alertIcon = 'info';
+    let alertTitle = 'Confirm Permission Changes';
+
+    if (granted.length > 0) {
+        messageParts.push(`<span style="color:green;font-weight:bold;">Grant access to:</span> ${granted.map(permission => PERMISSION_LABELS[permission] || permission).join(', ')}`);
+        alertIcon = 'success';
+        alertTitle = 'Grant Permissions';
+    }
+    if (removed.length > 0) {
+        messageParts.push(`<span style="color:red;font-weight:bold;">Remove access from:</span> ${removed.map(permission => PERMISSION_LABELS[permission] || permission).join(', ')}`);
+        alertIcon = 'error';
+        alertTitle = 'Remove Permissions';
+    }
+    if (selected.length === 0) {
+        messageParts.push(`<span style="color:orange;font-weight:bold;">No permissions selected.</span> This account will be deactivated.`);
+        alertIcon = 'warning';
+        alertTitle = 'Deactivate Account';
+    } else if (messageParts.length === 0) {
+        messageParts.push(`<span style="color:blue;font-weight:bold;">Keep current access</span> with ${selected.length} assigned permissions.`);
+        alertIcon = 'info';
+        alertTitle = 'No Changes';
+    }
+
+    Swal.fire({
+        title: alertTitle,
+        html: messageParts.join('<br><br>'),
+        icon: alertIcon,
+        showCancelButton: true,
+        confirmButtonText: 'Yes, save changes',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+        customClass: {
+            popup: 'swal-wide',
+            confirmButton: 'swal-confirm-btn',
+            cancelButton: 'swal-cancel-btn'
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            saveUserPermissions(selected);
+            Swal.fire({
+                title: 'Saved!',
+                text: 'Permissions have been updated successfully.',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }
+    });
+}
+
+function swalClassMap() {
+    return {
+        popup: 'swal-wide',
+        confirmButton: 'swal-confirm-btn',
+        cancelButton: 'swal-cancel-btn'
+    };
+}
+
+async function showUserManagementAlert(icon, title, text) {
+    return Swal.fire({
+        icon,
+        title,
+        text,
+        customClass: swalClassMap()
+    });
+}
+
+async function confirmUserManagementAction(title, text, confirmButtonText = 'Confirm', icon = 'warning') {
+    const result = await Swal.fire({
+        icon,
+        title,
+        text,
+        showCancelButton: true,
+        confirmButtonText,
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+        customClass: swalClassMap()
+    });
+
+    return result.isConfirmed;
+}
+
+
+// Function to move user to Archive OR Restore them
+async function toggleArchive(userId, shouldArchive, currentRole, silent = false) {
+    if (!hasAccessPermission('User-Management-Archive')) {
+        showAccessDeniedPopup('User Management Archive');
+        return;
+    }
+    const action = shouldArchive ? "archive" : "restore";
+    if (!silent && !(await confirmUserManagementAction(`Confirm ${action}`, `Are you sure you want to ${action} this user?`, `Yes, ${action}`))) return;
+
+    try {
+        const response = await fetch(`/admin/toggle-archive/${userId}?archive=${shouldArchive}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (!silent) {
+                await showUserManagementAlert('success', 'User updated', result.message);
+                loadUsers(currentRole);
+            }
+        }
+    } catch (err) {
+        console.error("Archive toggle failed:", err);
+    }
+}
+
+// Function to wipe user from SSMS forever
+async function permanentDelete(userId, currentRole, silent = false) {
+    if (!hasAccessPermission('User-Management-Delete')) {
+        showAccessDeniedPopup('User Management Delete');
+        return;
+    }
+    if (!silent && !(await confirmUserManagementAction('Delete user permanently?', 'This will permanently delete this user from the STI database and cannot be undone.', 'Delete user', 'warning'))) return;
+
+    try {
+        const response = await fetch(`/admin/permanent-delete/${userId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+        });
+
+        if (response.ok) {
+            if (!silent) {
+                await showUserManagementAlert('success', 'User deleted', 'User deleted permanently.');
+                loadUsers(currentRole);
+            }
+        }
+    } catch (err) {
+        console.error("Permanent delete failed:", err);
+    }
+}
+
+async function saveUserPermissions(selectedPermissions) {
+    const userId = document.getElementById('editUserId').value;
+    const token = localStorage.getItem("admin_token");
+    const normalizedPermissions = normalizePermissionSelection(selectedPermissions);
+
+    try {
+        const response = await fetch(`/admin/update-permissions/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ permissions: normalizedPermissions })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            await showUserManagementAlert('success', 'Permissions updated', `${result.message} Status: ${result.status}`);
+            cancelPermissionEdit();
+            loadUsers(currentView); 
+        } else {
+            const result = await response.json().catch(() => ({}));
+            await showUserManagementAlert('error', 'Update failed', result.detail || "You might not have permission to do this.");
+        }
+    } catch (error) {
+        console.error("Update Error:", error);
+    }
+}
+
+
+let allUsers = []; // Global variable to store the fetched data
+
+
+let currentAdminId = null; // Store your ID globally
+let currentView = 'admin';
+let currentUserTypeFilter = 'all';
+let currentBatchFilter = '';
+let selectedUserIds = new Set();
+
+function isFacultyUser(user) {
+    if (!user || user.is_admin) return false;
+    const department = String(user.department || '').trim();
+    const course = String(user.course || '').trim();
+    const section = String(user.section || '').trim();
+    return !!department && department !== 'N/A' && !course && !section;
+}
+
+function applyUserTypeFilter(users) {
+    if (currentView !== 'student') return users;
+    if (currentUserTypeFilter === 'faculty') {
+        return users.filter(isFacultyUser);
+    }
+    if (currentUserTypeFilter === 'student') {
+        return users.filter(user => !isFacultyUser(user));
+    }
+    return users;
+}
+
+function applyBatchFilter(users) {
+    const filterValue = String(currentBatchFilter || '').trim();
+    if (!filterValue) return users;
+
+    const [filterType, ...rawValueParts] = filterValue.split(':');
+    const selectedValue = rawValueParts.join(':').trim();
+
+    if (!filterType || !selectedValue) return users;
+
+    return users.filter(user => {
+        const batchId = String(user.batch_id || '').trim();
+        const course = String(user.course || '').trim();
+        const userId = String(user.student_no || '').trim();
+        const facultyUser = isFacultyUser(user);
+
+        if (filterType === 'role') {
+            if (selectedValue === 'faculty') return facultyUser;
+            if (selectedValue === 'student') return !facultyUser;
+        }
+
+        if (filterType === 'batch') return batchId === selectedValue;
+        if (filterType === 'course') return course === selectedValue;
+        return true;
+    });
+}
+
+function populateBatchFilterOptions() {
+    const batchFilterInput = document.getElementById('batchFilterInput');
+    if (!batchFilterInput) return;
+
+    const batchValues = [...new Set(
+        allUsers
+            .filter(user => !user.is_admin && String(user.batch_id || '').trim())
+            .map(user => String(user.batch_id || '').trim())
+    )].sort((a, b) => b.localeCompare(a));
+
+    const courseValues = [...new Set(
+        allUsers
+            .filter(user => !user.is_admin && String(user.course || '').trim())
+            .map(user => String(user.course || '').trim())
+    )].sort((a, b) => a.localeCompare(b));
+
+    batchFilterInput.innerHTML = '';
+
+    const appendOption = (value, label) => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        batchFilterInput.appendChild(option);
+    };
+
+    const appendGroup = (label, items, prefix, labelFormatter = value => value) => {
+        if (!items.length) return;
+        const group = document.createElement('optgroup');
+        group.label = label;
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = `${prefix}:${item}`;
+            option.textContent = labelFormatter(item);
+            group.appendChild(option);
+        });
+        batchFilterInput.appendChild(group);
+    };
+
+    appendOption('', 'All filters');
+    appendGroup('User Type', ['faculty', 'student'], 'role', value =>
+        value === 'faculty' ? 'Faculty' : 'Students'
+    );
+    appendGroup('Batches', batchValues, 'batch');
+    appendGroup('Courses', courseValues, 'course');
+
+    const allOptionValues = [
+        '',
+        ...batchValues.map(value => `batch:${value}`),
+        ...courseValues.map(value => `course:${value}`),
+        'role:faculty',
+        'role:student'
+    ];
+
+    if (currentBatchFilter && allOptionValues.includes(currentBatchFilter)) {
+        batchFilterInput.value = currentBatchFilter;
+    } else {
+        currentBatchFilter = '';
+        batchFilterInput.value = '';
+    }
+}
+
+function updateUserTypeToggle() {
+    const userTypeToggle = document.getElementById('userTypeToggle');
+    if (userTypeToggle) {
+        userTypeToggle.style.display = currentView === 'student' ? 'inline-flex' : 'none';
+    }
+
+    const buttons = {
+        all: document.getElementById('btnShowAllUsers'),
+        student: document.getElementById('btnShowStudentsOnly'),
+        faculty: document.getElementById('btnShowFacultyOnly')
+    };
+
+    Object.entries(buttons).forEach(([key, button]) => {
+        if (button) {
+            button.classList.toggle('active', currentUserTypeFilter === key);
+        }
+    });
+}
+
+function setUserTypeFilter(filterType) {
+    currentUserTypeFilter = filterType;
+    selectedUserIds.clear();
+    const selectAllRows = document.getElementById('selectAllRows');
+    if (selectAllRows) selectAllRows.checked = false;
+    updateUserTypeToggle();
+    if (document.getElementById('userSearch')?.value || currentBatchFilter) {
+        searchUsers();
+    } else {
+        filterTable('student');
+    }
+}
+
+function getInitialUserManagementTab() {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    return ['admin', 'student', 'archive', 'delete'].includes(tab) ? tab : 'admin';
+}
+
+async function loadUsers(currentRole = getInitialUserManagementTab()) {
+    const token = localStorage.getItem("admin_token");
+    
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        currentAdminId = payload.id || payload.sub;
+
+        const response = await fetch('/admin/get-all-users', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        allUsers = await response.json();
+        populateBatchFilterOptions();
+        
+        // This will use 'admin' on first load, 
+        // but will use 'student' or 'archive_student' if passed by a button.
+        filterTable(currentRole); 
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+function filterTable(role) {
+    currentView = role;
+    if (role !== 'student') {
+        currentUserTypeFilter = 'all';
+    }
+    selectedUserIds.clear();
+
+    const tabButtons = ['btnShowAdmin', 'btnShowStudent', 'btnShowArchive', 'btnShowDelete'];
+    tabButtons.forEach(id => document.getElementById(id)?.classList.remove('active'));
+    const activeButtonMap = {
+        admin: 'btnShowAdmin',
+        student: 'btnShowStudent',
+        archive: 'btnShowArchive',
+        delete: 'btnShowDelete'
+    };
+    document.getElementById(activeButtonMap[role])?.classList.add('active');
+
+    // 1. Hide ALL table containers first
+    const containers = ['adminContainer', 'studentContainer', 'archiveContainer', 'deleteContainer'];
+    containers.forEach(id => document.getElementById(id).style.display = 'none');
+
+    // 2. Map the role to the correct Container and Table Body
+    const config = {
+        'admin':           { container: 'adminContainer',          body: 'adminTableBody' },
+        'student':         { container: 'studentContainer',        body: 'studentTableBody' },
+        'archive':         { container: 'archiveContainer',        body: 'archiveTableBody' },
+        'delete':          { container: 'deleteContainer',         body: 'deleteTableBody' }
+    };
+
+    const activeConfig = config[role];
+    if (activeConfig) {
+        document.getElementById(activeConfig.container).style.display = 'block';
+    }
+
+    const batchFilterContainer = document.getElementById('batchFilterContainer');
+    const batchFilterInput = document.getElementById('batchFilterInput');
+    const userTypeToggle = document.getElementById('userTypeToggle');
+    const selectAllControl = document.getElementById('selectAllControl');
+    const selectAllRows = document.getElementById('selectAllRows');
+    const userCountBadge = document.getElementById('userCountBadge');
+    const archiveSelectedBtn = document.getElementById('btnArchiveSelected');
+    const activateSelectedBtn = document.getElementById('btnActivateSelected');
+    const recoverSelectedBtn = document.getElementById('btnRecoverSelected');
+    const deleteSelectedBtn = document.getElementById('btnDeleteSelected');
+    const shouldShowArchiveFilters = role === 'archive' || role === 'delete';
+
+    batchFilterContainer.style.display = (role === 'admin' || role === 'student' || shouldShowArchiveFilters) ? 'flex' : 'none';
+    if (userTypeToggle) {
+        userTypeToggle.style.display = role === 'student' ? 'inline-flex' : 'none';
+    }
+    if (batchFilterInput) {
+        batchFilterInput.style.display = role === 'student' ? 'inline-flex' : 'none';
+        if (role !== 'student') {
+            batchFilterInput.value = '';
+            currentBatchFilter = '';
+        }
+    }
+    if (selectAllControl) {
+        selectAllControl.style.display = role === 'admin' || role === 'student' || role === 'archive' || role === 'delete' ? 'inline-flex' : 'none';
+    }
+    if (selectAllRows) {
+        selectAllRows.checked = false;
+    }
+    if (userCountBadge) {
+        userCountBadge.style.display = (role === 'admin' || role === 'student' || role === 'archive' || role === 'delete') ? 'inline-flex' : 'none';
+    }
+    if (archiveSelectedBtn) archiveSelectedBtn.style.display = 'none';
+    if (activateSelectedBtn) activateSelectedBtn.style.display = 'none';
+    if (recoverSelectedBtn) recoverSelectedBtn.style.display = 'none';
+    if (deleteSelectedBtn) deleteSelectedBtn.style.display = 'none';
+
+    // 3. Filter the 'allUsers' array based on your Logic
+    let filtered = allUsers.filter(user => {
+        const isAdmin = !!user.is_admin;
+        const isArchived = !!user.is_archived;
+
+        if (role === 'admin')           return isAdmin && !isArchived;
+        if (role === 'student')         return !isAdmin && !isArchived;
+        if (role === 'archive')         return isArchived && !user.is_pending_delete;
+        if (role === 'delete')          return isArchived && !!user.is_pending_delete;
+        return false;
+    });
+
+    filtered = applyUserTypeFilter(filtered);
+    filtered = applyBatchFilter(filtered);
+    updateUserTypeToggle();
+
+    if (userCountBadge) {
+        userCountBadge.innerText = role === 'admin'
+            ? `Total Admins: ${filtered.length}`
+            : role === 'student'
+                ? `Total ${currentUserTypeFilter === 'faculty' ? 'Faculty' : currentUserTypeFilter === 'student' ? 'Students' : 'Users'}: ${filtered.length}`
+                : `Total Records: ${filtered.length}`;
+    }
+
+    // 4. Send to the specific table body
+    renderTable(filtered, role, activeConfig.body);
+}
+function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody') {
+    const tableBody = document.getElementById(targetBodyId);
+    if (!tableBody) return; // Safety check
+    
+    tableBody.innerHTML = '';
+
+    data.forEach(user => {
+        const isMe = user.id == currentAdminId; 
+        
+        // 1. Handle Login Display
+        let loginDisplay = "Never";
+        if (user.last_login) {
+            const date = new Date(user.last_login);
+            loginDisplay = date.toLocaleDateString('en-US', { 
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+            });
+        }
+
+        // 2. SEGREGATED COLUMN: Show Course/Section for users, Dept for Admins
+        let infoColumn = "";
+        let batchColumn = "";
+        if (currentRole === 'student') {
+            const userInfo = (user.course || user.section)
+                ? `${user.course || ''} ${user.section || ''}`.trim()
+                : (user.department || "N/A");
+            infoColumn = `<td>${userInfo}</td>`;
+            batchColumn = `<td>${user.batch_id || 'N/A'}</td>`;
+        } else if (currentRole === 'archive' || currentRole === 'delete') {
+            const roleInfo = user.is_admin
+                ? (user.department || 'N/A')
+                : ((user.course || user.section)
+                    ? `${user.course || ''} ${user.section || ''}`.trim()
+                    : 'STUDENT');
+            infoColumn = `<td>${user.is_admin ? 'Admin' : 'User'}${roleInfo ? ` - ${roleInfo}` : ''}</td>`;
+            batchColumn = `<td>${user.is_admin ? 'N/A' : (user.batch_id || 'N/A')}</td>`;
+        } else {
+            // Admin perspective
+            infoColumn = `<td>${user.department || 'N/A'}</td>`;
+            batchColumn = '';
+        }
+
+        // 3. Action Buttons Logic
+       let actionButtons = "";
+            const canEditUsers = hasAccessPermission('User-Management-Edit');
+            const canArchiveUsers = hasAccessPermission('User-Management-Archive');
+            const canDeleteUsers = hasAccessPermission('User-Management-Delete');
+
+            if (currentRole === 'delete') {
+                actionButtons = `
+                    ${canArchiveUsers
+                        ? `<button class="action-btn restore-btn" onclick="toggleArchive(${user.id}, false, '${currentRole}')" style="background-color: #28a745; color: white;">Recover</button>`
+                        : `<button class="action-btn locked-btn" disabled>No Recover Access</button>`}
+                    ${canDeleteUsers
+                        ? `<button class="action-btn delete-perm-btn" onclick="permanentDelete(${user.id}, '${currentRole}')" style="background-color: #dc3545; color: white; margin-left: 5px;">Delete</button>`
+                        : `<button class="action-btn locked-btn" disabled style="margin-left: 5px;">No Delete Access</button>`}
+                `;
+            } else if (currentRole === 'archive') {
+                actionButtons = `
+                    ${canArchiveUsers
+                        ? `<button class="action-btn restore-btn" onclick="toggleArchive(${user.id}, false, '${currentRole}')" style="background-color: #28a745; color: white;">Recover</button>`
+                        : `<button class="action-btn locked-btn" disabled>No Recover Access</button>`}
+                    ${canDeleteUsers
+                        ? `<button class="action-btn delete-perm-btn" onclick="moveToDelete(${user.id}, '${currentRole}')" style="background-color: #dc3545; color: white; margin-left: 5px;">Move to Trash</button>`
+                        : `<button class="action-btn locked-btn" disabled style="margin-left: 5px;">No Delete Access</button>`}
+                `;
+            } else {
+                const studentStatusButton = currentRole === 'student'
+                    ? (canEditUsers
+                        ? `<button class="action-btn edit-btn" onclick='openStudentAccessModal(${user.id}, ${JSON.stringify(user.full_name)}, ${user.is_student_active ? 'true' : 'false'}, ${isFacultyUser(user) ? 'true' : 'false'})'>Edit</button>`
+                        : `<button class="action-btn locked-btn" disabled>No Edit Access</button>`)
+                    : `${canEditUsers
+                        ? `<button class="action-btn edit-btn" onclick='openEditModal(${user.id}, "${user.full_name}", ${JSON.stringify(user.permissions)})'>Edit</button>`
+                        : `<button class="action-btn locked-btn" disabled>No Edit Access</button>`}`;
+
+                actionButtons = isMe ? 
+                    `<button class="action-btn locked-btn" disabled>Locked</button>` : 
+                    `
+                    ${studentStatusButton}
+                    ${currentRole === 'student' && canDeleteUsers
+                        ? `<button class="action-btn delete-perm-btn" onclick="moveToDelete(${user.id}, '${currentRole}')" style="margin-left: 5px; background-color: #dc3545; color: white;">Delete</button>`
+                        : ''}
+                    ${canArchiveUsers
+                        ? `<button class="action-btn archive-btn" onclick="toggleArchive(${user.id}, true, '${currentRole}')" style="background-color: #6c757d; color: white; margin-left: 5px;">Archive</button>`
+                        : `<button class="action-btn locked-btn" disabled style="margin-left: 5px;">No Archive Access</button>`}
+                    `;
+            }
+
+        const canSelect = currentRole === 'admin' || currentRole === 'student' || currentRole === 'archive' || currentRole === 'delete';
+        const selectColumn = canSelect
+            ? `<td><input type="checkbox" class="row-select" ${isMe ? 'disabled title="You cannot select your own account."' : ''} ${selectedUserIds.has(user.id) ? 'checked' : ''} onchange="toggleUserSelection(${user.id}, this.checked)"></td>`
+            : '';
+
+        const row = `
+            <tr data-user-id="${user.id}" class="${isMe ? 'self-row' : ''} ${user.is_archived ? 'archived-row' : ''}">
+                ${selectColumn}
+                <td><strong>${user.student_no || user.id}</strong></td>
+                <td>${user.full_name} ${isMe ? '<span class="you-badge">YOU</span>' : ''}</td>
+                ${infoColumn} <td style="font-size: 0.85rem; color: #555;">${loginDisplay}</td>
+                <td>
+                    <span class="status-pill ${(user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'status-active' : 'status-deactivated'}">
+                        ${user.is_archived ? 'Archived' : ((user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'Active' : 'Deactivated')}
+                    </span>
+                </td>
+                <td>
+                    ${actionButtons}
+                </td>
+                ${batchColumn}
+            </tr>
+        `;
+        tableBody.insertAdjacentHTML('beforeend', row);
+    });
+
+    updateSelectionActionButtons();
+}
+
+// Initial Load
+document.addEventListener('DOMContentLoaded', loadUsers);
+document.addEventListener('DOMContentLoaded', () => {
+    const batchYearInput = document.getElementById('batchYear');
+    if (batchYearInput && !batchYearInput.value) {
+        batchYearInput.value = new Date().getFullYear();
+    }
+    updateBatchPreview();
+    handleBulkEntryModeChange();
+});
+
+function toggleUserSelection(userId, isChecked) {
+    if (userId === currentAdminId) {
+        selectedUserIds.delete(userId);
+        updateSelectionActionButtons();
+        return;
+    }
+    if (isChecked) {
+        selectedUserIds.add(userId);
+    } else {
+        selectedUserIds.delete(userId);
+    }
+    updateSelectionActionButtons();
+}
+
+function toggleSelectAllVisible(isChecked) {
+    const visibleCheckboxes = Array.from(document.querySelectorAll(`#${currentView}TableBody .row-select:not(:disabled)`));
+    visibleCheckboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+        const row = checkbox.closest('tr');
+        const rowUserId = Number(row?.dataset.userId);
+        const rowUser = allUsers.find(user => user.id === rowUserId);
+        if (rowUser) {
+            if (isChecked) selectedUserIds.add(rowUser.id);
+            else selectedUserIds.delete(rowUser.id);
+        }
+    });
+    updateSelectionActionButtons();
+}
+
+function updateSelectionActionButtons() {
+    const selectedVisibleUsers = allUsers.filter(user => selectedUserIds.has(user.id) && user.id !== currentAdminId);
+    const archiveSelectedBtn = document.getElementById('btnArchiveSelected');
+    const activateSelectedBtn = document.getElementById('btnActivateSelected');
+    const deactivateSelectedBtn = document.getElementById('btnDeactivateSelected');
+    const recoverSelectedBtn = document.getElementById('btnRecoverSelected');
+    const deleteSelectedBtn = document.getElementById('btnDeleteSelected');
+    const hasInactiveStudentsSelected = selectedVisibleUsers.some(user => !user.is_admin && !user.is_archived && !user.is_student_active);
+    const hasActiveStudentsSelected = selectedVisibleUsers.some(user => !user.is_admin && !user.is_archived && user.is_student_active);
+    const hasActiveAdminsSelected = selectedVisibleUsers.some(user => user.is_admin && !user.is_archived);
+
+    if (archiveSelectedBtn) {
+        archiveSelectedBtn.style.display = ((currentView === 'admin' && hasActiveAdminsSelected) || (currentView === 'student' && selectedVisibleUsers.length > 0))
+            && hasAccessPermission('User-Management-Archive')
+            ? 'inline-flex'
+            : 'none';
+    }
+    if (activateSelectedBtn) {
+        activateSelectedBtn.style.display = currentView === 'student' && hasInactiveStudentsSelected && hasAccessPermission('User-Management-Edit') ? 'inline-flex' : 'none';
+    }
+    if (deactivateSelectedBtn) {
+        deactivateSelectedBtn.style.display = currentView === 'student' && hasActiveStudentsSelected && hasAccessPermission('User-Management-Edit') ? 'inline-flex' : 'none';
+    }
+    if (recoverSelectedBtn) {
+        recoverSelectedBtn.style.display = (currentView === 'archive' || currentView === 'delete') && selectedVisibleUsers.length > 0 && hasAccessPermission('User-Management-Archive') ? 'inline-flex' : 'none';
+    }
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.style.display = (currentView === 'archive' || currentView === 'delete') && selectedVisibleUsers.length > 0 && hasAccessPermission('User-Management-Delete') ? 'inline-flex' : 'none';
+        deleteSelectedBtn.innerHTML = currentView === 'archive'
+            ? '<i class="fas fa-share"></i> Move to Trash'
+            : '<i class="fas fa-trash"></i> Delete Permanently';
+    }
+}
+
+async function archiveSelectedUsers() {
+    if (!hasAccessPermission('User-Management-Archive')) {
+        showAccessDeniedPopup('User Management Archive');
+        return;
+    }
+    const selected = allUsers.filter(user =>
+        selectedUserIds.has(user.id) &&
+        !user.is_archived &&
+        user.id !== currentAdminId &&
+        ((currentView === 'admin' && user.is_admin) || (currentView === 'student' && !user.is_admin))
+    );
+    if (selected.length === 0) {
+        await showUserManagementAlert(
+            'info',
+            'No users selected',
+            currentView === 'admin'
+                ? 'Select at least one admin account first.'
+                : 'Select at least one active user first.'
+        );
+        return;
+    }
+    const selectedLabel = currentView === 'admin' ? 'admin account(s)' : 'user account(s)';
+    if (!(await confirmUserManagementAction('Archive selected users?', `Archive ${selected.length} selected ${selectedLabel}?`, 'Archive selected'))) return;
+    for (const user of selected) {
+        await toggleArchive(user.id, true, currentView, true);
+    }
+    selectedUserIds.clear();
+    await loadUsers(currentView);
+    await showUserManagementAlert('success', 'Users archived', `${selected.length} selected ${selectedLabel} archived.`);
+}
+
+async function activateSelectedUsers() {
+    if (!hasAccessPermission('User-Management-Edit')) {
+        showAccessDeniedPopup('User Management Edit');
+        return;
+    }
+
+    const selected = allUsers.filter(user => selectedUserIds.has(user.id) && !user.is_admin && !user.is_archived && !user.is_student_active);
+    if (selected.length === 0) {
+        await showUserManagementAlert('info', 'No users selected', 'Select at least one deactivated user first.');
+        return;
+    }
+    if (!(await confirmUserManagementAction('Activate selected users?', `Activate ${selected.length} selected user account(s)?`, 'Activate selected'))) return;
+
+    const activateBtn = document.getElementById('btnActivateSelected');
+    const originalActivateBtnHtml = activateBtn ? activateBtn.innerHTML : '';
+
+    try {
+        if (activateBtn) {
+            activateBtn.disabled = true;
+            activateBtn.style.opacity = '0.7';
+            activateBtn.style.cursor = 'wait';
+            activateBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Activating ${selected.length} Users...`;
+        }
+
+        const response = await fetch('/admin/activate-students', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+            },
+            body: JSON.stringify({ user_ids: selected.map(user => user.id) })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to activate selected users.');
+        }
+
+        selectedUserIds.clear();
+        await loadUsers('student');
+        await showUserManagementAlert('success', 'Users activated', result.message || `${selected.length} selected user account(s) activated.`);
+    } catch (error) {
+        await showUserManagementAlert('error', 'Activation failed', error.message || 'Failed to activate selected users.');
+    } finally {
+        if (activateBtn) {
+            activateBtn.disabled = false;
+            activateBtn.style.opacity = '';
+            activateBtn.style.cursor = '';
+            activateBtn.innerHTML = originalActivateBtnHtml;
+        }
+    }
+}
+
+async function deactivateSelectedUsers() {
+    if (!hasAccessPermission('User-Management-Edit')) {
+        showAccessDeniedPopup('User Management Edit');
+        return;
+    }
+
+    const selected = allUsers.filter(user => selectedUserIds.has(user.id) && !user.is_admin && !user.is_archived && user.is_student_active);
+    if (selected.length === 0) {
+        await showUserManagementAlert('info', 'No users selected', 'Select at least one active user first.');
+        return;
+    }
+    if (!(await confirmUserManagementAction('Deactivate selected users?', `Deactivate ${selected.length} selected user account(s)?`, 'Deactivate selected'))) return;
+
+    const deactivateBtn = document.getElementById('btnDeactivateSelected');
+    const originalDeactivateBtnHtml = deactivateBtn ? deactivateBtn.innerHTML : '';
+
+    try {
+        if (deactivateBtn) {
+            deactivateBtn.disabled = true;
+            deactivateBtn.style.opacity = '0.7';
+            deactivateBtn.style.cursor = 'wait';
+            deactivateBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Deactivating ${selected.length} Users...`;
+        }
+
+        const response = await fetch('/admin/deactivate-students', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+            },
+            body: JSON.stringify({ user_ids: selected.map(user => user.id) })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to deactivate selected users.');
+        }
+
+        selectedUserIds.clear();
+        await loadUsers('student');
+        await showUserManagementAlert('success', 'Users deactivated', result.message || `${selected.length} selected user account(s) deactivated.`);
+    } catch (error) {
+        await showUserManagementAlert('error', 'Deactivation failed', error.message || 'Failed to deactivate selected users.');
+    } finally {
+        if (deactivateBtn) {
+            deactivateBtn.disabled = false;
+            deactivateBtn.style.opacity = '';
+            deactivateBtn.style.cursor = '';
+            deactivateBtn.innerHTML = originalDeactivateBtnHtml;
+        }
+    }
+}
+
+async function toggleSingleStudentAccess(userId, shouldActivate) {
+    if (!hasAccessPermission('User-Management-Edit')) {
+        showAccessDeniedPopup('User Management Edit');
+        return;
+    }
+
+    const user = allUsers.find(item => item.id === userId);
+    if (!user || user.is_admin || user.is_archived) {
+        return;
+    }
+
+    const endpoint = shouldActivate ? '/admin/activate-students' : '/admin/deactivate-students';
+    const actionLabel = shouldActivate ? 'activate' : 'deactivate';
+
+    if (!(await confirmUserManagementAction(
+        `${shouldActivate ? 'Activate' : 'Deactivate'} user?`,
+        `${shouldActivate ? 'Activate' : 'Deactivate'} ${user.full_name || 'this user'}?`,
+        shouldActivate ? 'Activate user' : 'Deactivate user'
+    ))) {
+        return;
+    }
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+            },
+            body: JSON.stringify({ user_ids: [userId] })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || `Failed to ${actionLabel} user.`);
+        }
+
+        await loadUsers('student');
+    } catch (error) {
+        await showUserManagementAlert('error', `${shouldActivate ? 'Activation' : 'Deactivation'} failed`, error.message || `Failed to ${actionLabel} user.`);
+    }
+}
+
+function openStudentAccessModal(userId, fullName, isCurrentlyActive, isFaculty = false) {
+    if (!hasAccessPermission('User-Management-Edit')) {
+        showAccessDeniedPopup('User Management Edit');
+        return;
+    }
+
+    const targetState = !isCurrentlyActive;
+    document.getElementById('studentAccessUserId').value = userId;
+    document.getElementById('studentAccessTargetState').value = targetState ? 'activate' : 'deactivate';
+    document.getElementById('studentAccessIsFaculty').value = isFaculty ? 'true' : 'false';
+    document.getElementById('studentAccessUserDisplay').innerText = fullName || 'Selected user';
+
+    const stateBadge = document.getElementById('studentAccessState');
+    if (stateBadge) {
+        stateBadge.innerText = isCurrentlyActive ? 'Active' : 'Deactivated';
+        stateBadge.className = `permission-state-badge ${isCurrentlyActive ? 'active' : ''}`;
+    }
+
+    const summary = document.getElementById('studentAccessSummaryText');
+    if (summary) {
+        summary.innerText = targetState
+            ? 'This account is currently deactivated. You can activate it to restore dashboard access.'
+            : 'This account is currently active. You can deactivate it to remove dashboard access.';
+    }
+
+    const actionBtn = document.getElementById('studentAccessActionBtn');
+    if (actionBtn) {
+        actionBtn.innerText = targetState ? 'Activate' : 'Deactivate';
+        actionBtn.style.backgroundColor = targetState ? '#0d6efd' : '#dc3545';
+        actionBtn.style.color = targetState ? '#ffffff' : '#ffffff';
+        actionBtn.style.border = targetState ? 'none' : '2px solid #000000';
+    }
+
+    const grantAdminBtn = document.getElementById('studentGrantAdminBtn');
+    if (grantAdminBtn) {
+        grantAdminBtn.style.display = isFaculty ? 'inline-flex' : 'none';
+    }
+
+    closeModal('editPermissionsModal');
+    openModal('studentAccessModal');
+}
+
+async function confirmStudentAccessChange() {
+    const userId = Number(document.getElementById('studentAccessUserId').value);
+    const targetState = document.getElementById('studentAccessTargetState').value === 'activate';
+    if (!userId) return;
+
+    await toggleSingleStudentAccess(userId, targetState);
+    closeModal('studentAccessModal');
+}
+
+function openGrantAdminModal() {
+    const userId = Number(document.getElementById('studentAccessUserId').value);
+    const isFaculty = document.getElementById('studentAccessIsFaculty').value === 'true';
+    const fullName = document.getElementById('studentAccessUserDisplay').innerText;
+    if (!userId || !isFaculty) return;
+
+    document.getElementById('grantAdminUserId').value = userId;
+    document.getElementById('grantAdminUserDisplay').innerText = fullName || 'Selected faculty';
+    openModal('grantAdminModal');
+}
+
+async function confirmGrantAdminAccess() {
+    if (!hasAccessPermission('User-Management-Edit')) {
+        showAccessDeniedPopup('User Management Edit');
+        return;
+    }
+
+    const userId = Number(document.getElementById('grantAdminUserId').value);
+    if (!userId) return;
+
+    const confirmBtn = document.getElementById('confirmGrantAdminBtn');
+    const originalLabel = confirmBtn ? confirmBtn.innerText : 'Confirm Grant';
+
+    try {
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.innerText = 'Granting...';
+        }
+
+        const response = await fetch(`/admin/grant-admin-access/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+            }
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to grant admin access.');
+        }
+
+        closeModal('grantAdminModal');
+        closeModal('studentAccessModal');
+        await loadUsers('student');
+        await showUserManagementAlert('success', 'Admin access granted', result.message || 'Admin access granted successfully.');
+    } catch (error) {
+        await showUserManagementAlert('error', 'Grant failed', error.message || 'Failed to grant admin access.');
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerText = originalLabel;
+        }
+    }
+}
+
+async function recoverSelectedUsers() {
+    if (!hasAccessPermission('User-Management-Archive')) {
+        showAccessDeniedPopup('User Management Archive');
+        return;
+    }
+    const selected = allUsers.filter(user => selectedUserIds.has(user.id) && user.is_archived);
+    if (selected.length === 0) {
+        await showUserManagementAlert('info', 'No users selected', 'Select at least one archived account first.');
+        return;
+    }
+    if (!(await confirmUserManagementAction('Recover selected users?', `Recover ${selected.length} selected account(s)?`, 'Recover selected'))) return;
+    for (const user of selected) {
+        await toggleArchive(user.id, false, currentView, true);
+    }
+    selectedUserIds.clear();
+    await loadUsers(currentView);
+    await showUserManagementAlert('success', 'Users recovered', `${selected.length} selected account(s) recovered.`);
+}
+
+async function deleteSelectedUsers() {
+    if (!hasAccessPermission('User-Management-Delete')) {
+        showAccessDeniedPopup('User Management Delete');
+        return;
+    }
+    const selected = allUsers.filter(user => selectedUserIds.has(user.id) && user.is_archived);
+    if (selected.length === 0) {
+        await showUserManagementAlert('info', 'No users selected', 'Select at least one archived account first.');
+        return;
+    }
+
+    if (currentView === 'archive') {
+        if (!(await confirmUserManagementAction('Move users to Trash?', `Move ${selected.length} selected account(s) to the Trash tab?`, 'Move to Trash'))) return;
+        for (const user of selected) {
+            await moveToDelete(user.id, currentView, true);
+        }
+        selectedUserIds.clear();
+        await loadUsers(currentView);
+        await showUserManagementAlert('success', 'Users moved', `${selected.length} selected account(s) moved to Trash.`);
+        return;
+    }
+
+    if (!(await confirmUserManagementAction('Delete selected users permanently?', `Permanently delete ${selected.length} selected account(s)? This cannot be undone.`, 'Delete selected'))) return;
+    for (const user of selected) {
+        await permanentDelete(user.id, currentView, true);
+    }
+    selectedUserIds.clear();
+    await loadUsers(currentView);
+    await showUserManagementAlert('success', 'Users deleted', `${selected.length} selected account(s) deleted.`);
+}
+
+async function moveToDelete(userId, currentRole, silent = false) {
+    if (!hasAccessPermission('User-Management-Delete')) {
+        showAccessDeniedPopup('User Management Delete');
+        return;
+    }
+
+    if (!silent && !(await confirmUserManagementAction('Move user to Trash?', 'Move this archived user to the Trash tab?', 'Move to Trash'))) return;
+
+    try {
+        const response = await fetch(`/admin/move-to-delete/${userId}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to move user to Trash.');
+        }
+
+        if (!silent) {
+            await showUserManagementAlert('success', 'User moved', result.message);
+            loadUsers(currentRole);
+        }
+    } catch (error) {
+        console.error("Move to delete failed:", error);
+        if (!silent) await showUserManagementAlert('error', 'Move failed', error.message || 'Failed to move user to Trash.');
+    }
+}
+
+    function searchUsers() {
+    const query = document.getElementById('userSearch').value.toLowerCase();
+    currentBatchFilter = String(document.getElementById('batchFilterInput')?.value || '').trim();
+    
+    // Determine which tab is currently active
+    const activeTab = currentView;
+    // Filter the global allUsers list
+    const filtered = allUsers.filter(user => {
+        let matchesRole = false;
+        let matchesArchive = false;
+        let matchesScope = true;
+
+        if (activeTab === 'admin') {
+            matchesRole = !!user.is_admin;
+            matchesArchive = !user.is_archived;
+        } else if (activeTab === 'student') {
+            matchesRole = !user.is_admin;
+            matchesArchive = !user.is_archived;
+        } else if (activeTab === 'archive' || activeTab === 'delete') {
+            matchesArchive = !!user.is_archived;
+            matchesRole = true;
+        }
+        
+        // 2. Matches the search query (Name, ID, batch, course, department, email)
+        const matchesQuery = 
+            user.full_name.toLowerCase().includes(query) || 
+            (user.email && user.email.toLowerCase().includes(query)) ||
+            (user.student_no && user.student_no.toLowerCase().includes(query)) ||
+            (user.batch_id && user.batch_id.toLowerCase().includes(query)) ||
+            (user.course && user.course.toLowerCase().includes(query)) ||
+            (user.section && user.section.toLowerCase().includes(query)) ||
+            (user.department && user.department.toLowerCase().includes(query)) ||
+            user.id.toString().includes(query);
+
+        return matchesRole && matchesArchive && matchesScope && matchesQuery;
+    });
+    const visibleUsers = applyBatchFilter(applyUserTypeFilter(filtered));
+
+    const userCountBadge = document.getElementById('userCountBadge');
+    if (userCountBadge) {
+        userCountBadge.innerText = activeTab === 'admin'
+            ? `Total Admins: ${visibleUsers.length}`
+            : activeTab === 'student'
+                ? `Total ${currentUserTypeFilter === 'faculty' ? 'Faculty' : currentUserTypeFilter === 'student' ? 'Students' : 'Users'}: ${visibleUsers.length}`
+                : `Total Records: ${filtered.length}`;
+    }
+
+    // Re-render the table with the search results
+    const bodyId = activeTab === 'admin'
+        ? 'adminTableBody'
+            : activeTab === 'student'
+                ? 'studentTableBody'
+                : activeTab === 'archive'
+                    ? 'archiveTableBody'
+                    : 'deleteTableBody';
+    renderTable(visibleUsers, activeTab, bodyId);
+}
+
+     async function checkAccess(targetUrl, permission) {
+    const token = localStorage.getItem("admin_token");
+    
+    if (!token) {
+        window.location.href = "/login";
+        return;
+    }
+
+    try {
+        // Fetch fresh permissions from the backend
+        const response = await fetch("/admin/my-permissions", {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error("Unauthorized");
+
+        const permissions = await response.json();
+        currentAdminPermissions = Array.isArray(permissions) ? permissions : [];
+        syncPermissionGrantLocks();
+
+        // Check if the required permission exists in the user's list
+        if (hasAccessPermission(permission) || permissions.includes(permission)) {
+            window.location.href = targetUrl;
+        } else {
+            showAccessDeniedPopup(permission);
+        }
+    } catch (error) {
+        console.error("Access check failed:", error);
+        showAccessDeniedPopup(permission);
+    }
+}
+
+function showAccessDeniedPopup(permName) {
+    // Create the overlay
+    const overlay = document.createElement('div');
+    overlay.id = "access-denied-modal";
+    overlay.style = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.7); display: flex; 
+        justify-content: center; align-items: center; z-index: 9999;
+        backdrop-filter: blur(4px);
+    `;
+
+    // Create the modal box
+    overlay.innerHTML = `
+        <div style="background: white; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="font-size: 50px; margin-bottom: 20px;">🔒</div>
+            <h2 style="color: #d9534f; margin-bottom: 10px; font-family: 'Montserrat', sans-serif;">Access Denied</h2>
+            <p style="color: #555; line-height: 1.5;">
+                Your account does not have the <strong>${permName}</strong> permission required to view this page.
+            </p>
+            <button onclick="document.getElementById('access-denied-modal').remove()" 
+                style="margin-top: 25px; padding: 12px 30px; background: #003366; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                Close
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
+async function applyPermissions() {
+    const token = localStorage.getItem("admin_token");
+
+    if (!token) {
+        // No token → hide everything
+        document.querySelectorAll(".nav-links li").forEach(item => {
+            item.style.display = "none";
+        });
+        return;
+    }
+
+    try {
+        const response = await fetch("/admin/my-permissions", {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
+
+        const permissions = await response.json();
+        currentAdminPermissions = Array.isArray(permissions) ? permissions : [];
+        syncPermissionGrantLocks();
+
+        console.log("Permissions:", permissions); // DEBUG
+
+        document.querySelectorAll(".nav-links li").forEach(item => {
+            const required = item.getAttribute("data-permission");
+
+            // If no permission required → show it
+            if (!required) {
+                item.style.display = "block";
+                return;
+            }
+
+            // If user HAS permission → show
+            if (permissions.includes(required)) {
+                item.style.display = "block";
+            } 
+            // If NOT → hide
+            else {
+                item.style.display = "none";
+            }
+        });
+
+        const canManageUserActions = hasAccessPermission('User-Management-Create');
+        const canResetStudentPasswords = hasAccessPermission('User-Management-Reset');
+        const bulkBtn = document.getElementById('openBulkRegisterBtn');
+        const createBtn = document.getElementById('openCreateAdminBtn');
+        const resetBtn = document.getElementById('openResetStudentPasswordBtn');
+        if (bulkBtn) bulkBtn.style.display = canManageUserActions ? 'inline-flex' : 'none';
+        if (createBtn) createBtn.style.display = canManageUserActions ? 'inline-flex' : 'none';
+        if (resetBtn) resetBtn.style.display = canResetStudentPasswords ? 'inline-flex' : 'none';
+
+    } catch (error) {
+        console.error("Permission check failed", error);
+
+        // On error → hide everything for safety
+        document.querySelectorAll(".nav-links li").forEach(item => {
+            item.style.display = "none";
+        });
+        const bulkBtn = document.getElementById('openBulkRegisterBtn');
+        const createBtn = document.getElementById('openCreateAdminBtn');
+        const resetBtn = document.getElementById('openResetStudentPasswordBtn');
+        if (bulkBtn) bulkBtn.style.display = 'none';
+        if (createBtn) createBtn.style.display = 'none';
+        if (resetBtn) resetBtn.style.display = 'none';
+    }
+}
+
+applyPermissions();
+syncCreateAdminGrantLocks();
+
+function openModal(id) {
+        if ((id === 'bulkRegisterModal' || id === 'createAdminModal') && !hasAccessPermission('User-Management-Create')) {
+            showAccessDeniedPopup('User Management Create');
+            return;
+        }
+        if (id === 'resetStudentPasswordModal' && !hasAccessPermission('User-Management-Reset')) {
+            showAccessDeniedPopup('User Management Reset Password');
+            return;
+        }
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = "flex";
+        if (id === 'bulkRegisterModal') {
+            updateBatchPreview();
+        } else if (id === 'createAdminModal') {
+            syncCreateAdminGrantLocks();
+        }
+    }
+
+   function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'none';
+    }
+
+    // --- RESET THE PROGRESS BAR ---
+    const progressBar = document.getElementById('progressBar');
+    if (progressBar) {
+        progressBar.style.width = '0%';
+    }
+
+    // --- CLEAR EXCEL DATA AFTER CLOSING ---
+    if (modalId === 'bulkRegisterModal') {
+        window.bulkData = null;
+        const fileInput = document.getElementById('excelFile');
+        if (fileInput) fileInput.value = ""; // Clears the actual file selection
+        document.getElementById('fileNameDisplay').innerText = "No file chosen";
+        document.getElementById('bulkImportType').value = 'student';
+        document.getElementById('bulkEntryMode').value = 'upload';
+        document.getElementById('batchYear').value = new Date().getFullYear();
+        document.getElementById('batchTerm').value = '1st Semester';
+        ['manualUserId', 'manualLastName', 'manualFirstName', 'manualMiddleName', 'manualProgram', 'manualLevel', 'manualDisplayName', 'manualDepartment']
+            .forEach(id => {
+                const field = document.getElementById(id);
+                if (field) field.value = '';
+            });
+        updateBatchPreview();
+        handleBulkEntryModeChange();
+    } else if (modalId === 'createAdminModal') {
+        document.querySelectorAll('.perm-check').forEach(cb => cb.checked = false);
+        document.querySelectorAll('.perm-check').forEach(cb => {
+            cb.disabled = false;
+            cb.closest('.perm-item')?.classList.remove('disabled-permission');
+        });
+        const createAdminActions = document.getElementById('createAdminUserManagementActionsWrapper');
+        if (createAdminActions) createAdminActions.style.display = 'none';
+    } else if (modalId === 'resetStudentPasswordModal') {
+        const emailInput = document.getElementById('resetStudentEmail');
+        const resetBtn = document.getElementById('confirmResetStudentPasswordBtn');
+        if (emailInput) emailInput.value = '';
+        if (resetBtn) {
+            resetBtn.disabled = false;
+            resetBtn.innerText = 'Reset Password';
+        }
+    }
+}
+
+function getSelectedBatchId() {
+    const year = String(document.getElementById('batchYear')?.value || '').trim();
+    const term = String(document.getElementById('batchTerm')?.value || '').trim();
+    return year && term ? `BATCH-${year} ${term}` : '';
+}
+
+function updateBatchPreview() {
+    const preview = document.getElementById('batchPreview');
+    if (!preview) return;
+    preview.innerText = getSelectedBatchId() || 'Please select a valid batch year and term';
+}
+
+function showResetPasswordResult(email, tempPassword) {
+    const emailField = document.getElementById('resetResultEmail');
+    const passwordField = document.getElementById('resetResultPassword');
+    if (emailField) emailField.value = email;
+    if (passwordField) passwordField.value = tempPassword;
+    closeModal('resetStudentPasswordModal');
+    openModal('resetPasswordResultModal');
+}
+
+// --- BULK REGISTRATION & UTILS ---
+async function submitBulk() {
+    const btn = document.querySelector("#bulkRegisterModal .success-btn");
+    const modalContent = document.querySelector("#bulkRegisterModal .modal-content");
+    const token = localStorage.getItem("admin_token");
+    const duplicateAction = document.getElementById('duplicateAction')?.value || 'ignore';
+    const entryMode = document.getElementById('bulkEntryMode')?.value || 'upload';
+
+    if (!hasAccessPermission('User-Management-Create')) {
+        showAccessDeniedPopup('User Management Create');
+        return;
+    }
+    
+    const importType = document.getElementById('bulkImportType')?.value || 'student';
+    const batchId = getSelectedBatchId();
+
+    if (!batchId) {
+        await showUserManagementAlert('warning', 'Batch required', 'Please select a valid batch year and term first.');
+        return;
+    }
+
+    let rawData = entryMode === 'manual' ? getManualBulkEntries(importType) : (window.bulkData || []);
+
+    let usersToRegister = rawData.map(s => {
+        if (s.source_type === 'employee') {
+            return {
+                source_type: 'employee',
+                student_no: String(s.employee_no || "").trim(),
+                first_name: String(s.first_name || "").trim(),
+                middle_name: String(s.middle_name || "").trim(),
+                last_name: String(s.last_name || "").trim(),
+                display_name: String(s.display_name || "").trim(),
+                department: String(s.department || "").trim(),
+                course: '',
+                level: '',
+                batch_id: batchId
+            };
+        }
+
+        return {
+            source_type: 'student',
+            student_no: String(s.student_id).trim(),
+            first_name: String(s.first_name).trim(),
+            middle_name: String(s.middle_name || "").trim(),
+            last_name: String(s.last_name).trim(),
+            course: String(s.program || "").trim(),
+            level: String(s.level || "").trim(),
+            batch_id: batchId
+        };
+    });
+
+    if (usersToRegister.length === 0) {
+        modalContent.classList.add('shake');
+        setTimeout(() => modalContent.classList.remove('shake'), 400);
+        await showUserManagementAlert(
+            'warning',
+            'No users to process',
+            entryMode === 'manual'
+                ? 'Please fill in all required manual fields first.'
+                : 'No valid users found. Please upload the Excel file first.'
+        );
+        return;
+    }
+
+    if (usersToRegister.length > 1200 && !(await confirmUserManagementAction('Large upload detected', `You are about to upload ${usersToRegister.length} users. Continue?`, 'Continue upload', 'warning'))) {
+        return;
+    }
+
+    const containsEmployeeRows = usersToRegister.some(user => user.source_type === 'employee');
+    const duplicateMessage = duplicateAction === 'replace'
+        ? 'Existing users with the same User ID or email will be replaced.'
+        : 'Existing users with the same User ID or email will be ignored.';
+    const summaryLines = [
+        duplicateMessage,
+        containsEmployeeRows ? 'Import type: Faculty accounts (employee number suffix is ignored)' : 'Import type: Student accounts',
+        `Batch: ${batchId}`,
+        `Entry mode: ${entryMode === 'manual' ? 'Manual Entry' : 'Upload File'}`,
+        `Users to process: ${usersToRegister.length}`
+    ];
+    if (!(await confirmUserManagementAction('Confirm bulk registration', summaryLines.join(' '), 'Start bulk registration', 'info'))) {
+        return;
+    }
+
+    btn.innerText = `Starting ${usersToRegister.length} Users...`;
+    btn.disabled = true;
+
+    try {
+        const response = await fetch('/admin/bulk-register-students', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({ users: usersToRegister, duplicate_action: duplicateAction })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || "Failed to start bulk registration.");
+        }
+
+        closeModal('bulkRegisterModal');
+        renderBulkJobCard({
+            status: data.status || 'queued',
+            progress: 0,
+            processed: 0,
+            total: usersToRegister.length,
+            summary: {
+                total: usersToRegister.length,
+                created: 0,
+                replaced: 0,
+                ignored: 0
+            },
+            message: data.message || 'Bulk registration started in the background.'
+        });
+        startBulkJobPolling(data.job_id, { autoOpenResult: true });
+    } catch (err) { 
+        console.error(err);
+        await showUserManagementAlert('error', 'Bulk registration failed', err.message || 'Server connection failed.'); 
+    } finally { 
+        btn.innerText = "Generate Accounts"; 
+        btn.disabled = false;
+    }
+}
+
+function exportToExcelFromModal(results) {
+    const exportResults = results || window.lastBulkResults || [];
+    if (!exportResults || exportResults.length === 0) {
+        showUserManagementAlert('info', 'Nothing to export', 'No data available to export.');
+        return;
+    }
+
+    // 1. Create a new Workbook
+    const workbook = XLSX.utils.book_new();
+
+    // 2. Convert the results array to a Worksheet
+    // This will include: Email, User ID, Full Name, and Temp Password
+    const worksheet = XLSX.utils.json_to_sheet(exportResults);
+
+    // 3. Add the worksheet to the workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registered_Users");
+
+    // 4. Define the filename with the current year
+    const fileName = `STI_Novaliches_Batch_Registration_${new Date().getFullYear()}.xlsx`;
+
+    // 5. Trigger the download
+    XLSX.writeFile(workbook, fileName);
+}
+
+function downloadBulkJobExcel() {
+    const jobResults = Array.isArray(lastCompletedBulkJob?.results) ? lastCompletedBulkJob.results : [];
+    if (jobResults.length === 0) {
+        showUserManagementAlert('info', 'Nothing to export', 'No completed batch result is available to export yet.');
+        return;
+    }
+
+    exportToExcel(jobResults);
+}
+// Keep this function below submitBulk in your script
+function exportToExcel(results) {
+    const worksheet = XLSX.utils.json_to_sheet(results.map(item => ({
+        "Batch ID": item.batch_id,
+        "User ID": item.student_no,
+        "Full Name": item.full_name,
+        "Role / Department": item.department,
+        "Program": item.course,    // Shows STEM, MAWD, etc.
+        "Level": item.level,       // Shows G11, G12
+        "STI Email": item.email,
+        "Status": item.status,
+        "Temporary Password": item.temp_password
+    })));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "User Accounts");
+
+    // File name reflects current batch/year
+    // NEW (Fixed):
+    const fileName = `STI_Novaliches_Accounts_${new Date().getFullYear()}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+   
+}
+// Function to fetch departments from the database
+async function loadDepartments() {
+    const deptSelect = document.getElementById('adminCourse'); // The dropdown ID
+    
+    try {
+        const response = await fetch('/admin/departments');
+        const departments = await response.json();
+
+        // Keep the default "Select" option
+        deptSelect.innerHTML = '<option value="">-- Select Office --</option>';
+
+        departments.forEach(dept => {
+            const option = document.createElement('option');
+            option.value = dept.name; // This is what goes into the 'course' column
+            option.textContent = dept.name;
+            deptSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.error("Error loading departments:", error);
+    }
+}
+
+// Call this inside your existing DOMContentLoaded or at the end of the script
+loadDepartments();
+
+    async function submitAdminCreate() {
+    const token = localStorage.getItem("admin_token");
+    const btn = document.getElementById('createBtn');
+
+    if (!token) {
+        await showUserManagementAlert('warning', 'Session expired', 'Please log in again.');
+        return;
+    }
+
+    if (!hasAccessPermission('User-Management-Create')) {
+        showAccessDeniedPopup('User Management Create');
+        return;
+    }
+
+    // 1. Get info from the inputs that actually exist in your HTML
+    const fullName = document.getElementById('adminName').value;
+    const email = document.getElementById('adminEmail').value;
+
+    // 2. Collect checked permissions
+    toggleCreateAdminUserManagementActions();
+    const selectedPermissions = [];
+    document.querySelectorAll('.perm-check:checked').forEach(checkbox => {
+        selectedPermissions.push(checkbox.value);
+    });
+    const normalizedPermissions = normalizePermissionSelection(selectedPermissions);
+
+    // 3. Validation
+    if (!fullName || !email) {
+        await showUserManagementAlert('warning', 'Missing details', 'Please provide a Name and Email.');
+        return;
+    }
+    if (normalizedPermissions.length === 0) {
+        await showUserManagementAlert('warning', 'Permissions required', 'Please select at least one permission.');
+        return;
+    }
+
+    const adminData = {
+        full_name: document.getElementById('adminName').value,
+        email: document.getElementById('adminEmail').value.toLowerCase().trim(),
+        permissions: normalizedPermissions,
+        department: document.getElementById('adminCourse').value,
+        password: "AUTO_GENERATE"
+    };
+
+    btn.innerText = "Processing...";
+    btn.disabled = true;
+
+    try {
+        const response = await fetch('/admin/create-new-admin', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify(adminData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // 4. Success UI: Show the generated password
+            document.getElementById('adminResult').style.display = 'block';
+            document.getElementById('generatedAdminPass').innerText = result.temp_password;
+            btn.style.display = "none"; // Hide button so they don't click twice
+            await showUserManagementAlert('success', 'Admin created', 'Admin created successfully.');
+        } else {
+            await showUserManagementAlert('error', 'Creation failed', result.detail || 'Error creating admin');
+            btn.disabled = false;
+            btn.innerText = "Generate & Confirm Access";
+        }
+    } catch (err) {
+        console.error("Fetch error:", err);
+        await showUserManagementAlert('error', 'Connection failed', 'Failed to connect to server.');
+        btn.disabled = false;
+        btn.innerText = "Generate & Confirm Access";
+    }
+}
+    async function submitHeaderPasswordReset() {
+        const emailInput = document.getElementById('resetStudentEmail');
+        const btn = document.getElementById('confirmResetStudentPasswordBtn');
+        const email = (emailInput?.value || '').trim().toLowerCase();
+
+        if (!email) {
+            await showUserManagementAlert('warning', 'Email required', "Please enter the student's email.");
+            return;
+        }
+
+        if (!(await confirmUserManagementAction('Reset password?', `Reset password for ${email}?`, 'Reset password'))) return;
+
+        btn.disabled = true;
+        btn.innerText = "Resetting...";
+
+        try {
+            const response = await fetch('/admin/reset-student-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                },
+                body: JSON.stringify({ email: email })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showResetPasswordResult(email, result.new_temp_password);
+            } else {
+                await showUserManagementAlert('error', 'Reset failed', result.detail || 'Failed to reset password.');
+            }
+        } catch (err) {
+            await showUserManagementAlert('error', 'Reset failed', 'Failed to reset password.');
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Reset Password";
+        }
+    }
+
+    async function resetSingle(email) {
+        const token = localStorage.getItem("admin_token");
+        if (!(await confirmUserManagementAction('Reset password?', `Reset password for ${email}?`, 'Reset password'))) return;
+        try {
+            const response = await fetch('/admin/reset-student-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ email: email })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                showResetPasswordResult(email, result.new_temp_password);
+            } else {
+                await showUserManagementAlert('error', 'Reset failed', result.detail || 'Failed to reset password.');
+            }
+        } catch (err) {
+            await showUserManagementAlert('error', 'Reset failed', 'Failed to reset password.');
+        }
+    }
+
+function handleExcel(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    document.getElementById('fileNameDisplay').innerText = file.name;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        
+        // 1. Get raw rows
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+        
+        console.log("--- RAW EXCEL DATA PREVIEW ---");
+        console.table(rows.slice(0, 10)); 
+
+        const selectedImportType = document.getElementById('bulkImportType')?.value || 'student';
+        let headerRowIndex = -1;
+        let detectedFormat = null;
+        let colMap = {
+            student_id: -1,
+            emp_number: -1,
+            last_name: -1,
+            first_name: -1,
+            middle_name: -1,
+            display_name: -1,
+            program: -1,
+            level: -1
+        };
+
+        // 2. Scan for the header row (searching up to row 20)
+        for (let i = 0; i < Math.min(rows.length, 20); i++) {
+            const row = rows[i];
+            const sIdIndex = row.findIndex(cell =>
+                String(cell || "").toLowerCase().replace(/\s/g, '').includes("studentid")
+            );
+            const empIndex = row.findIndex(cell =>
+                String(cell || "").toLowerCase().replace(/\s/g, '').includes("empnumber")
+            );
+
+            if (sIdIndex !== -1 || empIndex !== -1) {
+                headerRowIndex = i;
+                detectedFormat = sIdIndex !== -1 ? 'student' : 'employee';
+                // Map every column index based on the text found in that row
+                row.forEach((cell, idx) => {
+                    const clean = String(cell || "").toLowerCase().replace(/\s/g, '');
+                    if (clean.includes("studentid")) colMap.student_id = idx;
+                    if (clean.includes("empnumber")) colMap.emp_number = idx;
+                    if (clean.includes("lastname")) colMap.last_name = idx;
+                    if (clean.includes("firstname")) colMap.first_name = idx;
+                    if (clean.includes("middlename")) colMap.middle_name = idx;
+                    if (clean.includes("displayname")) colMap.display_name = idx;
+                    if (clean.includes("program")) colMap.program = idx;
+                    if (clean.includes("level")) colMap.level = idx;
+                });
+                break;
+            }
+        }
+
+        if (headerRowIndex === -1 || (detectedFormat === 'student' && colMap.student_id === -1) || (detectedFormat === 'employee' && colMap.emp_number === -1)) {
+            showUserManagementAlert('warning', 'Invalid file format', 'No valid users found. Please check your Excel headers. Supported formats: Student ID sheets or EMP NUMBER sheets.');
+            return;
+        }
+
+        if (selectedImportType !== detectedFormat) {
+            const expectedMessage = selectedImportType === 'employee'
+                ? 'Expected a faculty file with EMP NUMBER.'
+                : 'Expected a student file with Student ID.';
+            showUserManagementAlert('warning', 'Import type mismatch', `The selected import type does not match this file. ${expectedMessage}`);
+            window.bulkData = null;
+            return;
+        }
+
+        const users = [];
+        for (let i = headerRowIndex + 1; i < rows.length; i++) {
+            const row = rows[i];
+            const identifier = detectedFormat === 'employee'
+                ? String(row[colMap.emp_number] || "").replace(/\s/g, '')
+                : String(row[colMap.student_id] || "").replace(/\s/g, '');
+            const lname = String(row[colMap.last_name] || "").trim();
+
+            if (!identifier || !lname) {
+                continue;
+            }
+
+            if (detectedFormat === 'employee') {
+                users.push({
+                    source_type: 'employee',
+                    employee_no: identifier,
+                    last_name: lname,
+                    first_name: String(row[colMap.first_name] || "").trim(),
+                    middle_name: String(row[colMap.middle_name] || "").trim(),
+                    display_name: String(row[colMap.display_name] || "").trim(),
+                    department: inferEmployeeDepartment(identifier)
+                });
+            } else if (identifier.length >= 10) {
+                users.push({
+                    source_type: 'student',
+                    student_id: identifier,
+                    last_name: lname,
+                    first_name: String(row[colMap.first_name] || "").trim(),
+                    middle_name: String(row[colMap.middle_name] || "").trim(),
+                    program: String(row[colMap.program] || "").trim(),
+                    level: String(row[colMap.level] || "").trim()
+                });
+            }
+        }
+
+        window.bulkData = users;
+
+        const accountLabel = detectedFormat === 'employee' ? 'faculty accounts' : 'users';
+        showUserManagementAlert('success', 'Users detected', `Found ${users.length} ${accountLabel}.`);
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function getManualBulkEntries(importType) {
+    const userId = (document.getElementById('manualUserId')?.value || '').trim();
+    const lastName = (document.getElementById('manualLastName')?.value || '').trim();
+    const firstName = (document.getElementById('manualFirstName')?.value || '').trim();
+    const middleName = (document.getElementById('manualMiddleName')?.value || '').trim();
+
+    if (!userId || !lastName || !firstName) {
+        return [];
+    }
+
+    if (importType === 'employee') {
+        return [{
+            source_type: 'employee',
+            employee_no: userId,
+            last_name: lastName,
+            first_name: firstName,
+            middle_name: middleName,
+            display_name: (document.getElementById('manualDisplayName')?.value || '').trim(),
+            department: ((document.getElementById('manualDepartment')?.value || '').trim() || inferEmployeeDepartment(userId))
+        }];
+    }
+
+    const program = (document.getElementById('manualProgram')?.value || '').trim();
+    const level = (document.getElementById('manualLevel')?.value || '').trim();
+    if (!program || !level) {
+        return [];
+    }
+
+    return [{
+        source_type: 'student',
+        student_id: userId,
+        last_name: lastName,
+        first_name: firstName,
+        middle_name: middleName,
+        program: program,
+        level: level
+    }];
+}
+
+function handleBulkImportTypeChange() {
+    const importType = document.getElementById('bulkImportType')?.value || 'student';
+    const batchYearGroup = document.getElementById('batchYear')?.closest('.form-group');
+    const batchTermGroup = document.getElementById('batchTerm')?.closest('.form-group');
+    const batchPreview = document.getElementById('batchPreview')?.parentElement;
+    const importHint = document.getElementById('bulkImportHint');
+    const manualHint = document.getElementById('bulkManualHint');
+    const manualUserIdLabel = document.querySelector('label[for="manualUserId"]');
+    const manualStudentFields = document.getElementById('manualStudentFields');
+    const manualFacultyFields = document.getElementById('manualFacultyFields');
+    const fileInput = document.getElementById('excelFile');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+
+    const isStudentImport = importType === 'student';
+
+    if (batchYearGroup) batchYearGroup.style.display = '';
+    if (batchTermGroup) batchTermGroup.style.display = '';
+    if (batchPreview) batchPreview.style.display = '';
+    if (importHint) {
+        importHint.innerText = isStudentImport
+            ? 'Expected file format: Student ID, Last Name, First Name, Middle Name, Program, Level'
+            : 'Expected faculty file format: EMP NUMBER, LAST NAME, FIRST NAME, MIDDLE NAME, DISPLAY NAME';
+    }
+    if (manualHint) {
+        manualHint.innerText = isStudentImport
+            ? 'Fill in Student ID, last name, first name, program, and level for manual registration.'
+            : 'Fill in Employee No., last name, first name, and optional faculty details for manual registration. The selected batch will also be applied.';
+    }
+    if (manualUserIdLabel) {
+        manualUserIdLabel.innerText = isStudentImport ? 'Student ID' : 'Employee No.';
+    }
+    if (manualStudentFields) manualStudentFields.style.display = isStudentImport ? '' : 'none';
+    if (manualFacultyFields) manualFacultyFields.style.display = isStudentImport ? 'none' : '';
+
+    window.bulkData = null;
+    if (fileInput) fileInput.value = '';
+    if (fileNameDisplay) fileNameDisplay.innerText = 'No file chosen';
+}
+
+function handleBulkEntryModeChange() {
+    const entryMode = document.getElementById('bulkEntryMode')?.value || 'upload';
+    const uploadSection = document.getElementById('bulkUploadSection');
+    const manualSection = document.getElementById('bulkManualSection');
+
+    if (uploadSection) uploadSection.style.display = entryMode === 'upload' ? '' : 'none';
+    if (manualSection) manualSection.style.display = entryMode === 'manual' ? '' : 'none';
+
+    window.bulkData = null;
+    handleBulkImportTypeChange();
+}
+
+function inferEmployeeDepartment(employeeNumber) {
+    const suffix = String(employeeNumber || '').trim().toUpperCase().slice(-1);
+    if (suffix === 'A') return 'Administrative Personnel';
+    if (suffix === 'F' || suffix === 'P') return 'Faculty / Teacher';
+    return 'Employee';
+}
+// Helper function to find a column even if the header is slightly different
+function findValue(row, keywords) {
+    const keys = Object.keys(row);
+    for (const key of keys) {
+        if (keywords.some(k => key.toLowerCase().includes(k))) {
+            return row[key];
+        }
+    }
+    return null;
+}
+
+function filterUsers() {
+    const input = document.getElementById("searchInput").value.toLowerCase();
+    const rows = document.querySelectorAll("#userTable tbody tr");
+
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(input) ? "" : "none";
+    });
+}
+
+function toggleStatus(button) {
+    const row = button.closest("tr");
+    const statusCell = row.querySelector(".status");
+
+    if (statusCell.classList.contains("active")) {
+        statusCell.classList.remove("active");
+        statusCell.classList.add("disabled");
+        statusCell.textContent = "Disabled";
+        button.textContent = "Enable";
+        button.style.background = "#28a745";
+    } else {
+        statusCell.classList.remove("disabled");
+        statusCell.classList.add("active");
+        statusCell.textContent = "Active";
+        button.textContent = "Disable";
+        button.style.background = "#dc3545";
+    }
+}
+
+
+
+
+    // --- LIFECYCLE HANDLERS ---
+// --- GLOBAL STATE ---
+let notifications = [];
+
+
+// --- UTILS ---
+
+// Prevents XSS when rendering notification messages
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// --- NOTIFICATION LOGIC ---
+
+async function loadNotifications() {
+    const token = localStorage.getItem("admin_token");
+    if (!token) return;
+
+    try {
+        const res = await fetch("/admin/notifications", {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error("Failed to fetch");
+        
+        notifications = await res.json();
+        updateNotificationUI();
+    } catch (err) {
+        console.error("Notification Sync Error:", err);
+    }
+}
+
+function updateNotificationUI() {
+    const list = document.getElementById("notificationList");
+    const countBadge = document.getElementById("notificationCount");
+    const emptyMsg = document.getElementById("emptyNotif");
+    
+    if (!list) return;
+    list.innerHTML = "";
+
+    if (notifications.length === 0) {
+        if (emptyMsg) emptyMsg.style.display = "block";
+        if (countBadge) countBadge.style.display = "none";
+        return;
+    }
+
+    if (emptyMsg) emptyMsg.style.display = "none";
+
+    notifications.forEach(n => {
+        const li = document.createElement("li");
+        const unreadClass = !n.is_read ? "unread" : "";
+
+        li.innerHTML = `
+            <div class="notif-item ${unreadClass}" 
+                 onclick="handleNotifClick(${n.id})" 
+                 style="cursor:pointer; border-bottom:1px solid #eee; padding: 12px 10px; display: flex; gap: 10px;">
+                <span style="font-size: 1.2em;">${n.type === 'match' ? '🔥' : '🔔'}</span>
+                <div style="flex: 1;">
+                    <span class="notif-text" style="font-size: 13px; display: block; line-height: 1.2;">
+                        ${escapeHtml(n.message)}
+                    </span>
+                    <small style="color:gray; font-size: 11px;">
+                        ${new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    </small>
+                </div>
+            </div>
+        `;
+        list.appendChild(li);
+    });
+
+    const unreadCount = notifications.filter(n => !n.is_read).length;
+    if (countBadge) {
+        countBadge.innerText = unreadCount;
+        countBadge.style.display = unreadCount > 0 ? "block" : "none";
+    }
+}
+
+async function handleNotifClick(notifId) {
+    const token = localStorage.getItem("admin_token");
+    const notif = notifications.find(n => n.id === notifId);
+    if (!notif) return;
+
+    // 1. UI: Instant Unbold
+    notif.is_read = true;
+    updateNotificationUI(); 
+
+    // 2. Backend Sync
+    try {
+        await fetch(`/admin/notifications/read/${notifId}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+    } catch (err) {
+        console.error("Server sync failed:", err);
+    }
+
+    // 3. Navigation
+    const msg = notif.message.toLowerCase();
+    closeAllDropdowns();
+
+    if (notif.type === "user_management_students") {
+        window.location.href = "/admin/User-Management?tab=student";
+        return;
+    }
+
+    if (notif.type === "user_management_admin") {
+        window.location.href = "/admin/User-Management?tab=admin";
+        return;
+    }
+
+    if (msg.includes("found")) {
+        // Ensure these functions exist in your main dashboard or global JS
+        if(typeof openFoundItemsModal === "function") openFoundItemsModal();
+    } 
+    else if (msg.includes("pending") || msg.includes("surrender") || msg.includes("reported")) {
+        if(typeof openPendingSurrenderModal === "function") openPendingSurrenderModal();
+    }
+    else if (msg.includes("message")) {
+        // If already on Messages, perhaps refresh or open specific chat
+        window.location.href = "/admin/Messages";
+    }
+}
+
+// --- UI CONTROLS ---
+
+function toggleNotifications() {
+    const dropdown = document.getElementById("notificationDropdown");
+    const isOpen = dropdown.style.display === "block";
+    closeAllDropdowns();
+    dropdown.style.display = isOpen ? "none" : "block";
+    if (!isOpen) loadNotifications(); // Refresh on open
+}
+
+function toggleProfile() {
+    const dropdown = document.getElementById("profileDropdown");
+    const isOpen = dropdown.style.display === "block";
+    closeAllDropdowns();
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+function closeAllDropdowns() {
+    const n = document.getElementById("notificationDropdown");
+    const p = document.getElementById("profileDropdown");
+    if(n) n.style.display = "none";
+    if(p) p.style.display = "none";
+}
+
+// Close on outside click
+window.addEventListener('click', function(e) {
+    if (!e.target.closest('.notification-container') && !e.target.closest('.profile-container')) {
+        closeAllDropdowns();
+    }
+});
+
+function logout() {
+    localStorage.clear();
+    window.location.href = "/";
+}
+
+// --- INITIALIZATION ---
+window.onload = () => {
+    resumePersistedBulkJob();
+    loadUsers(getInitialUserManagementTab());
+    initAdminNotifications();
+};
+
+window.addEventListener('pageshow', () => {
+    resumePersistedBulkJob();
+});
+</script>
+
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/admin-notifications.js?v=2"></script>
+<script src="/static/force-password-change.js"></script>
+</body>
+</html>

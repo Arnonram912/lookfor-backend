@@ -1,0 +1,296 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Admin Panel | LookFor STI</title> 
+    <script src="{{ url_for('static', path='js/script.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=9"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='admin_settings.css') }}?v=10"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+
+</head> 
+
+<body> 
+
+  
+
+   <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+        <ul class="nav-links"> 
+
+           <li class="#">
+                <a href="/student/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li>
+                <a href="/student/Messages"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/Lost-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/Found-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Item 
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="active">
+                <a href="/student/settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+           
+            
+
+        </ul> 
+
+    </nav> 
+
+  
+  <main class="main-content"> 
+
+       <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/student/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+
+
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop">My Profile</li>
+                    <li>Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+</header>
+
+    <div class="page-scroll-area">
+        <h2 class="section-title">Settings</h2>
+
+<div class="settings-grid">
+    <section class="settings-card">
+        <h3>Privacy & Security</h3>
+        <div class="setting-item">
+            <p>Two-Factor Authentication</p>
+            <input type="checkbox" id="2fa-toggle" class="switch">
+        </div>
+        <div class="setting-item">
+            <p>Session Management</p>
+            <button class="btn-outline">Logout all other devices</button>
+        </div>
+    </section>
+
+    <section class="settings-card">
+        <h3>Notifications</h3>
+        <div class="setting-item">
+            <p>Push Alerts</p>
+            <input type="checkbox" id="push-toggle" class="switch" checked>
+        </div>
+        <div class="setting-item">
+            <p>Sound/Vibration</p>
+            <select id="notif-sound">
+                <option value="default">Default STI Tone</option>
+                <option value="mute">Mute</option>
+            </select>
+        </div>
+    </section>
+
+    <section class="settings-card">
+        <h3>Display & Layout</h3>
+        <div class="setting-item">
+            <p>Theme Mode</p>
+            <button class="btn-outline" id="theme-toggle" onclick="toggleTheme()">Toggle Dark/Light</button>
+        </div>
+        <div class="setting-item">
+            <p>Font Size</p>
+            <input type="range" id="font-slider" min="12" max="24" value="16">
+            <span id="font-value">16px</span>
+        </div>
+    </section>
+</div>
+
+<div class="settings-footer">
+    <button class="upload-btn" onclick="saveSettings()">Save All Changes</button>
+    <button class="btn-reset">Reset to Default</button>
+</div>
+
+
+
+
+<script>
+
+// Function to show the modal
+ function toggleNotifications() { toggleDropdown('notificationDropdown'); }
+function toggleMessages() { toggleDropdown('messageDropdown'); }
+function toggleProfile() { toggleDropdown('profileDropdown'); }
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    const isOpen = dropdown.style.display === "block";
+    
+    // Close all first to prevent overlap
+    document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+            .forEach(el => el.style.display = 'none');
+            
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "flex";
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+
+function getAuthToken() {
+    return localStorage.getItem('token') || localStorage.getItem('admin_token');
+}
+
+function getSettingsEndpoint() {
+    return '/student/update-settings';
+}
+
+function updateFontSize(size) {
+    document.documentElement.style.setProperty('--base-font-size', size + 'px');
+    document.getElementById('font-value').innerText = size + 'px';
+    localStorage.setItem('admin-font-size', size);
+}
+
+function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark-theme');
+    localStorage.setItem('admin-theme', isDark ? 'dark' : 'light');
+}
+
+function saveSettings() {
+    saveSettingsToDB();
+}
+
+async function saveSettingsToDB() {
+    const authToken = getAuthToken();
+    if (!authToken) {
+        alert("Login session expired. Please log in again.");
+        window.location.href = "/login";
+        return;
+    }
+
+    const settings = {
+        two_factor: document.getElementById('2fa-toggle').checked,
+        notifications: document.getElementById('push-toggle').checked,
+        theme: localStorage.getItem('admin-theme') || 'light',
+        font_size: parseInt(localStorage.getItem('admin-font-size')) || 16,
+    };
+
+    const response = await fetch(getSettingsEndpoint(), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(settings)
+    });
+
+    if (response.ok) {
+        alert("Settings synchronized with account!");
+        return;
+    }
+
+    alert("Failed to save settings.");
+}
+
+async function loadSettings() {
+    const authToken = getAuthToken();
+    if (!authToken) return;
+
+    const response = await fetch('/auth/settings', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (!response.ok) return;
+
+    const settings = await response.json();
+    document.getElementById('2fa-toggle').checked = !!settings.two_factor;
+    document.getElementById('push-toggle').checked = !!settings.notifications;
+    localStorage.setItem('admin-theme', settings.theme || 'light');
+    localStorage.setItem('admin-font-size', settings.font_size || 16);
+    updateFontSize(settings.font_size || 16);
+    document.getElementById('font-slider').value = settings.font_size || 16;
+}
+
+document.getElementById('font-slider').addEventListener('input', (event) => {
+    updateFontSize(event.target.value);
+});
+
+loadSettings();
+</script>
+
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/force-password-change.js"></script>
+<script src="/static/student-sidebar-access.js"></script>
+<script src="/static/student-notifications.js"></script>
+</body>
+</html>

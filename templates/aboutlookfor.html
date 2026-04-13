@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About LookFor</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='landing.css') }}?v=5.1">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="navbar">
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/explore">Features</a></li>
+                <li><a href="/about" class="active">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+
+   
+    <section id="about-system" class="system-section alternate-bg" data-aos="fade-right">
+        <div class="tech-grid-bg"></div>
+        <div class="content-container" data-aos="zoom-in">
+            <h1 id="cms-about-hero-title" class="section-title cms-editable">Learn more About</h1>
+            <span class="biglogo">Look<span>for</span></span><br><br>
+            <p id="cms-about-hero-desc" class="section-description cms-editable">
+                Find hope with LookFor, an AI-powered lost and found image-text matching system that helps reunite lost items with their owners quickly and efficiently.
+            </p>
+            <div class="btn-group">
+                <a href="/login" class="btn-yellow">Report Now</a>
+                <a href="#why-choose-us" class="btn-primary">Discover More</a>
+            </div>
+        </div>
+    </section>
+
+    <section id="why-choose-us" class="benefits-section">
+        <div class="container">
+            <h2 id="cms-about-benefits-title" class="benefits-title cms-editable" data-aos="fade-down">Why Choose <span class="biglogo">Look<span>for</span></span> ?</h2>
+            <p id="cms-about-benefits-desc" class="benefits-intro cms-editable" data-aos="fade-up">
+                We utilize AI matching with human verification to make sure the methods of matching lost and found items are accurate.
+            </p>
+
+            <div class="benefits-grid">
+                <div class="benefit-card" data-aos="fade-right" data-aos-delay="100">
+                    <div class="benefit-icon">
+                        <input type="file" id="cms-about-benefit-1-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-benefit-1-img')">
+                        <img id="cms-about-benefit-1-img" src="/static/images/stilogo.png" alt="Benefit 1" onclick="triggerFileWindow('cms-about-benefit-1-file')">
+                    </div>
+                    <h3 id="cms-about-benefit-1-title" class="cms-editable">AI Matching</h3>
+                    <p id="cms-about-benefit-1-desc" class="cms-editable">Our intelligent AI system analyzes photos and text descriptions to find potential matches for lost items, saving time and effort.</p>
+                </div>
+
+                <div class="benefit-card" data-aos="fade-up" data-aos-delay="200">
+                    <div class="benefit-icon">
+                        <input type="file" id="cms-about-benefit-2-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-benefit-2-img')">
+                        <img id="cms-about-benefit-2-img" src="/static/images/stilogo.png" alt="Benefit 2" onclick="triggerFileWindow('cms-about-benefit-2-file')">
+                    </div>
+                    <h3 id="cms-about-benefit-2-title" class="cms-editable">Effortless Reporting</h3>
+                    <p id="cms-about-benefit-2-desc" class="cms-editable">Easily report lost and found items through the system, accessible from anywhere and anytime.</p>
+                </div>
+
+                <div class="benefit-card" data-aos="fade-left" data-aos-delay="300">
+                    <div class="benefit-icon">
+                        <input type="file" id="cms-about-benefit-3-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-benefit-3-img')">
+                        <img id="cms-about-benefit-3-img" src="/static/images/stilogo.png" alt="Benefit 3" onclick="triggerFileWindow('cms-about-benefit-3-file')">
+                    </div>
+                    <h3 id="cms-about-benefit-3-title" class="cms-editable">Secured & Centralized</h3>
+                    <p id="cms-about-benefit-3-desc" class="cms-editable">All information is stored in a central database with management and authority handled by school staff.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="clip-section" id="clip-technology">
+        <div class="container">
+            <h2 id="cms-about-clip-title" class="clip-headline cms-editable" data-velocity="fade-in">Powered by <span>CLIP</span></h2>
+            <p id="cms-about-clip-desc" class="clip-subtext cms-editable" data-velocity="fade-in">
+                Experience the efficiency of our advanced AI-powered platform designed to reunite you with your lost items.
+            </p>
+
+            <div class="clip-features-grid">
+                <div class="benefit-card" data-aos="fade-left" data-aos-delay="300">
+                    <div class="benefit-icon">
+                        <input type="file" id="cms-about-clip-1-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-clip-1-img')">
+                        <img id="cms-about-clip-1-img" src="/static/images/stilogo.png" alt="Clip 1" onclick="triggerFileWindow('cms-about-clip-1-file')">
+                    </div>
+                    <h3 id="cms-about-clip-1-title" class="cms-editable">Reporting</h3>
+                    <p id="cms-about-clip-1-desc" class="cms-editable">Effortless and simple processing of lost and found cases.</p>
+                </div>
+
+                <div class="benefit-card" data-aos="fade-left" data-aos-delay="300">
+                    <div class="benefit-icon">
+                        <input type="file" id="cms-about-clip-2-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-clip-2-img')">
+                        <img id="cms-about-clip-2-img" src="/static/images/stilogo.png" alt="Clip 2" onclick="triggerFileWindow('cms-about-clip-2-file')">
+                    </div>
+                    <h3 id="cms-about-clip-2-title" class="cms-editable">AI</h3>
+                    <p id="cms-about-clip-2-desc" class="cms-editable">AI-powered image-text matching for quick recovery of items.</p>
+                </div>
+
+                <div class="benefit-card" data-aos="fade-left" data-aos-delay="300">
+                    <div class="benefit-icon">
+                        <input type="file" id="cms-about-clip-3-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-clip-3-img')">
+                        <img id="cms-about-clip-3-img" src="/static/images/stilogo.png" alt="Clip 3" onclick="triggerFileWindow('cms-about-clip-3-file')">
+                    </div>
+                    <h3 id="cms-about-clip-3-title" class="cms-editable">Notifications</h3>
+                    <p id="cms-about-clip-3-desc" class="cms-editable">Real-time notifications for updates regarding report status.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="particles-js" style="position: absolute; width: 100%; height: 100%; z-index: 1;"></div>
+
+    <section class="improved-system-section">
+        <div class="container system-grid">
+            <div class="system-content" data-aos="fade-right">
+                <h1 id="cms-about-system-title" class="system-main-title cms-editable">Improved <span>Lost and Found System</span></h1>
+                <p id="cms-about-system-desc" class="system-subtitle cms-editable">Your complete solution for reuniting lost items with their owners.</p>
+
+                <div class="feature-item">
+                    <div class="icon-box blue-tint">
+                        <input type="file" id="cms-about-system-1-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-system-1-img')">
+                        <img id="cms-about-system-1-img" src="/static/images/stilogo.png" alt="System feature 1" onclick="triggerFileWindow('cms-about-system-1-file')">
+                    </div>
+                    <div class="text-box">
+                        <h3 id="cms-about-system-1-title" class="cms-editable">AI Matching & Search</h3>
+                        <p id="cms-about-system-1-desc" class="cms-editable">AI analyzes details and images to find potential matches quickly.</p>
+                    </div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="icon-box blue-tint">
+                        <input type="file" id="cms-about-system-2-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-system-2-img')">
+                        <img id="cms-about-system-2-img" src="/static/images/stilogo.png" alt="System feature 2" onclick="triggerFileWindow('cms-about-system-2-file')">
+                    </div>
+                    <div class="text-box">
+                        <h3 id="cms-about-system-2-title" class="cms-editable">Uploads</h3>
+                        <p id="cms-about-system-2-desc" class="cms-editable">Report lost or found items through a simple online form with photo uploads and text descriptions.</p>
+                    </div>
+                </div>
+
+                <div class="feature-item">
+                    <div class="icon-box blue-tint">
+                        <input type="file" id="cms-about-system-3-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-system-3-img')">
+                        <img id="cms-about-system-3-img" src="/static/images/stilogo.png" alt="System feature 3" onclick="triggerFileWindow('cms-about-system-3-file')">
+                    </div>
+                    <div class="text-box">
+                        <h3 id="cms-about-system-3-title" class="cms-editable">Alerts & Notifications</h3>
+                        <p id="cms-about-system-3-desc" class="cms-editable">Receive instant alerts and notifications when report progress changes.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="system-graphic" data-aos="zoom-in-left">
+                <input type="file" id="cms-about-system-graphic-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-system-graphic-img')">
+                <img id="cms-about-system-graphic-img" src="/static/images/background.jpg" alt="System Illustration" class="rotating-gear" onclick="triggerFileWindow('cms-about-system-graphic-file')">
+            </div>
+        </div>
+    </section>
+
+    <section id="reunite-cta" class="system-section alternate-bg" data-aos="fade-right">
+        <div id="vanta-reunite-bg"></div>
+        <div class="cta-content-overlay" data-aos="zoom-in">
+            <h2 id="cms-about-cta-title" class="cta-headline cms-editable">Ready to reunite<br>with your item?</h2>
+            <p id="cms-about-cta-desc" class="cta-body-text cms-editable">
+                Join our school community and reunite with your lost items with LookFor.
+            </p>
+
+            <div class="cta-illustration">
+                <input type="file" id="cms-about-cta-file" style="display:none;" accept="image/*" onchange="previewImage(event, 'cms-about-cta-img')">
+                <img id="cms-about-cta-img" src="/static/images/stilogo.png" alt="Reunite Graphic" onclick="triggerFileWindow('cms-about-cta-file')">
+            </div>
+
+            <div class="cta-button-group">
+                <a href="/login" class="btn-primary">Get Started</a>
+                <a href="/explore" class="btn-secondary">Discover More</a>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/velocity/1.5.2/velocity.min.js"></script>
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        function setImagePath(img, path) {
+            if (!img || !path) return;
+            img.src = path.startsWith("/") ? path : `/${path}`;
+        }
+
+        async function loadAboutContent() {
+            try {
+                const response = await fetch("/api/content/landing");
+                const data = await response.json();
+
+                if (data.about_hero) {
+                    document.getElementById("cms-about-hero-title").innerHTML = data.about_hero.title || "Learn more About";
+                    document.getElementById("cms-about-hero-desc").innerText = data.about_hero.description || "Find hope with LookFor, an AI-powered lost and found image-text matching system that helps reunite lost items with their owners quickly and efficiently.";
+                }
+
+                if (data.about_benefits) {
+                    document.getElementById("cms-about-benefits-title").innerHTML = data.about_benefits.title || "Why Choose <span class=\"biglogo\">Look<span>for</span></span> ?";
+                    document.getElementById("cms-about-benefits-desc").innerText = data.about_benefits.description || "We utilize AI matching with human verification to make sure the methods of matching lost and found items are accurate.";
+                }
+
+                if (Array.isArray(data.about_benefit_cards)) {
+                    const fallbackTitles = [
+                        "AI Matching",
+                        "Effortless Reporting",
+                        "Secured & Centralized"
+                    ];
+                    const fallbackDescs = [
+                        "Our intelligent AI system analyzes photos and text descriptions to find potential matches for lost items, saving time and effort.",
+                        "Easily report lost and found items through the system, accessible from anywhere and anytime.",
+                        "All information is stored in a central database with management and authority handled by school staff."
+                    ];
+                    data.about_benefit_cards.forEach((card, index) => {
+                        const n = index + 1;
+                        document.getElementById(`cms-about-benefit-${n}-title`).innerText = card.title || fallbackTitles[index];
+                        document.getElementById(`cms-about-benefit-${n}-desc`).innerText = card.description || fallbackDescs[index];
+                        setImagePath(document.getElementById(`cms-about-benefit-${n}-img`), card.image_path);
+                    });
+                }
+
+                if (data.about_clip) {
+                    document.getElementById("cms-about-clip-title").innerHTML = data.about_clip.title || "Powered by <span>CLIP</span>";
+                    document.getElementById("cms-about-clip-desc").innerText = data.about_clip.description || "Experience the efficiency of our advanced AI-powered platform designed to reunite you with your lost items.";
+                }
+
+                if (Array.isArray(data.about_clip_cards)) {
+                    const fallbackTitles = [
+                        "Reporting",
+                        "AI",
+                        "Notifications"
+                    ];
+                    const fallbackDescs = [
+                        "Effortless and simple processing of lost and found cases.",
+                        "AI-powered image-text matching for quick recovery of items.",
+                        "Real-time notifications for updates regarding report status."
+                    ];
+                    data.about_clip_cards.forEach((card, index) => {
+                        const n = index + 1;
+                        document.getElementById(`cms-about-clip-${n}-title`).innerText = card.title || fallbackTitles[index];
+                        document.getElementById(`cms-about-clip-${n}-desc`).innerText = card.description || fallbackDescs[index];
+                        setImagePath(document.getElementById(`cms-about-clip-${n}-img`), card.image_path);
+                    });
+                }
+
+                if (data.about_system) {
+                    document.getElementById("cms-about-system-title").innerHTML = data.about_system.title || "Improved <span>Lost and Found System</span>";
+                    document.getElementById("cms-about-system-desc").innerText = data.about_system.description || "Your complete solution for reuniting lost items with their owners.";
+                }
+
+                if (Array.isArray(data.about_system_cards)) {
+                    const fallbackTitles = [
+                        "AI Matching & Search",
+                        "Uploads",
+                        "Alerts & Notifications"
+                    ];
+                    const fallbackDescs = [
+                        "AI analyzes details and images to find potential matches quickly.",
+                        "Report lost or found items through a simple online form with photo uploads and text descriptions.",
+                        "Receive instant alerts and notifications when report progress changes."
+                    ];
+                    data.about_system_cards.forEach((card, index) => {
+                        const n = index + 1;
+                        document.getElementById(`cms-about-system-${n}-title`).innerText = card.title || fallbackTitles[index];
+                        document.getElementById(`cms-about-system-${n}-desc`).innerText = card.description || fallbackDescs[index];
+                        setImagePath(document.getElementById(`cms-about-system-${n}-img`), card.image_path);
+                    });
+                }
+
+                if (data.about_system_graphic) {
+                    setImagePath(document.getElementById("cms-about-system-graphic-img"), data.about_system_graphic.image_path);
+                }
+
+                if (data.about_cta) {
+                    document.getElementById("cms-about-cta-title").innerHTML = data.about_cta.title || "Ready to reunite<br>with your item?";
+                    document.getElementById("cms-about-cta-desc").innerText = data.about_cta.description || "Join our school community and reunite with your lost items with LookFor.";
+                    setImagePath(document.getElementById("cms-about-cta-img"), data.about_cta.image_path);
+                }
+            } catch (error) {
+                console.error("Failed to load about CMS content:", error);
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadAboutContent();
+
+            particlesJS("particles-js", {
+                particles: {
+                    number: { value: 80 },
+                    color: { value: "#005BAB" },
+                    shape: { type: "circle" },
+                    opacity: { value: 0.2 },
+                    size: { value: 3 },
+                    line_linked: { enable: true, distance: 150, color: "#005BAB", opacity: 0.2, width: 1 },
+                    move: { enable: true, speed: 2 },
+                },
+                interactivity: {
+                    events: { onhover: { enable: true, mode: "repulse" } },
+                },
+            });
+
+            document.querySelectorAll('[data-velocity="stagger-entry"]').forEach((el, i) => {
+                Velocity(el, "transition.slideUpIn", {
+                    delay: i * 250,
+                    duration: 800,
+                    display: "flex",
+                });
+            });
+
+            AOS.init({ once: true });
+        });
+    </script>
+</body>
+</html>

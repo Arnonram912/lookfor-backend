@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Student Panel | LookFor STI</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11">
+    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=14">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+
+    <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+        <ul class="nav-links"> 
+
+           <li class="#">
+                <a href="/student/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li>
+                <a href="/student/Messages"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/Lost-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                </a>
+            </li>
+
+            <li class="active">
+                <a href="/student/Found-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Item
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+           
+            
+
+        </ul> 
+
+    </nav> 
+    
+
+    <main class="main-content">
+     
+       <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/student/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+
+
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/student/profile'">My Profile</li>
+                    <li onclick="window.location.href='/student/settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+     
+
+</header>
+
+        <div class="page-scroll-area">
+            <section class="content-body">
+                <div class="profile-page-card">
+                    <div class="action-bar">
+                            <h2 class="section-title">Found Items <span>Inventory</span></h2>
+                            <button class="upload-btn" onclick="openModal('reportModal')">
+                                <span class="plus">+ Upload Found Item</span>
+                            </button>
+                    </div>
+                    <div class="items-grid" id="foundItemsGrid">
+                        <p style="text-align:center; grid-column: 1/-1;">Loading found items...</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div id="itemDetailModal" class="modal-overlay">
+            <div class="modal-content detail-modal">
+                <span class="close-btn" onclick="closeModal('itemDetailModal')">&times;</span>
+                <div class="detail-layout">
+                    <div class="detail-image">
+                        <img id="modalImg" src="" alt="Item Image">
+                    </div>
+                    <div class="detail-info">
+                        <div class="modal-header-flex" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h1 id="modalTitle">Item Name</h1>
+                            <span id="modalStatus" class="status-badge">PENDING</span>
+                        </div>
+
+                        <span id="modalCategory" class="badge-category">Category</span>
+                        <hr>
+
+                        <div class="trait-grid">
+                            <p><strong>Brand:</strong> <span id="modalBrand"></span></p>
+                            <p><strong>Color:</strong> <span id="modalColor"></span></p>
+                        </div>
+
+                        <p><strong>Where was the item found?</strong> <span id="modalLocation"></span></p>
+                        <p><strong>When was the item found?</strong> <span id="modalDate"></span></p>
+                        <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
+
+                        <p><strong>Description:</strong></p>
+                        <p id="modalDescription" class="description-text"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="reportModal" class="modal-overlay">
+            <div class="modal-content report-upload-modal">
+                <span class="close-btn" onclick="handleCloseReport()">&times;</span>
+                <h1 class="form-title">Found <span>Item</span></h1>
+
+                <div class="form-container">
+                    <div class="image-upload-section">
+                        <div class="image-placeholder image-preview-carousel" id="imagePreview">
+                            <button type="button" class="image-slide-btn prev" id="imagePreviewPrev" onclick="changePreviewSlide(-1)" style="display:none;">&#8249;</button>
+                            <div class="image-preview-stage" id="imagePreviewStage">Image Preview</div>
+                            <button type="button" class="image-slide-btn next" id="imagePreviewNext" onclick="changePreviewSlide(1)" style="display:none;">&#8250;</button>
+                            <div class="image-preview-status" id="imagePreviewStatus" style="display:none;"></div>
+                        </div>
+                        <input type="file" id="itemImage" hidden accept="image/*">
+                        <button class="btn-upload-img" id="itemImageTrigger" onclick="document.getElementById('itemImage').click()">+ Upload Main Image</button>
+                        <p class="supporting-image-note">Add up to 2 more photos to help the AI build a more accurate embedding. The first image stays as the main display photo.</p>
+                        <div class="supporting-image-grid">
+                            <div class="supporting-image-card">
+                                <span class="supporting-image-title">Optional Image 2</span>
+                                <input type="file" id="itemImageExtra1" hidden accept="image/*">
+                                <button type="button" class="btn-upload-img supporting-image-btn" id="itemImageExtra1Trigger" onclick="document.getElementById('itemImageExtra1').click()">+ Add Optional Image 2</button>
+                            </div>
+                            <div class="supporting-image-card">
+                                <span class="supporting-image-title">Optional Image 3</span>
+                                <input type="file" id="itemImageExtra2" hidden accept="image/*">
+                                <button type="button" class="btn-upload-img supporting-image-btn" id="itemImageExtra2Trigger" onclick="document.getElementById('itemImageExtra2').click()">+ Add Optional Image 3</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="details-column item-details">
+                        <h3>ITEM DETAILS</h3>
+                        <div class="input-group">
+                            <label>What is the item?</label>
+                            <input type="text" id="itemName" placeholder="Item Name:">
+                        </div>
+                        <div class="input-group">
+                            <label for="itemCategory">Item Category</label>
+                            <select id="itemCategory">
+                                <option value="">-- Loading Categories... --</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="itemColor" placeholder="Item Color:">
+                        </div>
+                        <div class="input-group">
+                            <input type="text" id="itemBrand" placeholder="Item Brand:">
+                        </div>
+                        <div class="input-group">
+                            <label>Additional Description:</label>
+                            <textarea id="itemDesc" rows="4"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="details-column other-details">
+                        <h3>OTHER DETAILS</h3>
+                        <div class="input-group">
+                            <label>When was the item found?</label>
+                            <div class="datetime-row">
+                                <input type="date" id="reportDate">
+                                <input type="time" id="reportTime">
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label>Where was the item found?</label>
+                            <textarea id="reportLocation" rows="3" placeholder="Last location located:"></textarea>
+                        </div>
+                    </div>
+                </div>
+ 
+                 <div class="modal-footer" style="display: flex; justify-content: center;">
+                    <button class="btn-found surrender-submit-btn" onclick="submitReport()">+Submit</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="confirmModal" class="modal-overlay" style="z-index: 1001;">
+            <div class="modal-content" style="max-width: 500px; padding: 30px;">
+                <h2 style="text-align: center; margin-bottom: 20px;">Review <span>Report</span></h2>
+
+                <div id="submissionSummary" style="background: #f9f9f9; border-radius: 10px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #003366; text-align: left; font-size: 14px;">
+                    <p><strong>Item:</strong> <span id="sumName"></span></p>
+                    <p><strong>Category:</strong> <span id="sumCategory"></span></p>
+                    <p><strong>Color/Brand:</strong> <span id="sumColorBrand"></span></p>
+                    <p><strong>Location:</strong> <span id="sumLocation"></span></p>
+                    <p><strong>Reporter:</strong> <span id="sumReporter"></span></p>
+                    <p><strong>Date:</strong> <span id="sumDate"></span></p>
+                </div>
+
+                <p style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">
+                    Is everything correct? Your surrender report will be submitted for admin review.
+                </p>
+
+                <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
+                    <button class="btn-found surrender-submit-btn" id="finalConfirmBtn" onclick="executeSubmit()" style="width: 100%; margin: 0;">Confirm & Surrender</button>
+
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <button class="btn-upload-img" onclick="backToEdit()" style="flex: 1; background: #f0ad4e; color: white; margin: 0; border: none;">
+                            Edit Details
+                        </button>
+                        <button class="btn-upload-img" onclick="handleCancelAll()" style="flex: 1; background: #6c757d; color: white; margin: 0; border: none;">
+                            Discard
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+</main>
+
+    <script>
+        
+
+        function toggleNotifications() { toggleDropdown('notificationDropdown'); }
+function toggleMessages() { toggleDropdown('messageDropdown'); }
+function toggleProfile() { toggleDropdown('profileDropdown'); }
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    const isOpen = dropdown.style.display === "block";
+    
+    // Close all first to prevent overlap
+    document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+            .forEach(el => el.style.display = 'none');
+            
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "flex";
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+function logout() {
+    clearStudentSession();
+    window.location.href = "/login";
+}
+
+function decodeTokenPayload(token) {
+    try {
+        return JSON.parse(atob(token.split(".")[1]));
+    } catch (error) {
+        return null;
+    }
+}
+
+function clearStudentSession() {
+    localStorage.removeItem("token");
+
+    const fallbackToken = localStorage.getItem("admin_token");
+    const payload = decodeTokenPayload(fallbackToken || "");
+    if (payload && !payload.is_admin) {
+        localStorage.removeItem("admin_token");
+    }
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+    // Close dropdowns if clicking outside nav items
+    if (!event.target.closest('.topbar-menu') && !event.target.closest('.profile-container')) {
+        document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+                .forEach(el => el.style.display = 'none');
+    }
+};
+
+
+
+        function getStudentToken() {
+            const studentToken = localStorage.getItem("token");
+            if (studentToken) return studentToken;
+
+            const fallbackToken = localStorage.getItem("admin_token");
+            const payload = decodeTokenPayload(fallbackToken || "");
+            return payload && !payload.is_admin ? fallbackToken : null;
+        }
+
+        async function loadFoundItems() {
+            const grid = document.getElementById("foundItemsGrid");
+            const token = getStudentToken();
+
+            if (!token) {
+                clearStudentSession();
+                window.location.href = "/login";
+                return;
+            }
+
+            try {
+                const response = await fetch('/student/items/found/me', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    console.log("Fetch failed:", response.status, errorData);
+
+                    if (response.status === 401) {
+                        clearStudentSession();
+                        window.location.href = "/login";
+                        return;
+                    }
+
+                    throw new Error(`${response.status} - ${errorData.detail || "Could not fetch your surrendered reports."}`);
+                }
+
+                const items = await response.json();
+
+                if (!items.length) {
+                    grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">You haven't surrendered any items yet.</p>`;
+                    return;
+                }
+
+                grid.innerHTML = items.map(item => {
+                    const data = item.data || {};
+                    const rawPath = (data.image_path || "").replace(/\\/g, '/');
+                    const imageUrl = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+                    const itemData = JSON.stringify({
+                        ...data,
+                        display_status: item.display_status
+                    }).replace(/'/g, "\\'");
+
+                    return `
+                        <div class="item-card">
+                            <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
+                                <img src="${imageUrl}" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                                <span class="inventory-state-tag ${item.display_status === "Matched" ? "matched" :
+                                item.display_status === "Approved" ? "approved" :
+                                "pending"}">${item.display_status || "Pending"}</span>
+                            </div>
+                            <div class="card-body">
+                                <h3>${data.item_name || data.category || 'Unnamed Item'}</h3>
+                                <p><i class="fas fa-map-marker-alt"></i> ${data.location || 'Unknown'}</p>
+                                <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details →</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error("Load Error:", err);
+                grid.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">${err.message}</p>`;
+            }
+        }
+
+        function submitReport() {
+            const imageFile = document.getElementById('itemImage').files[0];
+            const itemName = document.getElementById('itemName').value.trim();
+            const categorySelect = document.getElementById('itemCategory');
+            const categoryName = categorySelect.options[categorySelect.selectedIndex]?.text || "";
+            const reportDate = document.getElementById('reportDate').value;
+            const reportLocation = (document.getElementById('reportLocation').value || "").trim();
+
+            if (!imageFile || !itemName || !categorySelect.value || !reportDate || !reportLocation) {
+                Swal.fire({
+                    target: document.body,
+                    customClass: {
+                        container: 'swal2-on-top'
+                    },
+                    icon: "warning",
+                    title: "Missing required fields",
+                    text: "Please upload an image, enter an item name, select a category, choose the date found, and enter the location."
+                });
+                return;
+            }
+
+            document.getElementById('sumName').innerText = itemName;
+            document.getElementById('sumCategory').innerText = categoryName;
+            document.getElementById('sumColorBrand').innerText = `${document.getElementById('itemColor').value || "N/A"} / ${document.getElementById('itemBrand').value || "N/A"}`;
+            document.getElementById('sumLocation').innerText = document.getElementById('reportLocation').value || "Not specified";
+            document.getElementById('sumReporter').innerText = "Self (Student Report)";
+            document.getElementById('sumDate').innerText = `${document.getElementById('reportDate').value || "N/A"} ${document.getElementById('reportTime').value || ""}`;
+
+            closeModal('reportModal');
+            openModal('confirmModal');
+        }
+
+        async function executeSubmit() {
+            const confirmBtn = document.getElementById('finalConfirmBtn');
+            const token = getStudentToken();
+            const categorySelect = document.getElementById('itemCategory');
+            const categoryName = categorySelect.options[categorySelect.selectedIndex]?.text || "";
+            const categoryId = categorySelect.value;
+            const imageFile = document.getElementById('itemImage').files[0];
+            const description = (document.getElementById('itemDesc').value || "").trim();
+            const locationValue = (document.getElementById('reportLocation').value || "").trim();
+            const reportDate = document.getElementById('reportDate').value;
+            const reportTime = document.getElementById('reportTime').value;
+
+            if (!token) {
+                clearStudentSession();
+                window.location.href = "/login";
+                return;
+            }
+
+            if (!imageFile || !document.getElementById('itemName').value.trim() || !categoryId || !reportDate || !locationValue) {
+                await Swal.fire({
+                    target: document.body,
+                    customClass: {
+                        container: 'swal2-on-top'
+                    },
+                    icon: "warning",
+                    title: "Missing required fields",
+                    text: "Please complete the image, item name, category, date found, and location before submitting."
+                });
+                closeModal('confirmModal');
+                openModal('reportModal');
+                return;
+            }
+
+            confirmBtn.innerText = "Submitting...";
+            confirmBtn.disabled = true;
+
+            try {
+                const compareData = new FormData();
+                compareData.append("image", imageFile);
+                compareData.append("category", categoryName);
+                compareData.append("location", locationValue);
+                compareData.append("description", description);
+                compareData.append("status", "found");
+                compareData.append("brand", document.getElementById('itemBrand').value || "");
+                compareData.append("color", document.getElementById('itemColor').value || "");
+                appendOptionalImages(compareData);
+
+                const compareRes = await fetch('/api/compare-text-details', {
+                    method: 'POST',
+                    body: compareData
+                });
+
+                if (!compareRes.ok) throw new Error("AI comparison failed.");
+                const aiResult = await compareRes.json();
+                const hasConfirmedMatch = aiResult?.action === "show_match" &&
+                    aiResult?.matched_item?.id &&
+                    (aiResult.highest_score || 0) >= 0.55;
+
+                const formData = new FormData();
+                formData.append("item_name", document.getElementById('itemName').value);
+                formData.append("category", categoryName);
+                formData.append("category_id", categoryId);
+                formData.append("brand", document.getElementById('itemBrand').value);
+                formData.append("color", document.getElementById('itemColor').value);
+                formData.append("description", description);
+                formData.append("location", locationValue);
+                formData.append("date", reportDate);
+                formData.append("time_found", reportTime);
+                formData.append("image", imageFile);
+                formData.append("image_embedding", JSON.stringify(aiResult.generated_embedding || []));
+                appendOptionalImages(formData);
+
+                if (hasConfirmedMatch) {
+                    formData.append("matched_item_id", aiResult.matched_item.id);
+                    formData.append("ai_score", aiResult.highest_score || 0);
+                }
+
+                const response = await fetch('/student/found', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || "Failed to submit surrender report.");
+                }
+
+                await Swal.fire({
+                    target: document.body,
+                    customClass: {
+                        container: 'swal2-on-top'
+                    },
+                    icon: "success",
+                    title: "Report submitted",
+                    text: hasConfirmedMatch
+                        ? "Your surrendered item report has been submitted and a strong possible owner match was detected for review."
+                        : "Your surrendered item report has been submitted.",
+                    confirmButtonText: "OK"
+                });
+                location.reload();
+            } catch (err) {
+                Swal.fire({
+                    target: document.body,
+                    customClass: {
+                        container: 'swal2-on-top'
+                    },
+                    icon: "error",
+                    title: "Submission failed",
+                    text: err.message
+                });
+                console.error("Submission failed:", err);
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.innerText = "Confirm & Surrender";
+            }
+        }
+
+        function viewItemDetails(item) {
+            const rawPath = (item.image_path || "").replace(/\\/g, '/');
+            document.getElementById("modalImg").src = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+            document.getElementById("modalTitle").innerText = item.item_name || item.category || 'Unnamed Item';
+            document.getElementById("modalCategory").innerText = item.category || 'N/A';
+            document.getElementById("modalBrand").innerText = item.brand || 'None';
+            document.getElementById("modalColor").innerText = item.color || 'Not Specified';
+            document.getElementById("modalLocation").innerText = item.location || 'Not Specified';
+            document.getElementById("modalDate").innerText = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
+            document.getElementById("modalUploader").innerText = item.uploader_name || 'Self';
+            document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
+
+            const statusEl = document.getElementById("modalStatus");
+            statusEl.innerText = (item.display_status || "Pending Approval").toUpperCase();
+            statusEl.style.color = item.display_status === "Matched" ? "#28a745" : "#f59f00";
+
+            openModal('itemDetailModal');
+        }
+
+        async function fetchCategories() {
+            try {
+                const response = await fetch('/admin/category');
+                const categories = await response.json();
+                const dropdown = document.getElementById('itemCategory');
+
+                dropdown.innerHTML = '<option value="">-- Select Category --</option>';
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.id;
+                    option.textContent = cat.name;
+                    dropdown.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error loading categories:", error);
+                document.getElementById('itemCategory').innerHTML = '<option value="">Error loading list</option>';
+            }
+        }
+
+        function clearForm() {
+            document.getElementById('itemImage').value = "";
+            document.getElementById('itemImageExtra1').value = "";
+            document.getElementById('itemImageExtra2').value = "";
+            uploadPreviewSlides = [null, null, null];
+            currentPreviewSlideIndex = 0;
+            document.getElementById('itemImageTrigger').textContent = '+ Upload Main Image';
+            document.getElementById('itemImageExtra1Trigger').textContent = '+ Add Optional Image 2';
+            document.getElementById('itemImageExtra2Trigger').textContent = '+ Add Optional Image 3';
+            renderPreviewCarousel();
+            document.getElementById('itemName').value = "";
+            document.getElementById('itemCategory').value = "";
+            document.getElementById('itemColor').value = "";
+            document.getElementById('itemBrand').value = "";
+            document.getElementById('itemDesc').value = "";
+            document.getElementById('reportDate').value = "";
+            document.getElementById('reportTime').value = "";
+            document.getElementById('reportLocation').value = "";
+        }
+
+        function openModal(id) {
+            document.getElementById(id).style.display = 'flex';
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        async function confirmFoundReportAction(title, text, confirmButtonText = 'Continue') {
+            const result = await Swal.fire({
+                icon: 'warning',
+                title,
+                text,
+                showCancelButton: true,
+                confirmButtonText,
+                cancelButtonText: 'Keep editing',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#114b7a',
+                customClass: {
+                    container: 'swal2-on-top'
+                }
+            });
+
+            return result.isConfirmed;
+        }
+
+        async function handleCloseReport() {
+            const shouldClose = await confirmFoundReportAction(
+                'Close report?',
+                'Unsaved changes will be lost.',
+                'Yes, close it'
+            );
+            if (shouldClose) {
+                closeModal('reportModal');
+                clearForm();
+            }
+        }
+
+        async function handleCancelAll() {
+            const shouldDiscard = await confirmFoundReportAction(
+                'Discard report?',
+                'This will remove everything you entered in this found item report.',
+                'Yes, discard it'
+            );
+            if (shouldDiscard) {
+                closeModal('confirmModal');
+                closeModal('reportModal');
+                clearForm();
+            }
+        }
+
+        function backToEdit() {
+            closeModal('confirmModal');
+            openModal('reportModal');
+        }
+
+        let uploadPreviewSlides = [null, null, null];
+        let currentPreviewSlideIndex = 0;
+
+        function getAvailablePreviewSlides() {
+            return uploadPreviewSlides
+                .map((slide, index) => slide ? { ...slide, slotIndex: index } : null)
+                .filter(Boolean);
+        }
+
+        function renderPreviewCarousel() {
+            const stage = document.getElementById('imagePreviewStage');
+            const prevBtn = document.getElementById('imagePreviewPrev');
+            const nextBtn = document.getElementById('imagePreviewNext');
+            const status = document.getElementById('imagePreviewStatus');
+            const availableSlides = getAvailablePreviewSlides();
+
+            if (!stage || !prevBtn || !nextBtn || !status) return;
+
+            if (!availableSlides.length) {
+                stage.innerHTML = 'Image Preview';
+                prevBtn.style.display = 'none';
+                nextBtn.style.display = 'none';
+                status.style.display = 'none';
+                return;
+            }
+
+            if (!uploadPreviewSlides[currentPreviewSlideIndex]) {
+                currentPreviewSlideIndex = availableSlides[0].slotIndex;
+            }
+
+            const activePosition = availableSlides.findIndex(slide => slide.slotIndex === currentPreviewSlideIndex);
+            const activeSlide = activePosition >= 0 ? availableSlides[activePosition] : availableSlides[0];
+
+            stage.innerHTML = `<img src="${activeSlide.src}" class="modal-upload-preview" alt="${activeSlide.label}">`;
+            prevBtn.style.display = availableSlides.length > 1 ? 'flex' : 'none';
+            nextBtn.style.display = availableSlides.length > 1 ? 'flex' : 'none';
+            status.style.display = 'inline-flex';
+            status.textContent = `${activePosition + 1} / ${availableSlides.length} - ${activeSlide.label}`;
+        }
+
+        function updatePreviewSlide(slotIndex, file, label, triggerId, defaultButtonText) {
+            const trigger = document.getElementById(triggerId);
+
+            if (!file) {
+                uploadPreviewSlides[slotIndex] = null;
+                if (trigger) trigger.textContent = defaultButtonText;
+                if (currentPreviewSlideIndex === slotIndex) {
+                    const remainingSlides = getAvailablePreviewSlides();
+                    currentPreviewSlideIndex = remainingSlides.length ? remainingSlides[0].slotIndex : 0;
+                }
+                renderPreviewCarousel();
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                uploadPreviewSlides[slotIndex] = { src: e.target.result, label };
+                if (trigger) trigger.textContent = `Change ${label}`;
+                currentPreviewSlideIndex = slotIndex;
+                renderPreviewCarousel();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function changePreviewSlide(direction) {
+            const availableSlides = getAvailablePreviewSlides();
+            if (availableSlides.length < 2) return;
+
+            const currentPosition = availableSlides.findIndex(slide => slide.slotIndex === currentPreviewSlideIndex);
+            const nextPosition = (currentPosition + direction + availableSlides.length) % availableSlides.length;
+            currentPreviewSlideIndex = availableSlides[nextPosition].slotIndex;
+            renderPreviewCarousel();
+        }
+
+        function appendOptionalImages(formData) {
+            const optionalImages = [
+                document.getElementById('itemImageExtra1')?.files?.[0],
+                document.getElementById('itemImageExtra2')?.files?.[0],
+            ];
+
+            optionalImages.forEach((file, index) => {
+                if (file) {
+                    formData.append(`extra_image_${index + 1}`, file);
+                }
+            });
+        }
+
+        document.getElementById('itemImage').addEventListener('change', function(event) {
+            updatePreviewSlide(0, event.target.files[0], 'Main Image', 'itemImageTrigger', '+ Upload Main Image');
+        });
+        document.getElementById('itemImageExtra1').addEventListener('change', function() {
+            updatePreviewSlide(1, this.files[0], 'Optional Image 2', 'itemImageExtra1Trigger', '+ Add Optional Image 2');
+        });
+        document.getElementById('itemImageExtra2').addEventListener('change', function() {
+            updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFoundItems();
+            fetchCategories();
+        });
+
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal-overlay')) {
+                event.target.style.display = 'none';
+            }
+        };
+    </script>
+
+    <script src="/static/session-keepalive.js"></script>
+    <script src="/static/student-notifications.js"></script>
+    <script src="/static/force-password-change.js"></script>
+    <script src="/static/student-sidebar-access.js"></script>
+</body>
+</html>

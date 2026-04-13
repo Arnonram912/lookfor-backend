@@ -1,0 +1,422 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Student Panel | LookFor STI</title> 
+
+    <link rel="stylesheet" href="{{ url_for('static', path='student_dashboard.css') }}?v=10"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+
+<head> 
+
+<body> 
+
+  
+
+    <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+        <ul class="nav-links"> 
+
+           <li class="active">
+                <a href="/student/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li>
+                <a href="/student/Messages"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/Lost-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/Found-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Item 
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+        
+            
+
+        </ul> 
+
+    </nav> 
+    
+
+  
+
+    <main class="main-content"> 
+
+      
+       <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/student/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger student-profile-trigger" onclick="toggleProfile()" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user student-profile-icon"></i>
+            
+        </span>
+        </div>
+
+
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/student/profile'">My Profile</li>
+                    <li onclick="window.location.href='/student/settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+     
+
+</header>
+
+
+  <div class="page-scroll-area">
+    <section class="content-body">
+        <div class="announcement-section">
+            <div class="carousel-container" id="carouselInner">
+                <div class="loading-spinner" style="text-align: center; padding: 50px;">
+                    Loading updates...
+                </div>
+            </div>
+        </div>
+    
+
+    <div class="stats-grid">
+        <div class="card" onclick="openFoundItemsModal()">
+            <div class="card-icon">📁</div>
+            <h3 id="foundCount">0</h3>
+            <p>Found Items Inventory</p>
+        </div>
+
+        <div class="card">
+            <div class="card-icon">🔍</div>
+            <h3>12</h3>
+            <p>Lost Item Inventory</p>
+        </div>
+
+        <div class="card" onclick="openPendingSurrenderModal()">
+            <div class="card-icon">⏳</div>
+            <h3 id="pendingCount">0</h3>
+            <p>Pending Surrendered </p>
+        </div>
+
+        <div class="card">
+            <div class="card-icon">✅</div>
+            <h3 id="claimedCount">0</h3>
+            <p>Successfully Claimed</p>
+        </div>
+    </div>
+</section>
+  </div>
+    </main> 
+
+    <div id="bulkRegisterModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('bulkRegisterModal')">&times;</span>
+            <h2>Bulk Register Students</h2>
+            <p>Enter STI Emails (one per line):</p>
+            <textarea id="bulkEmails" placeholder="user@novaliches.sti.edu.ph" style="width: 100%; height: 150px; margin: 15px 0; padding: 10px;"></textarea>
+            <button class="btn-primary success-btn" onclick="submitBulk()" style="width: 100%;">Generate Accounts</button>
+        </div>
+    </div>
+
+    <div id="foundItemsModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                <h2>Found Items Inventory</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button class="refresh-btn" onclick="loadFoundItems()" style="padding: 5px 15px;">🔄 Sync AI</button>
+                    <span class="close-modal" onclick="closeModal('foundItemsModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="filter-bar" style="display: flex; gap: 10px; margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+                    <input type="text" id="filterCategory" placeholder="Category..." oninput="loadFoundItems()">
+                    <input type="text" id="filterLocation" placeholder="Location..." oninput="loadFoundItems()">
+                    <input type="date" id="filterDate" onchange="loadFoundItems()">
+                    <button onclick="clearFilters()" class="btn-secondary">Reset</button>
+                </div>
+                <div class="items-grid" id="itemsGrid">
+                    </div>
+            </div>
+            <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
+                <button class="btn-secondary" onclick="closeModal('foundItemsModal')">Close Window</button>
+            </div>
+        </div>
+    </div>
+        <div id="adminActionModal" class="modal">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                    <h2 id="adminModalTitle">Pending Surrender Items</h2>
+                    <span class="close-modal" onclick="closeModal('adminActionModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="adminModalList">
+                        <p style="text-align:center; padding:20px;">Loading items...</p>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
+                    <button class="btn-secondary" onclick="closeModal('adminActionModal')" style="padding: 8px 20px; cursor: pointer;">Close</button>
+                </div>
+            </div>
+        </div>
+        <script>
+
+// --- UTILS & HELPERS ---
+function escapeHtml(text) {
+    if (!text) return "";
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+let currentSlide = 0;
+
+function moveSlide(direction) {
+    const slides = document.querySelectorAll('.carousel-slide');
+    if (slides.length <= 1) return; 
+
+    slides[currentSlide].classList.remove('active');
+    currentSlide = (currentSlide + direction + slides.length) % slides.length;
+    slides[currentSlide].classList.add('active');
+}
+
+ // --- GLOBAL STATE ---
+
+let notifications = [];
+window.allPending = []; 
+window.allFound = [];
+
+// --- 1. DYNAMIC CAROUSEL LOGIC ---
+async function loadAnnouncements() {
+    try {
+        const response = await fetch('/api/announcements');
+        const announcements = await response.json();
+        const container = document.getElementById('carouselInner');
+        
+        if (!announcements || announcements.length === 0) {
+            container.innerHTML = `<p style="text-align:center; padding:20px;">No active announcements.</p>`;
+            return;
+        }
+
+        // Map the data to HTML
+        container.innerHTML = announcements.map((anno, index) => `
+            <div class="carousel-slide ${index === 0 ? 'active' : ''}">
+                <img src="/${anno.image_url}" alt="${escapeHtml(anno.title)}" onerror="this.src='/static/photos/default_news.jpg'">
+                <div class="carousel-caption">
+                    <h2>${escapeHtml(anno.title)}</h2>
+                    <p>${escapeHtml(anno.content)}</p>
+                </div>
+            </div>
+        `).join('');
+
+        currentSlide = 0;
+    } catch (err) {
+        console.error("Failed to load announcements:", err);
+    }
+}
+
+
+
+// --- 2. DROPDOWN HANDLERS ---
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    const isOpen = dropdown.style.display === "block";
+    
+    // Close all first to prevent overlap
+    document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+            .forEach(el => el.style.display = 'none');
+            
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+// Specific wrappers for your existing HTML onclicks
+function toggleNotifications() { toggleDropdown('notificationDropdown'); }
+function toggleMessages() { toggleDropdown('messageDropdown'); }
+function toggleProfile() { toggleDropdown('profileDropdown'); }
+
+function decodeTokenPayload(token) {
+    try {
+        return JSON.parse(atob(token.split(".")[1]));
+    } catch (error) {
+        return null;
+    }
+}
+
+function getStudentToken() {
+    const studentToken = localStorage.getItem("token");
+    if (studentToken) return studentToken;
+
+    const fallbackToken = localStorage.getItem("admin_token");
+    const payload = decodeTokenPayload(fallbackToken || "");
+    return payload && !payload.is_admin ? fallbackToken : null;
+}
+
+// --- 3. DASHBOARD STATS ---
+async function updateDashboardStats() {
+    const token = getStudentToken();
+    if (!token) return;
+
+    try {
+        const [resMine, resFound] = await Promise.all([
+            fetch('/student/items/found/me', { headers: { 'Authorization': `Bearer ${token}` } }),
+            fetch('/admin/items/found', { headers: { 'Authorization': `Bearer ${token}` } })
+        ]);
+
+        if (!resMine.ok || !resFound.ok) {
+            throw new Error("Failed to load dashboard stats.");
+        }
+
+        const myItems = await resMine.json();
+        const foundItems = await resFound.json();
+        const pendingItems = myItems.filter(item => item.display_status === "Pending Approval");
+        const claimedItems = myItems.filter(item => item.display_status !== "Pending Approval");
+
+        document.getElementById('pendingCount').innerText = pendingItems.length || 0;
+        document.getElementById('foundCount').innerText = foundItems.length || 0;
+        document.getElementById('claimedCount').innerText = claimedItems.length || 0;
+        
+        window.allPending = pendingItems;
+        window.allFound = foundItems;
+    } catch (err) {
+        console.error("Stats sync failed");
+    }
+}
+
+// --- 4. LIFECYCLE (THE BRAIN) ---
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Auth Guard
+    const token = getStudentToken();
+    if (!token) {
+        window.location.href = "/";
+        return;
+    }
+
+    const payload = decodeTokenPayload(token);
+    if (payload?.is_admin) {
+        window.location.replace("/admin/dashboard");
+        return;
+    }
+
+    // 2. Initial Data Load
+    loadAnnouncements();
+    updateDashboardStats();
+    loadNotifications(); // Make sure this is defined
+    loadFoundItems();    // Make sure this is defined
+
+    // 3. Setup Timers (ONLY ONCE)
+    // This handles the carousel rotation every 5 seconds
+    const carouselTimer = setInterval(() => moveSlide(1), 5000);
+
+    // This refreshes background data every 30 seconds
+    setInterval(() => {
+        updateDashboardStats();
+        loadNotifications();
+    }, 30000);
+});
+
+// --- 5. UTILS ---
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "flex";
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+function logout() {
+    localStorage.clear();
+    window.location.href = "/";
+}
+
+// Global click handler for closing modals and dropdowns
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+    // Close dropdowns if clicking outside nav items
+    if (!event.target.closest('.topbar-menu') && !event.target.closest('.profile-container')) {
+        document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+                .forEach(el => el.style.display = 'none');
+    }
+};
+</script>
+
+<script src="/static/session-keepalive.js?v=2"></script>
+<script src="/static/student-notifications.js?v=2"></script>
+<script src="/static/force-password-change.js?v=2"></script>
+<script src="/static/student-sidebar-access.js?v=2"></script>
+</body> 
+
+</html> 

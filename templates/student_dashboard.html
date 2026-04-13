@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Student Portal | LookFor STI</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v=5">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body class="dashboard-body">
+    <nav class="navbar admin-nav">
+        <div class="nav-logo">LookFor <small>(Student)</small></div>
+        <ul class="nav-links">
+            <li><a href="#">Home</a></li>
+            <li><a href="#">Items List</a></li>         
+            <li>
+                <div class="notification-container">
+                    <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                        🔔 <span id="notificationCount" class="badge red">0</span>
+                    </span>
+                    <div id="notificationDropdown" class="notification-dropdown">
+                        <h3>Recent Matches & Alerts</h3>
+                        <ul id="notificationList"></ul>
+                        <div id="emptyNotif">No new notifications</div>
+                    </div>
+                </div>
+            </li>
+            <div class="profile-section" onclick="openSettings()" style="cursor: pointer;">
+            <img id="userProfileLogo" src="/static/default-avatar.png" 
+                style="width: 45px; height: 45px; border-radius: 50%; border: 2px solid #007bff;">
+            </div>
+            <li><a href="javascript:void(0)" class="logout-link" onclick="logout()">Logout</a></li>
+        </ul>
+    </nav>
+
+    <div class="dashboard-container">
+        <div class="alert-box success">
+            <strong>You receive a message from admin!</strong> An item matching your "White Wallet" has been found.
+        </div>
+
+        <!-- Lost Report Modal -->
+        <div id="lostReportModal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Report a Lost Item</h2>
+                    <p style="font-size: 0.8rem; color: #666;">Our AI will check if this matches any items already surrendered.</p>
+                    <span class="close-modal" onclick="closeLostModal()">&times;</span>
+                </div>
+                <form id="lostForm" class="upload-form" onsubmit="submitLostReport(event)">
+                    <div class="form-group">
+                        <label>Item Category</label>
+                        <input type="text" name="category" placeholder="e.g. Wallet, iPhone, Keys" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Detailed Description</label>
+                        <textarea name="description" rows="3" placeholder="Describe brand, color, or unique features..." required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Where did you lose it?</label>
+                        <input type="text" name="location" placeholder="e.g. Library, Canteen" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Date Lost</label>
+                        <input type="date" name="date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Upload Reference Image</label>
+                        <input type="file" name="image" accept="image/*" required onchange="previewImage(this, 'lostPreview')">
+                        <img id="lostPreview" src="#" alt="Preview" style="display:none; width:100px; margin-top:10px; border-radius:5px;">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width:100%">Search & Submit Report</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Found Report Modal -->
+        <div id="foundReportModal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Create Found Report</h2>
+                    <span class="close-modal" onclick="closeFoundModal()">&times;</span>
+                </div>
+                <form id="foundForm" class="upload-form" onsubmit="submitFoundReport(event)">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <input type="text" name="category" placeholder="e.g. Wallet, ID, Bag" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Detailed Description</label>
+                        <textarea name="description" rows="3" placeholder="Where was it found? Color? Brand?" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" name="location" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Date Found</label>
+                        <input type="date" name="date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Upload Image</label>
+                        <input type="file" name="image" accept="image/*" required onchange="previewImage(this, 'foundPreview')">
+                        <img id="foundPreview" src="#" alt="Preview" style="display:none; width:100px; margin-top:10px; border-radius:5px;">
+                    </div>
+                    <button type="submit" class="btn-primary" style="width:100%">Submit Found Report</button>
+                </form>
+            </div>
+        </div>
+        <div id="settingsModal" class="modal">
+    <div class="modal-content settings-grid">
+        <span class="close" onclick="closeSettings()">&times;</span>
+        <h3>Account Settings</h3>
+        <hr>
+        
+        <section class="settings-section">
+            <h4><i class="fas fa-user"></i> Account Profile</h4>
+            <input type="text" id="setDisplayName" placeholder="Display Name">
+            <input type="password" id="setNewPassword" placeholder="New Password">
+            <label>Update Profile Picture:</label>
+            <input type="file" id="setProfilePic" accept="image/*">
+        </section>
+
+        <section class="settings-section">
+            <h4><i class="fas fa-paint-roller"></i> Display Layout</h4>
+            <label class="switch">
+                Dark Mode: <input type="checkbox" id="darkModeToggle" onchange="toggleTheme()">
+            </label>
+            <label>Font Size:</label>
+            <input type="range" id="fontSizeSlider" min="12" max="24" oninput="adjustFontSize(this.value)">
+        </section>
+
+        <div class="settings-footer">
+            <button class="btn-primary" onclick="saveUserSettings()">Save Changes</button>
+            <button class="btn-secondary" onclick="resetToDefault()">Reset to Default</button>
+        </div>
+    </div>
+</div>
+        <header class="hero-banner">
+            <h1>Search Lost Items</h1>
+            <div class="search-container">
+                <input type="text" id="studentSearch" placeholder="Search by item name (e.g. Umbrella, ID, Bag)...">
+                    <select id="categoryFilter">
+                    <option value="">All Categories</option>
+                    <option value="Wallet">Wallet</option>
+                    <option value="Bag">Bag</option>
+                    <option value="ID">ID</option>
+                    <option value="Umbrella">Umbrella</option>
+                 </select>
+                <label for="imageSearchInput" class="btn-secondary" style="cursor:pointer; padding: 10px;">
+                    📷 Upload Image
+                </label>
+                <input type="file" id="imageSearchInput" accept="image/*" style="display:none;" onchange="handleImageSelect(this)">
+                
+                <button class="btn-primary" onclick="runQuickSearch()">Search</button>
+            </div>
+
+            <div id="imageSearchStatus" style="margin-top:10px; font-weight:600; color:#114b7a;"></div>
+            
+            <div id="quickSearchResult" class="match-info" style="display:none; margin-top: 20px; padding: 15px; border-radius: 8px; background: rgba(255,255,255,0.9);"></div>
+
+            <div style="margin-top: 20px;">
+                <p style="font-size: 0.9rem;">Can't find it? 
+                    <button class="btn-link" onclick="openLostModal()" style="color: white; text-decoration: underline; background: none; border: none; cursor: pointer;">
+                        Submit an official Lost Report
+                    </button>
+                </p>
+            </div>
+        </header>
+
+        <div class="action-grid">
+            <div class="action-card full-width">
+                <h3>Report a Lost Item</h3>
+                <p>Can't find it in the list? Post a "Lost Report" so Admin can notify you if it's found.</p>
+                <button class="btn-primary" onclick="openLostModal()">Create Lost Report</button>
+            </div>
+        </div>
+        
+        <div class="action-grid">
+            <div class="action-card full-width">
+                <h3>Report a Found Item</h3>
+                <p>Found something? Post a "Found Report" so Admin can match it with lost items.</p>
+                <button class="btn-primary" onclick="openFoundModal()">Create Found Report</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat Widget -->
+    <div class="chat-widget" id="chatWidget" style="display:none;">
+        <div class="chat-header" onclick="toggleChat()">
+            <span>Chat with Admin</span>
+            <span class="status-dot"></span>
+        </div>
+        <div class="chat-body" id="chatBody">
+            <div class="message admin">Hello! How can I help you today?</div>
+        </div>
+        <div class="chat-footer">
+            <input type="text" placeholder="Type a message..." id="chatInput">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+    <div class="chat-toggle" onclick="toggleChat()">💬</div>
+
+    <!-- Password Change Modal -->
+    <div id="mustChangeModal" class="modal" style="display: none; z-index: 9999;">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <h2 style="color: #003366;">Secure Your Account</h2>
+            <p>Please set a new password to continue.</p>
+            
+            <form id="forceChangeForm" style="margin-top: 20px;">
+                <div class="input-group">
+                    <label>NEW PASSWORD</label>
+                    <input type="password" id="newPass" placeholder="Enter new password" required>
+                    <div id="password-requirements" style="text-align: left; font-size: 0.75rem; margin-top: 10px; color: #666;">
+                        <div id="req-length">✖ Min 8 characters</div>
+                        <div id="req-upper">✖ One uppercase letter</div>
+                        <div id="req-number">✖ One number</div>
+                        <div id="req-special">✖ One special character (@$!%*?&)</div>
+                    </div>
+                </div>
+                <div class="input-group" style="text-align: left; margin-top: 15px;">
+                    <label>CONFIRM PASSWORD</label>
+                    <input type="password" id="confirmPass" placeholder="Repeat new password" required>
+                    <div id="match-message" style="font-size: 0.75rem; margin-top: 5px;"></div>
+                </div>
+                <button type="submit" class="login-btn" style="margin-top: 20px; width: 100%;">Update & Continue</button>
+            </form>
+        </div>
+    </div>
+
+<script>
+// --- 1. SECURITY CHECK (Fixed: checks for 'token' not 'admin_token') ---
+(function() {
+    const token = localStorage.getItem("admin_token");  // FIXED: was "admin_token"
+    
+    if (!token) {
+        window.location.replace("/");
+        return;
+    }
+
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const now = Math.floor(Date.now() / 1000);
+
+        if (payload.exp && payload.exp < now) {
+            localStorage.clear();
+            window.location.replace("/");
+            return;
+        }
+
+        // Redirect admins away from student dashboard
+        if (payload.is_admin) {
+            window.location.replace("/admin/dashboard");
+            return;
+        }
+
+        // Handle first-time login
+        if (payload.must_change) {
+            document.addEventListener('DOMContentLoaded', () => {
+                const modal = document.getElementById('mustChangeModal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                    document.getElementById('newPass').focus();
+                }
+            });
+        }
+    } catch (e) {
+        window.location.replace("/");
+    }
+})();
+
+// --- 2. PASSWORD VALIDATION ---
+const newPassInput = document.getElementById('newPass');
+const confirmPassInput = document.getElementById('confirmPass');
+
+if (newPassInput) {
+    newPassInput.addEventListener('input', () => {
+        const val = newPassInput.value;
+        updateRequirement('req-length', val.length >= 8);
+        updateRequirement('req-upper', /[A-Z]/.test(val));
+        updateRequirement('req-number', /[0-9]/.test(val));
+        updateRequirement('req-special', /[@$!%*?&]/.test(val));
+        checkMatch();
+    });
+}
+
+if (confirmPassInput) confirmPassInput.addEventListener('input', checkMatch);
+
+function updateRequirement(id, isMet) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.color = isMet ? 'green' : '#666';
+    el.textContent = isMet ? el.textContent.replace('✖', '✔') : el.textContent.replace('✔', '✖');
+}
+
+function checkMatch() {
+    const matchMsg = document.getElementById('match-message');
+    if (!matchMsg) return;
+    if (confirmPassInput.value === newPassInput.value && newPassInput.value !== '') {
+        matchMsg.textContent = "✔ Passwords match";
+        matchMsg.style.color = "green";
+    } else {
+        matchMsg.textContent = "✖ Passwords do not match";
+        matchMsg.style.color = "red";
+    }
+}
+
+// --- 3. SUBMIT PASSWORD CHANGE ---
+document.getElementById('forceChangeForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newPass = document.getElementById('newPass').value;
+    const confirmPass = document.getElementById('confirmPass').value;
+    const token = localStorage.getItem("admin_token");
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    
+    if (!passwordRegex.test(newPass)) {
+        alert("Password must be 8+ characters with uppercase, number, and special character.");
+        return;
+    }
+    if (newPass !== confirmPass) {
+        alert("Passwords do not match!");
+        return;
+    }
+
+    try {
+        const response = await fetch('/auth/change-password', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ new_password: newPass })
+        });
+
+        if (response.ok) {
+            alert("Success! Please log in again.");
+            logout();
+        } else {
+            const errorData = await response.json();
+            alert(errorData.detail || "Failed to update password.");
+        }
+    } catch (err) {
+        alert("Network error. Please try again.");
+    }
+});
+
+// --- 4. MODAL CONTROLS ---
+function openLostModal() { 
+    document.getElementById('lostReportModal').style.display = 'block'; 
+}
+function closeLostModal() { 
+    document.getElementById('lostReportModal').style.display = 'none'; 
+}
+function openFoundModal() { 
+    document.getElementById('foundReportModal').style.display = 'block'; 
+}
+function closeFoundModal() { 
+    document.getElementById('foundReportModal').style.display = 'none'; 
+}
+
+function previewImage(input, previewId) {
+    const preview = document.getElementById(previewId);
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function handleImageSelect(input) {
+    const status = document.getElementById('imageSearchStatus');
+    if (input.files && input.files[0]) {
+        status.innerText = `📷 Photo selected: ${input.files[0].name}`;
+    }
+}
+
+// --- 5. SEARCH LOGIC (Single function - no duplicates) ---
+async function runQuickSearch() {
+    const textQuery = document.getElementById('studentSearch').value;
+    const fileInput = document.getElementById('imageSearchInput');
+    const resultBox = document.getElementById('quickSearchResult');
+    
+    resultBox.style.display = "block";
+    resultBox.innerHTML = "🔍 Scanning...";
+
+    // Image search takes priority
+    if (fileInput.files.length > 0) {
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        
+        try {
+           const response = await fetch('/api/quick-compare', { 
+    method: 'POST', 
+    body: formData 
+});
+
+const data = await response.json(); // This is {"highest_score": 0.0}
+
+// Check if we actually got a score
+if (data.highest_score !== undefined) {
+    const scorePercent = (data.highest_score * 100).toFixed(1);
+    
+    if (data.highest_score > 0.85) {
+        resultBox.innerHTML = `
+            <div style="color: green;">
+                <strong>Match Found!</strong> (${scorePercent}%)<br>
+                This looks like an item we have. Please submit a Lost Report.
+            </div>`;
+    } else {
+        resultBox.innerHTML = `
+            <div style="color: #721c24;">
+                No direct match found (${scorePercent}%). <br>
+                Try a clearer photo or check back later.
+            </div>`;
+    }
+} else {
+    resultBox.innerHTML = "Unexpected response from server.";
+}
+        } catch (err) {
+            resultBox.innerHTML = "Error connecting to the system.";
+        }
+    } 
+    // Text search fallback
+   else if (textQuery) {
+
+    const category = document.getElementById('categoryFilter').value;
+
+    try {
+        const response = await fetch(
+            `/api/quick-search?q=${encodeURIComponent(textQuery)}&category=${encodeURIComponent(category)}`
+        );
+
+        const data = await response.json();
+           if (data.highest_score > 0.85) {
+                resultBox.innerHTML = `
+                <div style="color: green;">
+                    <strong>Match Found!</strong> (${(data.highest_score*100).toFixed(1)}%)<br>
+                    ${data.matched_item.description}
+                </div>`;
+            } else {
+                resultBox.innerHTML = `
+                    <div style="color: #721c24;">
+                        No direct matches found yet. Try uploading a photo or check back later.
+                    </div>`;
+            }
+        } catch (err) {
+            resultBox.innerHTML = "Error connecting to the system.";
+        }
+    } else {
+        resultBox.innerHTML = "Please enter a search term or upload an image.";
+    }
+}
+
+// --- 6. FOUND REPORT SUBMISSION ---
+// --- FOUND REPORT SUBMISSION ---
+async function submitFoundReport(event) {
+    event.preventDefault(); // Stop form from refreshing page
+    
+    const form = document.getElementById('foundForm');
+    const formData = new FormData(form);
+
+    console.log("Submitting found report...");
+
+    try {
+        // 1. Check for matches using Text Details
+       const token = localStorage.getItem("admin_token");
+
+        const response = await fetch('/api/compare-text-details', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        
+        const result = await response.json();
+        console.log("Result:", result);
+
+        // 2. Handle the result
+        if (result.action === "show_match" && result.highest_score > 0.22) {
+            // Match found!
+            const confirmMatch = confirm(
+                `Possible match found (Score: ${result.highest_score})!\n\n` +
+                `Found: ${result.search_query}\n` +
+                `Lost: ${result.matched_item?.category || 'N/A'} at ${result.matched_item?.location || 'N/A'}\n\n` +
+                `Do you want to submit this found item for approval?`
+            );
+            
+            if (confirmMatch) {
+                // Add matched item ID and save
+                formData.append("matched_item_id", result.matched_item.id);
+                await saveToPendingItem(formData);
+            } else {
+                await saveToPendingItem(formData);
+            }
+        } else {
+            // No match - just save
+            await saveToPendingItem(formData);
+        }
+
+    } catch (error) {
+        console.error("Error:", error);
+        alert("An error occurred. Please try again.");
+    }
+}
+async function submitLostReport() {
+    // 1. Validation
+    const fileInput = document.getElementById("lostImageInput");
+    const categoryEl = document.getElementById("lostCategory");
+    const locationEl = document.getElementById("lostLocationInput");
+    const dateEl = document.getElementById("lostDateInput");
+
+    if (!fileInput.files[0]) {
+        alert("Please upload an image for AI matching.");
+        return;
+    }
+
+    // 2. Prepare Form Data (Keys must match FastAPI Form parameters)
+    const formData = new FormData();
+    formData.append("category", categoryEl.value);
+    formData.append("description", document.getElementById("lostDescription").value);
+    formData.append("location", locationEl.value);
+    formData.append("date", dateEl.value); // Ensure this is YYYY-MM-DD
+    
+    // Brand and Color (New Columns)
+    formData.append("brand", document.getElementById("lostBrand").value.trim());
+    formData.append("color", document.getElementById("lostColor").value.trim());
+    
+    formData.append("image", fileInput.files[0]);
+
+    // Use 'admin_token' or 'student_token' depending on your login setup
+    const token = localStorage.getItem("admin_token") || localStorage.getItem("token");
+
+    try {
+        // 3. Submit to the "Intelligent" Route
+        console.log("Submitting lost report with AI matching...");
+        const response = await fetch('/api/lost-report-upload', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            if (result.ai_match) {
+                alert(`✨ AI Match Found (${result.match_score})! Our system has linked your report to a found item.`);
+            } else {
+                alert("✅ Report submitted successfully. We will notify you if a match is found.");
+            }
+            window.location.reload();
+        } else {
+            console.error("Submission failed:", result.detail);
+            alert("Error: " + (result.detail || "Failed to submit report."));
+        }
+
+    } catch (error) {
+        console.error("Error in submission flow:", error);
+        alert("An error occurred during upload. Please check the console.");
+    }
+}
+
+async function finalizeLostUpload(formData) {
+    try {
+        // This sends the data (including the matched_item_id) to your Python route
+        const response = await fetch('/api/lost-report-upload', {
+            method: 'POST',
+            // Do NOT set headers for FormData; let the browser handle it
+            body: formData 
+        });
+        
+        const data = await response.json();
+        
+        if (data.is_matched) {
+            alert("✨ Match Confirmed! Both items have been linked in the system. Please go to the Discipline Office.");
+        } else {
+            alert("✅ Report submitted. We'll notify you if a match appears later.");
+        }
+        
+        window.location.reload();
+    } catch (err) {
+        console.error("Upload Error:", err);
+        alert("Upload failed. Please check your connection.");
+    }
+}
+
+
+async function saveToPendingItem(formData) {
+    console.log("Saving to pending...");
+    
+    try {
+        const response = await fetch('/api/save-found-item', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        console.log("Save result:", result);
+        
+        if (response.ok) {
+            alert("✅ " + result.message);
+            closeFoundModal();
+            document.getElementById('foundForm').reset();
+            document.getElementById('foundPreview').style.display = 'none';
+        } else {
+            alert("Failed to save: " + (result.detail || "Unknown error"));
+        }
+    } catch (error) {
+        console.error("Save Error:", error);
+        alert("Error saving found item: " + error.message);
+    }
+}
+// --- 7. CHAT & UTILS ---
+function toggleChat() {
+    const chat = document.getElementById('chatWidget');
+    chat.style.display = (chat.style.display === 'none' || chat.style.display === '') ? 'flex' : 'none';
+}
+
+function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const body = document.getElementById('chatBody');
+    if (input.value.trim()) {
+        const msg = document.createElement('div');
+        msg.className = 'message user';
+        msg.textContent = input.value;
+        body.appendChild(msg);
+        input.value = '';
+        body.scrollTop = body.scrollHeight;
+    }
+}
+
+function updateNotificationUI() {
+    const list = document.getElementById("notificationList");
+    const countBadge = document.getElementById("notificationCount");
+    const emptyMsg = document.getElementById("emptyNotif");
+
+    if (!list || !countBadge) return;
+
+    // Update the red badge count
+    const count = notifications.length;
+    countBadge.textContent = count;
+    countBadge.style.display = count > 0 ? "block" : "none";
+
+    if (count === 0) {
+        list.innerHTML = "";
+        emptyMsg.style.display = "block";
+        return;
+    }
+
+    emptyMsg.style.display = "none";
+    list.innerHTML = notifications.map(notif => `
+        <li class="notification-item ${notif.is_read ? 'read' : 'unread'}" onclick="markAsRead(${notif.id})">
+            <div class="notif-content">
+                <strong>Match Found!</strong>
+                <p>Your reported "${notif.item_name}" matches a found item in ${notif.location}.</p>
+                <small>${new Date(notif.created_at).toLocaleDateString()}</small>
+            </div>
+        </li>
+    `).join('');
+}
+
+// Add this to make the bell actually fetch data when clicked
+async function toggleNotifications() {
+    const dropdown = document.getElementById("notificationDropdown");
+    const isOpening = dropdown.style.display !== "block";
+    
+    dropdown.style.display = isOpening ? "block" : "none";
+    
+    if (isOpening) {
+        await loadNotifications(); // Refresh data from server
+    }
+}
+function logout() {
+    localStorage.clear();
+    window.location.replace("/"); 
+}
+</script>
+<script src="/static/session-keepalive.js"></script>
+</body>
+</html>

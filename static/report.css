@@ -1,0 +1,633 @@
+/*---REPORT MOCULE---*/ 
+
+body { 
+
+  margin: 0; 
+
+  font-family: Arial, sans-serif; 
+
+  background: #ffffff; 
+
+  color: #004080; 
+
+} 
+
+ 
+
+.report-module{ 
+
+  display: flex; 
+
+  flex-direction: column; 
+
+  min-height: 100vh; 
+
+  padding: 1rem 2rem; 
+
+} 
+
+.head-title{ 
+
+    color: var(--sti-blue); 
+
+    font-size: 3rem; 
+
+    margin-bottom: 30px; 
+
+    border-bottom: solid 2px var(--sti-blue); 
+
+    font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif; 
+
+     
+
+} 
+
+ 
+
+.head-title span { 
+
+    color: var(--sti-yellow); 
+
+     
+
+} 
+
+.summary-cards{ 
+
+  display: grid; 
+
+  grid-template-columns: repeat(5, 1fr); 
+
+  gap: 1rem; 
+
+  margin: 1rem 0; 
+
+} 
+
+.card{ 
+
+  background: #f0f1f3; 
+
+  color: var(--sti-blue); 
+
+  padding: 1.2rem; 
+
+  border: solid 3px var(--sti-yellow); 
+
+  border-radius: 12px; 
+
+  text-align: center; 
+
+  transition: transform 0.2s, box-shadow 0.2s; 
+
+} 
+
+.card:hover { 
+
+  transform: translateY(-4px); 
+
+   
+
+} 
+
+ 
+
+ 
+
+.generate-section{ 
+
+  background: #f0f8ff; 
+
+  padding: 1rem; 
+
+  border-radius: 10px; 
+
+  display: flex; 
+
+  flex-wrap: wrap; 
+
+  gap: 1rem; 
+
+  margin-top: 1rem; 
+
+} 
+
+.generate-section select { 
+
+  flex: 1; 
+
+  padding: 0.6rem; 
+
+  border: 1px solid #3399ff; 
+
+  border-radius: 6px; 
+
+} 
+
+.generate-section button { 
+
+  background: linear-gradient(90deg, #ffcc00, #ffd633); 
+
+  border: none; 
+
+  padding: 0.6rem 1.2rem; 
+
+  font-weight: bold; 
+
+  color: #004080; 
+
+  border-radius: 6px; 
+
+  cursor: pointer; 
+
+} 
+
+.generate-section button:hover { 
+
+  box-shadow: 0 0 8px rgba(255,204,0,0.6); 
+
+} 
+
+.charts { 
+
+  display: flex; 
+
+  gap: 1rem; 
+
+  margin: 1rem; 
+
+} 
+
+ 
+
+.chart { 
+
+  flex: 1; 
+
+  background: #f9f9f9; 
+
+  padding: 1rem; 
+
+  border: 1px solid #3399ff; 
+
+  border-radius: 8px; 
+
+} 
+
+ 
+
+.report-table { 
+
+  width: 100%; 
+
+  margin-top: 1rem; 
+
+  border-collapse: collapse; 
+
+} 
+
+.report-table th, .report-table td { 
+
+  border: 1px solid #004080; 
+
+  padding: 0.6rem; 
+
+} 
+
+.report-table tr:nth-child(even) { 
+
+  background: #f9f9f9; 
+
+} 
+
+.report-table th:first-child, 
+
+.report-table td:first-child { 
+
+  text-align: center; 
+
+  width: 100px; 
+
+} 
+
+.report-table td button { 
+
+  margin: 0 2px; 
+
+  padding: 4px 8px; 
+
+  border: none; 
+
+  border-radius: 4px; 
+
+  cursor: pointer; 
+
+} 
+
+ 
+
+.report-table td button:nth-child(1) { background: #3399ff; color: #fff; } /* view */ 
+
+.report-table td button:nth-child(2) { background: #ffcc00; color: #004080; } /* edit */ 
+
+.report-table td button:nth-child(3) { background: #e74c3c; color: #fff; } /* delete */ 
+
+ 
+
+.report-table td button:hover { 
+
+  opacity: 0.8; 
+
+} 
+
+ 
+
+.rowCheckbox, #selectAll { 
+
+  transform: scale(1.2); 
+
+  cursor: pointer; 
+
+} 
+
+.btn-multi-selec{ 
+
+  margin-top: 10px; 
+
+  display: grid; 
+
+  grid-template-columns: repeat(2, auto); 
+
+  gap: 8px; /* reduces spacing between buttons */ 
+
+  align-items: center; 
+
+  justify-content: start; 
+
+} 
+
+.selectall{ 
+
+  color: var(--sti-blue); 
+
+  font-size: 1rem; 
+
+  padding: 6px 15px; 
+
+  border: none; 
+
+  border-radius: 4px; 
+
+  cursor: pointer; 
+
+  margin-top: 10px; 
+
+} 
+
+.selectdelete{ 
+
+  background: linear-gradient(90deg, #ff4d4d, #b30000); 
+
+  font-size: 1rem; 
+
+  padding: 6px 15px; 
+
+  border: none; 
+
+  border-radius: 4px; 
+
+  cursor: pointer; 
+
+  color: #fff; 
+
+  margin-top: 10px; 
+
+} 
+
+.selectdelete:hover { 
+
+  background: linear-gradient(90deg, #b30000, #660000); 
+
+} 
+
+.modal{ 
+
+  display: none; 
+
+  position: fixed; 
+
+  top: 0; left: 0; 
+
+  width: 100%; height: 100%; 
+
+  background: rgba(0,0,0,0.6); 
+
+  justify-content: center; 
+
+  align-items: center; 
+
+  z-index: 1000; 
+
+} 
+
+.modal-content { 
+
+  background: #ffffff; 
+
+  padding: 2rem; 
+
+  border-radius: 10px; 
+
+  width: 420px; 
+
+  max-width: 90%; 
+
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25); 
+
+  animation: fadeIn 0.3s ease-in-out; 
+
+} 
+
+ 
+
+.modal-content h2 { 
+
+  margin-top: 0; 
+
+  color: #004080; 
+
+  font-weight: 600; 
+
+  border-bottom: 2px solid #3399ff; 
+
+  padding-bottom: 0.5rem; 
+
+} 
+
+ 
+
+/* Close button */ 
+
+.modal-content .close { 
+
+  float: right; 
+
+  font-size: 1.5rem; 
+
+  cursor: pointer; 
+
+  color: #888; 
+
+} 
+
+.modal-content .close:hover { 
+
+  color: #e74c3c; 
+
+} 
+
+ 
+
+/* Labels and inputs */ 
+
+.modal-content label { 
+
+  display: block; 
+
+  margin-top: 1rem; 
+
+  font-weight: 500; 
+
+  color: #333; 
+
+} 
+
+ 
+
+.modal-content input[type="text"], 
+
+.modal-content input[type="date"], 
+
+.modal-content select { 
+
+  width: 100%; 
+
+  padding: 0.6rem; 
+
+  margin-top: 0.3rem; 
+
+  border: 1px solid #ccc; 
+
+  border-radius: 6px; 
+
+  font-size: 0.95rem; 
+
+  transition: border-color 0.2s; 
+
+} 
+
+ 
+
+.modal-content input:focus, 
+
+.modal-content select:focus { 
+
+  border-color: #3399ff; 
+
+  outline: none; 
+
+  box-shadow: 0 0 6px rgba(51,153,255,0.4); 
+
+} 
+
+ 
+
+/* Save button */ 
+
+.modal-content button { 
+
+  margin-top: 1.5rem; 
+
+  width: 100%; 
+
+  padding: 0.8rem; 
+
+  background: linear-gradient(90deg, #3399ff, #004080); 
+
+  color: #fff; 
+
+  font-weight: bold; 
+
+  border: none; 
+
+  border-radius: 6px; 
+
+  cursor: pointer; 
+
+  transition: background 0.3s; 
+
+} 
+
+ 
+
+.modal-content button:hover { 
+
+  background: linear-gradient(90deg, #004080, #003366); 
+
+} 
+
+ 
+
+/* Animation */ 
+
+@keyframes fadeIn { 
+
+  from {opacity: 0; transform: scale(0.95);} 
+
+  to {opacity: 1; transform: scale(1);} 
+
+} 
+
+.form-title { 
+
+    color: var(--sti-blue); 
+
+    font-size: 2.2rem; 
+
+    margin-bottom: 20px; 
+
+    font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;   
+
+} 
+
+ 
+
+.form-title span { 
+
+    color: #f9e11e;    
+
+} 
+
+.form-grid-layout { 
+
+    display: grid; 
+
+    grid-template-columns: 200px 1fr 1fr; 
+
+    gap: 20px; 
+
+} 
+
+ 
+
+ 
+
+.form-column-card { 
+
+    background-color: #fdfdf2; /* Light yellow tint */ 
+
+    padding: 5px; 
+
+    border-radius: 15px; 
+
+} 
+
+ 
+
+.form-column-card h3 { 
+
+    font-weight: bold; 
+
+    color: #0056a4; 
+
+    font-size: 1.5rem; 
+
+    margin-bottom: 10px; 
+
+} 
+
+ 
+
+.form-column-card .highlight { 
+
+    color: #f9e11e; 
+
+} 
+
+.date-range { 
+
+  display: flex; 
+
+  align-items: center; 
+
+  gap: 0.5rem; 
+
+} 
+
+ 
+
+.export-options { 
+
+  display: flex; 
+
+  flex-direction: column; 
+
+  gap: 0.5rem; 
+
+  margin-top: 0.5rem; 
+
+} 
+
+ 
+
+.export-options label { 
+
+  font-weight: normal; 
+
+  cursor: pointer; 
+
+} 
+
+ 
+
+.modal-actions { 
+
+  display: flex; 
+
+  justify-content: flex-end; 
+
+  gap: 1rem; 
+
+  margin-top: 1.5rem; 
+
+} 
+
+@keyframes fadeIn { 
+
+  from {opacity: 0; transform: scale(0.95);} 
+
+  to {opacity: 1; transform: scale(1);} 
+
+} 
+
+#customRangeInputs { 
+
+  display: flex; 
+
+  gap: 0.5rem; 
+
+  align-items: center; 
+
+} 
+
+ 
+
+#customRangeInputs input[type="date"] { 
+
+  padding: 0.4rem; 
+
+  border: 1px solid #3399ff; 
+
+  border-radius: 6px; 
+
+} 

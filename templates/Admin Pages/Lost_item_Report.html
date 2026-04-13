@@ -1,0 +1,1362 @@
+<!DOCTYPE html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8"> 
+    <title>Admin Panel | LookFor STI</title> 
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+    
+    <link rel="stylesheet" href="{{ url_for('static', path='Lost_item_report.css') }}?v=14"> 
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head> 
+<body> 
+
+    <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+         <ul class="nav-links"> 
+
+           <li>
+                <a href="/admin/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li data-permission="Messages">
+                <a href= "#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+             <li data-permission="User-Management">
+                <a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" 
+                style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/userw.png" class="side-icon"> User Management
+                </a>
+            </li>
+
+
+            <li class="active" data-permission="Lost-Reports">
+                <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
+                
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrender Item
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Claim Management
+                </a>
+            </li>
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Confiscated Items
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/folderw.png" class="side-icon">  Reports
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+             <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Content-management', 'Content-management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/form.png" class="side-icon">  Content Management
+                </a>
+            </li>
+
+        </ul> 
+
+    </nav> 
+    
+
+  
+  <main class="main-content"> 
+       <header class="top-bar navbar">
+    <div class="search-container">
+        
+    </div>
+
+   <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/admin/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/admin/Profile'">My Profile</li>
+                    <li onclick="window.location.href='/admin/Settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+</header>
+    <div class="page-scroll-area">
+        <section class="content-body">
+            <div class="profile-page-card">
+                <div class="action-bar">
+                    <h1 class="section-title">Lost Items <span>Inventory</span></h1>
+                    <div class="inventory-actions">
+                        <select id="lostStatusFilter" class="inventory-filter" onchange="renderLostItems()">
+                            <option value="all">All Items</option>
+                            <option value="pending">Pending</option>
+                            <option value="matched">Matched</option>
+                        </select>
+                        <button class="upload-btn" id="analyzeMatchesBtn" onclick="analyzeItemMatches()">
+                            Analyze Matches
+                        </button>
+                        <button class="upload-btn archive-toggle-btn" id="lostArchiveToggleBtn" onclick="toggleLostArchiveView()">
+                            Archived Items
+                        </button>
+                        <button class="upload-btn" onclick="openModal('reportModal')"> 
+                            <span class="plus">+ Report Lost Item </span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="items-grid" id="lostItemsGrid">
+                    <p style="text-align:center; grid-column: 1/-1;">Loading lost reports...</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+        <div id="itemDetailModal" class="modal-overlay">
+            <div class="modal-content detail-modal">
+                <span class="close-btn" onclick="closeModal('itemDetailModal')">&times;</span>
+                <div class="detail-layout">
+                    <div class="detail-image">
+                        <img id="modalImg" src="" alt="Item Image">
+                    </div>
+                    <div class="detail-info">
+                        <div class="modal-header-flex" style="display: flex; justify-content: space-between; align-items: center;">
+                            <h1 id="modalTitle">Item Name</h1>
+                            <span id="modalStatus" class="status-badge">PENDING</span>
+                        </div>
+                        
+                        <span id="modalCategory" class="badge-category">Category</span>
+                        <hr>
+                        
+                                                <div class="trait-grid">
+                            <p><strong>Brand:</strong> <span id="modalBrand"></span></p>
+                            <p><strong>Color:</strong> <span id="modalColor"></span></p>
+                        </div>
+
+                        <p><strong>Location:</strong> <span id="modalLocation"></span></p>
+                        <p><strong>Date:</strong> <span id="modalDate"></span></p>
+                        
+                        <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
+
+                        <p><strong>Description:</strong></p>
+                        <p id="modalDescription" class="description-text"></p>
+                        
+                        <div class="modal-actions">
+                            <button type="button" class="btn-archive-big" id="archiveBtn">Archive Report</button>
+                            <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">Dispose Item</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+         <div id="reportModal" class="modal-overlay">
+                <div class="modal-content report-upload-modal">
+                    <span class="close-btn" onclick="handleCloseReport()">&times;</span>
+                    <h1 class="form-title">Lost <span>Item</span></h1>
+
+                    <div class="form-container">
+                    <div class="image-upload-section">
+                            <div class="image-placeholder image-preview-carousel" id="imagePreview">
+                                <button type="button" class="image-slide-btn prev" id="imagePreviewPrev" onclick="changePreviewSlide(-1)" style="display:none;">&#8249;</button>
+                                <div class="image-preview-stage" id="imagePreviewStage">Image Preview</div>
+                                <button type="button" class="image-slide-btn next" id="imagePreviewNext" onclick="changePreviewSlide(1)" style="display:none;">&#8250;</button>
+                                <div class="image-preview-status" id="imagePreviewStatus" style="display:none;"></div>
+                            </div> 
+                            
+                            <input type="file" id="itemImage" hidden accept="image/*"> 
+                            
+                            <button class="btn-upload-img" id="itemImageTrigger" onclick="document.getElementById('itemImage').click()">+ Upload Main Image</button>
+                            <p class="supporting-image-note">Add up to 2 more photos to help the AI build a more accurate embedding. The first image stays as the main display photo.</p>
+                            <div class="supporting-image-grid">
+                                <div class="supporting-image-card">
+                                    <span class="supporting-image-title">Optional Image 2</span>
+                                    <input type="file" id="itemImageExtra1" hidden accept="image/*">
+                                    <button type="button" class="btn-upload-img supporting-image-btn" id="itemImageExtra1Trigger" onclick="document.getElementById('itemImageExtra1').click()">+ Add Optional Image 2</button>
+                                </div>
+                                <div class="supporting-image-card">
+                                    <span class="supporting-image-title">Optional Image 3</span>
+                                    <input type="file" id="itemImageExtra2" hidden accept="image/*">
+                                    <button type="button" class="btn-upload-img supporting-image-btn" id="itemImageExtra2Trigger" onclick="document.getElementById('itemImageExtra2').click()">+ Add Optional Image 3</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="details-column item-details">
+                            <h3>ITEM DETAILS</h3>
+                            <div class="input-group">
+                                <label>What is the item?</label>
+                                <input type="text" id="itemName" placeholder="Item Name:">
+                            </div>
+                           <div class="input-group">
+                                <label for="itemCategory">Item Category</label>
+                                <select id="itemCategory">
+                                    <option value="">-- Loading Categories... --</option>
+                                </select>
+                            </div> 
+                            <div class="input-group">
+                                <input type="text" id="itemColor" placeholder="Item Color:">
+                            </div>
+                            <div class="input-group">
+                                <input type="text" id="itemBrand" placeholder="Item Brand:">
+                            </div>
+                            <div class="input-group">
+                                <label>Additional Description:</label>
+                                <textarea id="itemDesc" rows="4"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="details-column other-details">
+                            <h3>OTHER DETAILS</h3>
+                            <div class="input-group">
+                                <label>Handling Department</label>
+                                <select id="itemDepartment" class="form-control">
+                                    <option value="">-- Select Office --</option>
+                                    </select>
+                            </div>
+                            <div class="input-group">
+                                <label>When was the item lost?</label>
+                                <div class="datetime-row">
+                                    <input type="date" id="reportDate">
+                                    <input type="time" id="reportTime">
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>Where was the item last seen?</label>
+                                <textarea id="reportLocation" rows="3" placeholder="Last location seen:"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer" style="display: flex; justify-content: center;">
+                    <button class="btn-found lost-submit-btn" onclick="submitReport()">Submit</button>
+                    </div>
+                </div>
+            </div>
+            <div id="confirmModal" class="modal-overlay" style="z-index: 1001;">
+                <div class="modal-content" style="max-width: 500px; padding: 30px;">
+                    <h2 style="text-align: center; margin-bottom: 20px;">Review <span>Report</span></h2>
+                    
+                    <div id="submissionSummary" style="background: #f9f9f9; border-radius: 10px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #003366; text-align: left; font-size: 14px;">
+                        <p><strong>📦 Item:</strong> <span id="sumName"></span></p>
+                        <p><strong>🏷️ Category:</strong> <span id="sumCategory"></span></p>
+                        <p><strong>🎨 Color/Brand:</strong> <span id="sumColorBrand"></span></p>
+                        <p><strong>📍 Location:</strong> <span id="sumLocation"></span></p>
+                        <p><strong>👤 Reporter:</strong> <span id="sumReporter"></span></p>
+                        <p><strong>📅 Date:</strong> <span id="sumDate"></span></p>
+                    </div>
+
+                    <p style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">
+                        Is everything correct? Our AI will now analyze this image for potential matches.
+                    </p>
+                    
+                    <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="btn-found lost-submit-btn" id="finalConfirmBtn" onclick="executeSubmit()" style="width: 100%; margin: 0;">Confirm & Report</button>
+                        
+                        <div style="display: flex; gap: 10px; width: 100%;">
+                            <button class="btn-upload-img" onclick="backToEdit()" style="flex: 1; background: #f0ad4e; color: white; margin: 0; border: none;">
+                                Edit Details
+                            </button>
+                            <button class="btn-upload-img" onclick="handleCancelAll()" style="flex: 1; background: #6c757d; color: white; margin: 0; border: none;">
+                                Discard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+</main>
+
+    <script>
+        function closeAllDropdowns() {
+        const dropdowns = [
+            "notificationDropdown",
+            "messageDropdown",
+            "profileDropdown"
+        ];
+
+        dropdowns.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = "none";
+        });
+    }
+    // --- NOTIFICATION LOGIC ---
+    function toggleNotifications() {
+        const dropdown = document.getElementById("notificationDropdown");
+        dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
+    }
+    // 💬 Messages
+    function toggleMessages(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById("messageDropdown");
+        const isOpen = dropdown.style.display === "block";
+        closeAllDropdowns();
+        dropdown.style.display = isOpen ? "none" : "block";
+    }
+    // 👤 Profile
+    function toggleProfile(event) {
+        event.stopPropagation();
+        const dropdown = document.getElementById("profileDropdown");
+        const isOpen = dropdown.style.display === "block";
+        closeAllDropdowns();
+        dropdown.style.display = isOpen ? "none" : "block";
+    }
+    async function loadNotifications() {
+        const token = localStorage.getItem("admin_token");
+        try {
+            const res = await fetch("/admin/notifications", {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to fetch");
+            const data = await res.json();
+            notifications = data; 
+            updateNotificationUI();
+        } catch (err) {
+            console.error("Notification Sync Error:", err);
+        }
+    }
+
+        async function checkAccess(targetUrl, permission) {
+    const token = localStorage.getItem("admin_token");
+    
+    if (!token) {
+        window.location.href = "/login";
+        return;
+    }
+
+    try {
+        // Fetch fresh permissions from the backend
+        const response = await fetch("/admin/my-permissions", {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error("Unauthorized");
+
+        const permissions = await response.json();
+
+        // Check if the required permission exists in the user's list
+        if (permissions.includes(permission)) {
+            window.location.href = targetUrl;
+        } else {
+            showAccessDeniedPopup(permission);
+        }
+    } catch (error) {
+        console.error("Access check failed:", error);
+        showAccessDeniedPopup(permission);
+    }
+}
+
+function showAccessDeniedPopup(permName) {
+    // Create the overlay
+    const overlay = document.createElement('div');
+    overlay.id = "access-denied-modal";
+    overlay.style = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.7); display: flex; 
+        justify-content: center; align-items: center; z-index: 9999;
+        backdrop-filter: blur(4px);
+    `;
+
+    // Create the modal box
+    overlay.innerHTML = `
+        <div style="background: white; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="font-size: 50px; margin-bottom: 20px;">🔒</div>
+            <h2 style="color: #d9534f; margin-bottom: 10px; font-family: 'Montserrat', sans-serif;">Access Denied</h2>
+            <p style="color: #555; line-height: 1.5;">
+                Your account does not have the <strong>${permName}</strong> permission required to view this page.
+            </p>
+            <button onclick="document.getElementById('access-denied-modal').remove()" 
+                style="margin-top: 25px; padding: 12px 30px; background: #003366; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                Close
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+}
+        async function loadLostItems() {
+        const grid = document.getElementById("lostItemsGrid");
+        const token = localStorage.getItem("admin_token");
+
+        try {
+            const response = await fetch('/admin/items/lost', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const items = await response.json();
+
+            // Clear only the grid inner content
+            grid.innerHTML = "";
+
+            if (items.length === 0) {
+                grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No lost reports found.</p>`;
+                return;
+            }
+
+            grid.innerHTML = items.map(item => {
+                const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+                const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+                
+                // Escape single quotes in the JSON string for the onclick event
+                const itemData = JSON.stringify(item).replace(/'/g, "\\'");
+
+                return `
+                    <div class="item-card">
+                        <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
+                            <img src="${imageUrl}" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                            ${item.is_matched ? '<span class="match-tag" style="background:#005BAB;">Matched</span>' : ''}
+                        </div>
+                        <div class="card-body">
+                            <h3>${item.item_name || item.category}</h3>
+                            <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
+                            <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details →</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error("Load Error:", err);
+            grid.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">Error loading items.</p>`;
+        }
+    }
+        let lostItemsCache = [];
+        let showingLostArchived = false;
+
+        async function loadLostItems() {
+        const grid = document.getElementById("lostItemsGrid");
+        const token = localStorage.getItem("admin_token");
+
+        try {
+            const response = await fetch(showingLostArchived ? '/admin/items/lost/archived' : '/admin/items/lost', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const items = await response.json();
+            lostItemsCache = Array.isArray(items) ? items : [];
+            updateLostArchiveButton();
+            renderLostItems();
+        } catch (err) {
+            console.error("Load Error:", err);
+            grid.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">Error loading items.</p>`;
+        }
+    }
+
+    function updateLostArchiveButton() {
+        const btn = document.getElementById("lostArchiveToggleBtn");
+        if (!btn) return;
+        btn.textContent = showingLostArchived ? "Show Active Items" : "Archived Items";
+        btn.classList.toggle("active-archive-view", showingLostArchived);
+    }
+
+    function toggleLostArchiveView() {
+        showingLostArchived = !showingLostArchived;
+        loadLostItems();
+    }
+
+    async function analyzeItemMatches() {
+        const token = localStorage.getItem("admin_token");
+        const button = document.getElementById("analyzeMatchesBtn");
+        if (!token) {
+            window.location.href = "/login";
+            return;
+        }
+
+        const analyzePrompt = await Swal.fire({
+            icon: 'question',
+            title: 'Analyze matches now?',
+            text: 'Analyze all active unmatched lost and found items now?',
+            showCancelButton: true,
+            confirmButtonText: 'Analyze now',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#114b7a',
+            cancelButtonColor: '#6c757d'
+        });
+        if (!analyzePrompt.isConfirmed) {
+            return;
+        }
+
+        const originalText = button ? button.textContent : "Analyze Matches";
+        if (button) {
+            button.disabled = true;
+            button.textContent = "Analyzing...";
+        }
+
+        try {
+            const response = await fetch('/admin/items/analyze-matches', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.detail || result.message || "Analysis failed.");
+            }
+
+            await loadLostItems();
+            await showLostUploadAlert(
+                'success',
+                'Analysis complete',
+                `Scanned lost items: ${result.scanned_lost}. Scanned found items: ${result.scanned_found}. New matches: ${result.matched_count}.`
+            );
+        } catch (error) {
+            console.error("Analyze matches failed:", error);
+            await showLostUploadAlert('error', 'Analysis failed', error.message || 'Failed to analyze lost and found items.');
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalText;
+            }
+        }
+    }
+
+    function getLostFilterValue() {
+        const filter = document.getElementById("lostStatusFilter");
+        return filter ? filter.value : "all";
+    }
+
+    function renderLostItems() {
+        const grid = document.getElementById("lostItemsGrid");
+        const activeFilter = getLostFilterValue();
+        const filteredItems = lostItemsCache.filter(item => {
+            if (activeFilter === "matched") return Boolean(item.is_matched);
+            if (activeFilter === "pending") return !item.is_matched;
+            return true;
+        });
+
+        grid.innerHTML = "";
+
+        if (filteredItems.length === 0) {
+            grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${showingLostArchived ? 'archived' : 'lost'} reports found for this filter.</p>`;
+            return;
+        }
+
+        grid.innerHTML = filteredItems.map(item => {
+            const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+            const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+            const itemData = JSON.stringify(item).replace(/'/g, "\\'");
+            const statusTag = item.is_matched
+                ? '<span class="inventory-state-tag matched">Matched</span>'
+                : '<span class="inventory-state-tag surrendered">Surrendered</span>';
+
+            return `
+                <div class="item-card">
+                    <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
+                        <img src="${imageUrl}" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                        ${statusTag}
+                    </div>
+                    <div class="card-body">
+                        <h3>${item.item_name || item.category}</h3>
+                        <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
+                        <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details →</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+        // --- VIEW DETAILS ---
+       function viewItemDetails(item) {
+    const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+    document.getElementById("modalImg").src = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+    
+    // Title & Core Info
+    document.getElementById("modalTitle").innerText = item.item_name || item.category;
+    document.getElementById("modalCategory").innerText = item.category;
+    document.getElementById("modalLocation").innerText = item.location || 'Not Specified';
+    document.getElementById("modalDate").innerText = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
+    
+    // --- ADDED MISSING COLUMNS ---
+    
+    // 1. Uploader Info (Shows who reported it)
+    if (document.getElementById("modalUploader")) {
+        document.getElementById("modalUploader").innerText = item.uploader_name || `User ID: ${item.user_id}`;
+    }
+
+    // 2. Physical Traits (Brand/Color)
+    if (document.getElementById("modalBrand")) {
+        document.getElementById("modalBrand").innerText = item.brand || 'None';
+    }
+    if (document.getElementById("modalColor")) {
+        document.getElementById("modalColor").innerText = item.color || 'Not Specified';
+    }
+
+    // 3. Match Status (Visual indicator)
+    const statusEl = document.getElementById("modalStatus");
+    if (statusEl) {
+        statusEl.innerText = item.is_matched ? "✅ MATCHED" : "🔍 PENDING";
+        statusEl.style.color = item.is_matched ? "#28a745" : "#ffc107";
+    }
+
+    if (statusEl) {
+        statusEl.innerText = item.is_matched ? "MATCHED" : "SURRENDERED";
+        statusEl.style.color = item.is_matched ? "#28a745" : "#f59f00";
+    }
+
+    // Description
+    document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
+    
+    const disposeBtn = document.getElementById("disposeBtn");
+    const archiveBtn = document.getElementById("archiveBtn");
+    if (showingLostArchived) {
+        archiveBtn.style.display = "none";
+        disposeBtn.style.display = "inline-flex";
+        disposeBtn.onclick = () => disposeItem(item.id);
+    } else {
+        archiveBtn.style.display = "inline-flex";
+        archiveBtn.onclick = () => archiveLostItem(item.id);
+        disposeBtn.style.display = "none";
+        disposeBtn.onclick = null;
+    }
+    
+    openModal('itemDetailModal');
+}
+
+        // Use this instead of window.onload to avoid overwriting other scripts
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLostItems();
+        });
+
+        // Connect the file input to the preview div
+        document.getElementById('itemImage').addEventListener('change', function(event) {
+            updatePreviewSlide(0, event.target.files[0], 'Main Image', 'itemImageTrigger', '+ Upload Main Image');
+        });
+        document.getElementById('itemImageExtra1').addEventListener('change', function() {
+            updatePreviewSlide(1, this.files[0], 'Optional Image 2', 'itemImageExtra1Trigger', '+ Add Optional Image 2');
+        });
+        document.getElementById('itemImageExtra2').addEventListener('change', function() {
+            updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
+        });
+
+        // --- 2. MODAL CONTROLS ---
+        function openModal(id) { 
+            document.getElementById(id).style.display = 'flex'; 
+        }
+
+        function closeModal(id) { 
+            document.getElementById(id).style.display = 'none'; 
+        }
+
+        // Specifically for the report modal to clear inputs when closed
+        async function handleCloseReport() {
+            if (await confirmDiscardLostReport()) {
+                closeModal('reportModal');
+                clearForm(); 
+            }
+        }
+
+        async function archiveLostItem(itemId) {
+        const confirmArchive = await Swal.fire({
+            icon: 'warning',
+            title: 'Archive item?',
+            text: 'This item will be moved to the System Archive.',
+            showCancelButton: true,
+            confirmButtonText: 'Archive item',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#114b7a'
+        });
+        if (!confirmArchive.isConfirmed) return;
+
+        try {
+            const response = await fetch(`/admin/items/${itemId}/archive`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                }
+            });
+
+            if (response.ok) {
+                await showLostUploadAlert('success', 'Item archived', 'Item archived successfully.');
+                closeModal('itemDetailModal');
+                // Refresh the current list to remove the archived item
+                location.reload(); 
+            } else {
+                const error = await response.json();
+                await showLostUploadAlert('error', 'Archive failed', error.detail || 'Failed to archive item.');
+            }
+        } catch (err) {
+            console.error("Archive Error:", err);
+            await showLostUploadAlert('error', 'Connection failed', 'Server connection failed.');
+        }
+    }
+
+        function showLostUploadAlert(icon, title, text) {
+            if (window.Swal) {
+                return Swal.fire({
+                    icon,
+                    title,
+                    text,
+                    confirmButtonColor: '#114b7a'
+                });
+            }
+
+            alert(text || title);
+            return Promise.resolve();
+        }
+
+        async function confirmDiscardLostReport() {
+            if (!window.Swal) {
+                return confirm("Are you sure you want to discard this entire report?");
+            }
+
+            const result = await Swal.fire({
+                icon: 'warning',
+                title: 'Discard report?',
+                text: 'All unsaved changes in this lost report will be removed.',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, discard it',
+                cancelButtonText: 'Keep editing',
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#114b7a'
+            });
+
+            return result.isConfirmed;
+        }
+
+        // --- 3. SUBMISSION LOGIC ---
+        function submitReport() {
+            const itemImage = document.getElementById('itemImage').files[0];
+            const itemName = document.getElementById('itemName').value;
+            
+            if (!itemImage || !itemName) {
+                alert("⚠️ Please upload an image and provide an item name!");
+                return;
+            }
+
+            // Fill Summary List
+            document.getElementById('sumName').innerText = itemName;
+            document.getElementById('sumCategory').innerText = document.getElementById('itemCategory').value;
+            
+            const color = document.getElementById('itemColor').value || "N/A";
+            const brand = document.getElementById('itemBrand').value || "N/A";
+            document.getElementById('sumColorBrand').innerText = `${color} / ${brand}`;
+            
+            document.getElementById('sumLocation').innerText = document.getElementById('reportLocation').value || "Not specified";
+            
+            // Get the TEXT of the selected department for the summary
+            const deptDropdown = document.getElementById('itemDepartment');
+            const deptName = deptDropdown.options[deptDropdown.selectedIndex].text;
+            document.getElementById('sumReporter').innerText = `Holding Office: ${deptName}`;
+            
+            const date = document.getElementById('reportDate').value || "N/A";
+            const time = document.getElementById('reportTime').value || "";
+            document.getElementById('sumDate').innerText = `${date} ${time}`;
+
+            openModal('confirmModal');
+            closeModal('reportModal');
+        }
+
+        // Full Reset Logic
+        async function handleCancelAll() {
+            if (await confirmDiscardLostReport()) {
+                closeModal('confirmModal');
+                closeModal('reportModal');
+                clearForm();
+            }
+        }
+        async function submitReport() {
+            const itemImage = document.getElementById('itemImage').files[0];
+            const itemName = document.getElementById('itemName').value;
+
+            if (!itemImage || !itemName) {
+                await showLostUploadAlert('warning', 'Missing required details', 'Please upload an image and provide an item name.');
+                return;
+            }
+
+            document.getElementById('sumName').innerText = itemName;
+            document.getElementById('sumCategory').innerText = document.getElementById('itemCategory').value;
+
+            const color = document.getElementById('itemColor').value || "N/A";
+            const brand = document.getElementById('itemBrand').value || "N/A";
+            document.getElementById('sumColorBrand').innerText = `${color} / ${brand}`;
+
+            document.getElementById('sumLocation').innerText = document.getElementById('reportLocation').value || "Not specified";
+
+            const deptDropdown = document.getElementById('itemDepartment');
+            const deptName = deptDropdown.options[deptDropdown.selectedIndex].text;
+            document.getElementById('sumReporter').innerText = `Holding Office: ${deptName}`;
+
+            const date = document.getElementById('reportDate').value || "N/A";
+            const time = document.getElementById('reportTime').value || "";
+            document.getElementById('sumDate').innerText = `${date} ${time}`;
+
+            openModal('confirmModal');
+            closeModal('reportModal');
+        }
+
+async function executeSubmit() {
+    const confirmBtn = document.getElementById('finalConfirmBtn');
+    const token = localStorage.getItem("admin_token");
+    const imageFile = document.getElementById('itemImage').files[0];
+    const catSelect = document.getElementById('itemCategory');
+    const deptSelect = document.getElementById('itemDepartment');
+    const catId = catSelect.value;
+    const catName = catSelect.options[catSelect.selectedIndex]?.text;
+    const deptName = deptSelect.options[deptSelect.selectedIndex]?.text;
+
+    if (!catId || !catName || !deptName || deptName.includes("Select") || catName.includes("Loading")) {
+        await showLostUploadAlert('warning', 'Missing required selections', 'Please select both a valid category and a department or office.');
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+        return;
+    }
+
+    confirmBtn.innerText = "AI is Analyzing...";
+    confirmBtn.disabled = true;
+
+    try {
+        const compareData = new FormData();
+        compareData.append("image", imageFile);
+        compareData.append("category", catName);
+        compareData.append("location", document.getElementById('reportLocation').value);
+        compareData.append("description", document.getElementById('itemDesc').value);
+        compareData.append("brand", document.getElementById('itemBrand').value || "");
+        compareData.append("color", document.getElementById('itemColor').value || "");
+        compareData.append("status", "lost");
+        appendOptionalImages(compareData);
+
+        const compareRes = await fetch('/api/compare-text-details', {
+            method: 'POST',
+            body: compareData
+        });
+
+        if (!compareRes.ok) throw new Error("AI Analysis failed.");
+        const aiResult = await compareRes.json();
+        const hasConfirmedMatch = aiResult?.action === "show_match" &&
+            aiResult?.matched_item?.id &&
+            (aiResult.highest_score || 0) >= 0.55;
+
+        if (hasConfirmedMatch) {
+            const matchedLocation = aiResult.matched_item.location || "Unknown location";
+            await showLostUploadAlert(
+                'success',
+                'Analysis complete',
+                `Match found. Matched item ID: ${aiResult.matched_item.id}. Category: ${aiResult.matched_item.category || catName}. Location: ${matchedLocation}. Score: ${Number(aiResult.highest_score || 0).toFixed(2)}.`
+            );
+        } else {
+            await showLostUploadAlert(
+                'info',
+                'Analysis complete',
+                `No confident match found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+            );
+        }
+
+        const saveData = new FormData();
+        saveData.append("file", imageFile);
+        saveData.append("item_name", document.getElementById('itemName').value);
+        saveData.append("description", document.getElementById('itemDesc').value);
+        saveData.append("color", document.getElementById('itemColor').value);
+        saveData.append("brand", document.getElementById('itemBrand').value);
+        saveData.append("location", document.getElementById('reportLocation').value);
+        saveData.append("date", document.getElementById('reportDate').value);
+        saveData.append("time_found", document.getElementById('reportTime').value);
+        saveData.append("category_id", catId);
+        saveData.append("category", catName);
+        saveData.append("department", deptName);
+        saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
+        appendOptionalImages(saveData);
+
+        if (hasConfirmedMatch) {
+            saveData.append("matched_item_id", aiResult.matched_item.id);
+            saveData.append("ai_score", aiResult.highest_score || 0);
+        }
+
+        const saveRes = await fetch('/admin/items/lost', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: saveData
+        });
+
+        if (saveRes.ok) {
+            await showLostUploadAlert('success', 'Report submitted', `Lost item report registered in ${deptName}.`);
+            location.reload();
+        } else {
+            const errorData = await saveRes.json();
+            throw new Error(errorData.detail || "Failed to save report.");
+        }
+    } catch (err) {
+        await showLostUploadAlert('error', 'Submission failed', err.message || 'Failed to save the lost report.');
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+    }
+}
+
+        async function handleCancelAll() {
+            if (await confirmDiscardLostReport()) {
+                closeModal('confirmModal');
+                closeModal('reportModal');
+                clearForm();
+            }
+        }
+function backToEdit() {
+    closeModal('confirmModal');  // Hide the summary
+    openModal('reportModal');    // Re-open the input form so they can change things
+}
+
+let uploadPreviewSlides = [null, null, null];
+let currentPreviewSlideIndex = 0;
+
+function getAvailablePreviewSlides() {
+    return uploadPreviewSlides
+        .map((slide, index) => slide ? { ...slide, slotIndex: index } : null)
+        .filter(Boolean);
+}
+
+function renderPreviewCarousel() {
+    const stage = document.getElementById('imagePreviewStage');
+    const prevBtn = document.getElementById('imagePreviewPrev');
+    const nextBtn = document.getElementById('imagePreviewNext');
+    const status = document.getElementById('imagePreviewStatus');
+    const availableSlides = getAvailablePreviewSlides();
+
+    if (!stage || !prevBtn || !nextBtn || !status) return;
+
+    if (!availableSlides.length) {
+        stage.innerHTML = 'Image Preview';
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        status.style.display = 'none';
+        return;
+    }
+
+    if (!uploadPreviewSlides[currentPreviewSlideIndex]) {
+        currentPreviewSlideIndex = availableSlides[0].slotIndex;
+    }
+
+    const activePosition = availableSlides.findIndex(slide => slide.slotIndex === currentPreviewSlideIndex);
+    const activeSlide = activePosition >= 0 ? availableSlides[activePosition] : availableSlides[0];
+
+    stage.innerHTML = `<img src="${activeSlide.src}" class="modal-upload-preview" alt="${activeSlide.label}">`;
+    prevBtn.style.display = availableSlides.length > 1 ? 'flex' : 'none';
+    nextBtn.style.display = availableSlides.length > 1 ? 'flex' : 'none';
+    status.style.display = 'inline-flex';
+    status.textContent = `${activePosition + 1} / ${availableSlides.length} - ${activeSlide.label}`;
+}
+
+function updatePreviewSlide(slotIndex, file, label, triggerId, defaultButtonText) {
+    const trigger = document.getElementById(triggerId);
+
+    if (!file) {
+        uploadPreviewSlides[slotIndex] = null;
+        if (trigger) trigger.textContent = defaultButtonText;
+        if (currentPreviewSlideIndex === slotIndex) {
+            const remainingSlides = getAvailablePreviewSlides();
+            currentPreviewSlideIndex = remainingSlides.length ? remainingSlides[0].slotIndex : 0;
+        }
+        renderPreviewCarousel();
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        uploadPreviewSlides[slotIndex] = { src: e.target.result, label };
+        if (trigger) trigger.textContent = `Change ${label}`;
+        currentPreviewSlideIndex = slotIndex;
+        renderPreviewCarousel();
+    };
+    reader.readAsDataURL(file);
+}
+
+function toggleProfile() {
+    const dropdown = document.getElementById("profileDropdown");
+    const isOpen = dropdown.style.display === "block";
+    closeAllDropdowns();
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+function changePreviewSlide(direction) {
+    const availableSlides = getAvailablePreviewSlides();
+    if (availableSlides.length < 2) return;
+
+    const currentPosition = availableSlides.findIndex(slide => slide.slotIndex === currentPreviewSlideIndex);
+    const nextPosition = (currentPosition + direction + availableSlides.length) % availableSlides.length;
+    currentPreviewSlideIndex = availableSlides[nextPosition].slotIndex;
+    renderPreviewCarousel();
+}
+
+function appendOptionalImages(formData) {
+    const optionalImages = [
+        document.getElementById('itemImageExtra1')?.files?.[0],
+        document.getElementById('itemImageExtra2')?.files?.[0],
+    ];
+
+    optionalImages.forEach((file, index) => {
+        if (file) {
+            formData.append(`extra_image_${index + 1}`, file);
+        }
+    });
+}
+
+async function executeSubmit() {
+    const confirmBtn = document.getElementById('finalConfirmBtn');
+    const token = localStorage.getItem("admin_token");
+
+    confirmBtn.innerText = "🤖 AI is Analyzing...";
+    confirmBtn.disabled = true;
+
+    // 1. Get Elements
+    const imageFile = document.getElementById('itemImage').files[0];
+    const catSelect = document.getElementById('itemCategory');
+    const deptSelect = document.getElementById('itemDepartment');
+
+    // 2. Get BOTH the ID (value) and the Name (text)
+    const catId = catSelect.value; 
+    const catName = catSelect.options[catSelect.selectedIndex]?.text;
+    const deptName = deptSelect.options[deptSelect.selectedIndex]?.text;
+
+    // 3. Validation
+    if (!catId || !catName || !deptName || deptName.includes("Select") || catName.includes("Loading")) {
+        alert("⚠️ Please select both a valid Category and a Department/Office!");
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+        return;
+    }
+
+    try {
+        // STEP 1: AI Match Analysis
+        const compareData = new FormData();
+        compareData.append("image", imageFile);
+        compareData.append("category", catName); // AI uses the name (e.g., "Electronics")
+        compareData.append("location", document.getElementById('reportLocation').value);
+        compareData.append("description", document.getElementById('itemDesc').value);
+        compareData.append("brand", document.getElementById('itemBrand').value || "");
+        compareData.append("color", document.getElementById('itemColor').value || "");
+        compareData.append("status", "lost"); 
+        appendOptionalImages(compareData);
+
+        const compareRes = await fetch('/api/compare-text-details', { 
+            method: 'POST', 
+            body: compareData 
+        });
+
+        if (!compareRes.ok) throw new Error("AI Analysis failed.");
+        const aiResult = await compareRes.json();
+        const hasConfirmedMatch = aiResult?.action === "show_match" &&
+            aiResult?.matched_item?.id &&
+            (aiResult.highest_score || 0) >= 0.55;
+
+        if (hasConfirmedMatch) {
+            const matchedLocation = aiResult.matched_item.location || "Unknown location";
+            alert(`Analysis complete.\n\nMatch found.\nMatched item ID: ${aiResult.matched_item.id}\nCategory: ${aiResult.matched_item.category || catName}\nLocation: ${matchedLocation}\nScore: ${Number(aiResult.highest_score || 0).toFixed(2)}`);
+        } else {
+            alert(`Analysis complete.\n\nNo confident match found yet.\nScore: ${Number(aiResult?.highest_score || 0).toFixed(2)}`);
+        }
+        
+        // STEP 2: Final Save to Database
+        const saveData = new FormData();
+        saveData.append("file", imageFile);
+        saveData.append("item_name", document.getElementById('itemName').value);
+        saveData.append("description", document.getElementById('itemDesc').value);
+        saveData.append("color", document.getElementById('itemColor').value);
+        saveData.append("brand", document.getElementById('itemBrand').value);
+        saveData.append("location", document.getElementById('reportLocation').value);
+        saveData.append("date", document.getElementById('reportDate').value);
+        saveData.append("time_found", document.getElementById('reportTime').value);
+        // --- DATA CONNECTIONS ---
+        saveData.append("category_id", catId);    // Links to the Category Table ID
+        saveData.append("category", catName);       // Saves the string "Electronics"
+        saveData.append("department", deptName);   // Saves the string "ICT Office"
+        saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
+        appendOptionalImages(saveData);
+        if (hasConfirmedMatch) {
+            saveData.append("matched_item_id", aiResult.matched_item.id);
+            saveData.append("ai_score", aiResult.highest_score || 0);
+        }
+
+        const saveRes = await fetch('/admin/items/lost', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: saveData
+        });
+
+        if (saveRes.ok) {
+            alert(`Success! Lost item report registered in ${deptName}`);
+            location.reload();
+        } else {
+            const errorData = await saveRes.json();
+            throw new Error(errorData.detail || "Failed to save report.");
+        }
+    } catch (err) {
+        alert("Error: " + err.message);
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+    }
+
+}
+async function executeSubmit() {
+    const confirmBtn = document.getElementById('finalConfirmBtn');
+    const token = localStorage.getItem("admin_token");
+    const imageFile = document.getElementById('itemImage').files[0];
+    const catSelect = document.getElementById('itemCategory');
+    const deptSelect = document.getElementById('itemDepartment');
+    const catId = catSelect.value;
+    const catName = catSelect.options[catSelect.selectedIndex]?.text;
+    const deptName = deptSelect.options[deptSelect.selectedIndex]?.text;
+
+    if (!catId || !catName || !deptName || deptName.includes("Select") || catName.includes("Loading")) {
+        await showLostUploadAlert('warning', 'Missing required selections', 'Please select both a valid category and a department or office.');
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+        return;
+    }
+
+    confirmBtn.innerText = "AI is Analyzing...";
+    confirmBtn.disabled = true;
+
+    try {
+        const compareData = new FormData();
+        compareData.append("image", imageFile);
+        compareData.append("category", catName);
+        compareData.append("location", document.getElementById('reportLocation').value);
+        compareData.append("description", document.getElementById('itemDesc').value);
+        compareData.append("brand", document.getElementById('itemBrand').value || "");
+        compareData.append("color", document.getElementById('itemColor').value || "");
+        compareData.append("status", "lost");
+        appendOptionalImages(compareData);
+
+        const compareRes = await fetch('/api/compare-text-details', {
+            method: 'POST',
+            body: compareData
+        });
+
+        if (!compareRes.ok) throw new Error("AI Analysis failed.");
+        const aiResult = await compareRes.json();
+        const hasConfirmedMatch = aiResult?.action === "show_match" &&
+            aiResult?.matched_item?.id &&
+            (aiResult.highest_score || 0) >= 0.55;
+
+        if (hasConfirmedMatch) {
+            const matchedLocation = aiResult.matched_item.location || "Unknown location";
+            await showLostUploadAlert(
+                'success',
+                'Analysis complete',
+                `Match found. Matched item ID: ${aiResult.matched_item.id}. Category: ${aiResult.matched_item.category || catName}. Location: ${matchedLocation}. Score: ${Number(aiResult.highest_score || 0).toFixed(2)}.`
+            );
+        } else {
+            await showLostUploadAlert(
+                'info',
+                'Analysis complete',
+                `No confident match found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+            );
+        }
+
+        const saveData = new FormData();
+        saveData.append("file", imageFile);
+        saveData.append("item_name", document.getElementById('itemName').value);
+        saveData.append("description", document.getElementById('itemDesc').value);
+        saveData.append("color", document.getElementById('itemColor').value);
+        saveData.append("brand", document.getElementById('itemBrand').value);
+        saveData.append("location", document.getElementById('reportLocation').value);
+        saveData.append("date", document.getElementById('reportDate').value);
+        saveData.append("time_found", document.getElementById('reportTime').value);
+        saveData.append("category_id", catId);
+        saveData.append("category", catName);
+        saveData.append("department", deptName);
+        saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
+        appendOptionalImages(saveData);
+
+        if (hasConfirmedMatch) {
+            saveData.append("matched_item_id", aiResult.matched_item.id);
+            saveData.append("ai_score", aiResult.highest_score || 0);
+        }
+
+        const saveRes = await fetch('/admin/items/lost', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: saveData
+        });
+
+        if (saveRes.ok) {
+            await showLostUploadAlert('success', 'Report submitted', `Lost item report registered in ${deptName}.`);
+            location.reload();
+        } else {
+            const errorData = await saveRes.json();
+            throw new Error(errorData.detail || "Failed to save report.");
+        }
+    } catch (err) {
+        await showLostUploadAlert('error', 'Submission failed', err.message || 'Failed to save the lost report.');
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+    }
+}
+async function disposeItem(itemId) {
+    const disposePrompt = await Swal.fire({
+        icon: 'warning',
+        title: 'Dispose item permanently?',
+        text: 'This action cannot be undone.',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, dispose it',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#114b7a'
+    });
+    const confirmed = disposePrompt.isConfirmed;
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`/admin/items/${itemId}/dispose`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+            }
+        });
+
+        if (response.ok) {
+            await showLostUploadAlert('success', 'Item disposed', 'Item disposed permanently.');
+            closeModal('itemDetailModal');
+            loadLostItems();
+        } else {
+            const error = await response.json();
+            await showLostUploadAlert('error', 'Dispose failed', error.detail || 'Failed to dispose item.');
+        }
+    } catch (err) {
+        console.error("Dispose Error:", err);
+        await showLostUploadAlert('error', 'Connection failed', 'Server connection failed.');
+    }
+}
+        async function fetchCategories() {
+            try {
+                const response = await fetch('/admin/category'); 
+                const categories = await response.json();
+                
+                const dropdown = document.getElementById('itemCategory');
+                
+                // Clear the "Loading..." message
+                dropdown.innerHTML = '<option value="">-- Select Category --</option>';
+                
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.id;          // The Integer ID from your Model
+                    option.textContent = cat.name;  // The Name (e.g., "Books")
+                    dropdown.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error loading categories:", error);
+                document.getElementById('itemCategory').innerHTML = '<option value="">Error loading list</option>';
+            }
+        }
+        async function fetchDepartments() {
+            const response = await fetch('/admin/departments');
+            const departments = await response.json();
+            
+            const dropdown = document.getElementById('itemDepartment');
+            
+            // Clear and Fill
+            dropdown.innerHTML = '<option value="">-- Select Office --</option>';
+            
+            departments.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept.id;  // The ID goes to the database
+                option.textContent = dept.name; // The Name is what the Admin sees
+                dropdown.appendChild(option);
+            });
+        }
+
+        // Load them when the page opens
+        document.addEventListener('DOMContentLoaded', fetchDepartments);
+        
+        function clearForm() {
+            document.getElementById('itemImage').value = "";
+            document.getElementById('itemImageExtra1').value = "";
+            document.getElementById('itemImageExtra2').value = "";
+            uploadPreviewSlides = [null, null, null];
+            currentPreviewSlideIndex = 0;
+            document.getElementById('itemImageTrigger').textContent = '+ Upload Main Image';
+            document.getElementById('itemImageExtra1Trigger').textContent = '+ Add Optional Image 2';
+            document.getElementById('itemImageExtra2Trigger').textContent = '+ Add Optional Image 3';
+            renderPreviewCarousel();
+            document.getElementById('itemName').value = "";
+            document.getElementById('itemDesc').value = "";
+            // Reset other fields as needed
+        }
+
+        // --- 4. INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLostItems();
+            fetchDepartments();
+            fetchCategories();
+            
+        });
+
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal-overlay')) {
+                event.target.style.display = 'none';
+            }
+        };
+     function logout() {
+        localStorage.clear();
+        window.location.href = "/";
+    }
+    </script>
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/force-password-change.js"></script>
+<script src="/static/admin-notifications.js?v=2"></script>
+</body>
+</html>
+

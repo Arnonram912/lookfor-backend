@@ -1,0 +1,996 @@
+<!DOCTYPE html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8"> 
+    <title>Student Panel | LookFor STI</title> 
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=14"> 
+    
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head> 
+<body> 
+
+   <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+        <ul class="nav-links"> 
+
+           <li class="#">
+                <a href="/student/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li>
+                <a href="/student/Messages"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+
+            <li class="active">
+                <a href="/student/Lost-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/Found-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Item
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+           
+            
+
+        </ul> 
+
+    </nav> 
+    
+
+  
+  <main class="main-content"> 
+
+       <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/student/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+
+
+             <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/student/profile'">My Profile</li>
+                    <li onclick="window.location.href='/student/settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+     
+
+</header>
+
+
+   
+
+   
+
+        
+    <div class="page-scroll-area">
+        <section class="content-body"> 
+             <div class="profile-page-card">
+                <div class="action-bar">
+                    <h2 class="section-title">Lost Items <span>Inventory</span></h2>
+                    <button class="upload-btn" onclick="openModal('reportModal')"> 
+                        <span class="plus">+ Upload Lost Item </span>
+                    </button> 
+                </div>
+
+                <div class="items-grid" id="lostItemsGrid">
+                    <p style="text-align:center; grid-column: 1/-1;">Loading lost items...</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div id="itemDetailModal" class="modal-overlay">
+        <div class="modal-content detail-modal">
+            <span class="close-btn" onclick="closeModal('itemDetailModal')">&times;</span>
+            <div class="detail-layout">
+                <div class="detail-image">
+                    <img id="modalImg" src="" alt="Item Image">
+                </div>
+                <div class="detail-info">
+                    <div class="modal-header-flex" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h1 id="modalTitle">Item Name</h1>
+                        <span id="modalStatus" class="status-badge">PENDING</span>
+                    </div>
+
+                    <span id="modalCategory" class="badge-category">Category</span>
+                    <hr>
+
+                    <div class="trait-grid">
+                        <p><strong>Brand:</strong> <span id="modalBrand"></span></p>
+                        <p><strong>Color:</strong> <span id="modalColor"></span></p>
+                    </div>
+
+                    <p><strong>Where was the item found?</strong> <span id="modalLocation"></span></p>
+                    <p><strong>When was the item found?</strong> <span id="modalDate"></span></p>
+                    <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
+
+                    <p><strong>Description:</strong></p>
+                    <p id="modalDescription" class="description-text"></p>
+                    
+                    </div>
+                </div>
+            </div>
+        </div>
+
+         <div id="reportModal" class="modal-overlay">
+                <div class="modal-content report-upload-modal">
+                    <span class="close-btn" onclick="handleCloseReport()">&times;</span>
+                    <h1 class="form-title">Lost <span>Item</span></h1>
+
+                    <div class="form-container">
+                    <div class="image-upload-section">
+                            <div class="image-placeholder image-preview-carousel" id="imagePreview">
+                                <button type="button" class="image-slide-btn prev" id="imagePreviewPrev" onclick="changePreviewSlide(-1)" style="display:none;">&#8249;</button>
+                                <div class="image-preview-stage" id="imagePreviewStage">Image Preview</div>
+                                <button type="button" class="image-slide-btn next" id="imagePreviewNext" onclick="changePreviewSlide(1)" style="display:none;">&#8250;</button>
+                                <div class="image-preview-status" id="imagePreviewStatus" style="display:none;"></div>
+                            </div> 
+                            
+                            <input type="file" id="itemImage" hidden accept="image/*"> 
+                            
+                            <button class="btn-upload-img" id="itemImageTrigger" onclick="document.getElementById('itemImage').click()">+ Upload Main Image</button>
+                            <p class="supporting-image-note">Add up to 2 more photos to help the AI build a more accurate embedding. The first image stays as the main display photo.</p>
+                            <div class="supporting-image-grid">
+                                <div class="supporting-image-card">
+                                    <span class="supporting-image-title">Optional Image 2</span>
+                                    <input type="file" id="itemImageExtra1" hidden accept="image/*">
+                                    <button type="button" class="btn-upload-img supporting-image-btn" id="itemImageExtra1Trigger" onclick="document.getElementById('itemImageExtra1').click()">+ Add Optional Image 2</button>
+                                </div>
+                                <div class="supporting-image-card">
+                                    <span class="supporting-image-title">Optional Image 3</span>
+                                    <input type="file" id="itemImageExtra2" hidden accept="image/*">
+                                    <button type="button" class="btn-upload-img supporting-image-btn" id="itemImageExtra2Trigger" onclick="document.getElementById('itemImageExtra2').click()">+ Add Optional Image 3</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="details-column item-details">
+                            <h3>ITEM DETAILS</h3>
+                            <div class="input-group">
+                                <label>What is the item?</label>
+                                <input type="text" id="itemName" placeholder="Item Name:">
+                            </div>
+                            <div class="input-group">
+                                <label for="itemCategory">Item Category</label>
+                                <select id="itemCategory">
+                                    <option value="">-- Loading Categories... --</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <input type="text" id="itemColor" placeholder="Item Color:">
+                            </div>
+                            <div class="input-group">
+                                <input type="text" id="itemBrand" placeholder="Item Brand:">
+                            </div>
+                            <div class="input-group">
+                                <label>Additional Description:</label>
+                                <textarea id="itemDesc" rows="4"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="details-column other-details">
+                            <h3>OTHER DETAILS</h3>
+                            <div class="input-group">
+                                <label>When was the item lost?</label>
+                                <div class="datetime-row">
+                                    <input type="date" id="reportDate">
+                                    <input type="time" id="reportTime">
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>Where was the item last seen?</label>
+                                <textarea id="reportLocation" rows="3" placeholder="Last location seen:"></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                     <div class="modal-footer" style="display: flex; justify-content: center;">
+                    <button class="btn-found lost-submit-btn" onclick="submitReport()">+submit</button>
+                    </div>
+                </div>
+            </div>
+            <div id="confirmModal" class="modal-overlay" style="z-index: 1001;">
+                <div class="modal-content" style="max-width: 500px; padding: 30px;">
+                    <h2 style="text-align: center; margin-bottom: 20px;">Review <span>Report</span></h2>
+                    
+                    <div id="submissionSummary" style="background: #f9f9f9; border-radius: 10px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #003366; text-align: left; font-size: 14px;">
+                        <p><strong>📦 Item:</strong> <span id="sumName"></span></p>
+                        <p><strong>🏷️ Category:</strong> <span id="sumCategory"></span></p>
+                        <p><strong>🎨 Color/Brand:</strong> <span id="sumColorBrand"></span></p>
+                        <p><strong>Location:</strong> <span id="sumLocation"></span></p>
+                        <p><strong>Reporter:</strong> <span id="sumReporter"></span></p>
+                        <p><strong>Date:</strong> <span id="sumDate"></span></p>
+                    </div>
+
+                    <p style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">
+                        Is everything correct? Our AI will now analyze this image for potential matches.
+                    </p>
+                    
+                    <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
+                        <button class="btn-found lost-submit-btn" id="finalConfirmBtn" onclick="executeSubmit()" style="width: 100%; margin: 0;">Confirm & Report</button>
+                        
+                        <div style="display: flex; gap: 10px; width: 100%;">
+                            <button class="btn-upload-img" onclick="backToEdit()" style="flex: 1; background: #f0ad4e; color: white; margin: 0; border: none;">
+                                Edit Details
+                            </button>
+                            <button class="btn-upload-img" onclick="handleCancelAll()" style="flex: 1; background: #6c757d; color: white; margin: 0; border: none;">
+                                Discard
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+</main>
+
+    <script>
+         function toggleNotifications() { toggleDropdown('notificationDropdown'); }
+function toggleMessages() { toggleDropdown('messageDropdown'); }
+function toggleProfile() { toggleDropdown('profileDropdown'); }
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    const isOpen = dropdown.style.display === "block";
+    
+    // Close all first to prevent overlap
+    document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+            .forEach(el => el.style.display = 'none');
+            
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "flex";
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+function decodeTokenPayload(token) {
+    try {
+        return JSON.parse(atob(token.split(".")[1]));
+    } catch (error) {
+        return null;
+    }
+}
+
+function getStudentToken() {
+    const studentToken = localStorage.getItem("token");
+    if (studentToken) return studentToken;
+
+    const fallbackToken = localStorage.getItem("admin_token");
+    const payload = decodeTokenPayload(fallbackToken || "");
+    return payload && !payload.is_admin ? fallbackToken : null;
+}
+
+function clearStudentSession() {
+    localStorage.removeItem("token");
+
+    const fallbackToken = localStorage.getItem("admin_token");
+    const payload = decodeTokenPayload(fallbackToken || "");
+    if (payload && !payload.is_admin) {
+        localStorage.removeItem("admin_token");
+    }
+}
+
+function logout() {
+    clearStudentSession();
+    window.location.href = "/login";
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+    // Close dropdowns if clicking outside nav items
+    if (!event.target.closest('.topbar-menu') && !event.target.closest('.profile-container')) {
+        document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+                .forEach(el => el.style.display = 'none');
+    }
+};
+
+        // --- LOAD ITEMS INTO BOXES ---
+       // --- LOAD ONLY MY ITEMS ---
+async function loadLostItems() {
+    const grid = document.getElementById("lostItemsGrid");
+    const token = getStudentToken();
+
+    if (!token) {
+        clearStudentSession();
+        window.location.href = "/login";
+        return;
+    }
+
+    try {
+        const response = await fetch('/student/api/items/lost/me', { // Matches your Python route
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) throw new Error("Could not fetch your reports.");
+        
+        const items = await response.json();
+        grid.innerHTML = "";
+
+        if (items.length === 0) {
+            grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center; padding: 20px;">You haven't reported any lost items yet.</p>`;
+            return;
+        }
+
+        grid.innerHTML = items.map(item => {
+            const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+            const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+            const itemData = JSON.stringify(item).replace(/'/g, "\\'");
+
+            return `
+                <div class="item-card">
+                    <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
+                        <img src="${imageUrl}" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                        ${item.is_matched ? '<span class="match-tag" style="background:#28a745;">Matched!</span>' : ''}
+                    </div>
+                    <div class="card-body">
+                        <h3>${item.item_name || item.category}</h3>
+                        <p><i class="fas fa-calendar"></i> ${item.date || 'Date not set'}</p>
+                        <span class="view-link" onclick='viewItemDetails(${itemData})'>View My Report →</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        grid.innerHTML = items.map(item => {
+            const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+            const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+            const itemData = JSON.stringify(item).replace(/'/g, "\\'");
+            const displayStatus = item.display_status || (item.is_matched ? "Matched" : "Pending");
+
+            return `
+                <div class="item-card">
+                    <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
+                        <img src="${imageUrl}" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                        <span class="inventory-state-tag 
+                        ${displayStatus === "Matched" ? "matched" : 
+                        displayStatus === "Approved" ? "approved" : 
+                        "pending"}">${displayStatus}</span>
+                    </div>
+                    <div class="card-body">
+                        <h3>${item.item_name || item.category || 'Unnamed Item'}</h3>
+                        <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
+                        <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details →</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        grid.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">${err.message}</p>`;
+    }
+}
+
+
+// --- 1. SUBMISSION LOGIC (REFINED) ---
+function showLostUploadAlert(icon, title, text) {
+    if (window.Swal) {
+        return Swal.fire({
+            icon,
+            title,
+            text,
+            confirmButtonColor: '#114b7a'
+        });
+    }
+
+    alert(text || title);
+    return Promise.resolve();
+}
+
+async function confirmDiscardLostReport() {
+    if (!window.Swal) {
+        return confirm("Are you sure you want to discard this entire report?");
+    }
+
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: 'Discard report?',
+        text: 'All unsaved changes in this lost report will be removed.',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, discard it',
+        cancelButtonText: 'Keep editing',
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#114b7a'
+    });
+
+    return result.isConfirmed;
+}
+
+function submitReport() {
+    const itemImage = document.getElementById('itemImage').files[0];
+    const itemName = document.getElementById('itemName').value;
+    
+    if (!itemImage || !itemName) {
+        showLostUploadAlert('warning', 'Missing required details', 'Please upload an image and provide an item name.');
+        return;
+    }
+
+    // Fill Summary List
+    document.getElementById('sumName').innerText = itemName;
+    
+    // Get Category Text
+    const catDropdown = document.getElementById('itemCategory');
+    const catName = catDropdown.options[catDropdown.selectedIndex].text;
+    document.getElementById('sumCategory').innerText = catName;
+    
+    const color = document.getElementById('itemColor').value || "N/A";
+    const brand = document.getElementById('itemBrand').value || "N/A";
+    document.getElementById('sumColorBrand').innerText = `${color} / ${brand}`;
+    
+    document.getElementById('sumLocation').innerText = document.getElementById('reportLocation').value || "Not specified";
+    
+    // REPORTER: Since this is the student panel, the reporter is "Me"
+    document.getElementById('sumReporter').innerText = "Self (Student Report)";
+    
+    const date = document.getElementById('reportDate').value || "N/A";
+    const time = document.getElementById('reportTime').value || "";
+    document.getElementById('sumDate').innerText = `${date} ${time}`;
+
+    openModal('confirmModal');
+    closeModal('reportModal');
+}
+
+// --- 2. EXECUTE UPLOAD (REFINED) ---
+async function executeSubmit() {
+    const confirmBtn = document.getElementById('finalConfirmBtn');
+    const token = localStorage.getItem("token") || localStorage.getItem("admin_token");
+
+    // 1. Get initial values
+    const imageFile = document.getElementById('itemImage').files[0];
+    const catSelect = document.getElementById('itemCategory');
+    const catId = catSelect.value; 
+    const catName = catSelect.options[catSelect.selectedIndex]?.text;
+    const locVal = document.getElementById('reportLocation').value;
+    const descVal = document.getElementById('itemDesc').value;
+
+    if (!catId || catName.includes("Loading")) {
+        await showLostUploadAlert('warning', 'Invalid category', 'Please select a valid category.');
+        return;
+    }
+
+    confirmBtn.innerText = "🤖 AI is Analyzing...";
+    confirmBtn.disabled = true;
+
+    try {
+        // --- STEP 1: AI Analysis ---
+        const compareData = new FormData();
+        compareData.append("image", imageFile); 
+        compareData.append("category", catName);
+        compareData.append("location", locVal || "Unknown"); 
+        compareData.append("description", descVal || "");
+        compareData.append("status", "lost");
+        compareData.append("brand", document.getElementById('itemBrand').value || "");
+        compareData.append("color", document.getElementById('itemColor').value || "");
+        appendOptionalImages(compareData);
+
+        const compareRes = await fetch('/api/compare-text-details', { 
+            method: 'POST', 
+            body: compareData 
+        });
+        
+        if (!compareRes.ok) throw new Error("AI Comparison failed.");
+        const aiResult = await compareRes.json();
+        const hasConfirmedMatch = aiResult?.action === "show_match" &&
+            aiResult?.matched_item?.id &&
+            (aiResult.highest_score || 0) >= 0.55;
+
+        if (hasConfirmedMatch) {
+            const matchedLocation = aiResult.matched_item.location || "Unknown location";
+            await showLostUploadAlert(
+                'info',
+                'Analysis complete',
+                `Possible strong match found. Matched item ID: ${aiResult.matched_item.id}. Category: ${aiResult.matched_item.category || catName}. Location: ${matchedLocation}. Score: ${Number(aiResult.highest_score || 0).toFixed(2)}. This will be reviewed before it becomes a real match.`
+            );
+        } else {
+            await showLostUploadAlert(
+                'info',
+                'Analysis complete',
+                `No confident match found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+            );
+        }
+        
+        // --- STEP 2: Final Save to /student/items/lost/report ---
+        const saveData = new FormData();
+        
+        // IMPORTANT: These keys MUST match your Python @router.post arguments exactly
+        saveData.append("image", imageFile); // Changed from "file" to "image"
+        saveData.append("item_name", document.getElementById('itemName').value);
+        saveData.append("category", catName);
+        saveData.append("category_id", catId);
+        saveData.append("location", locVal);
+        saveData.append("description", descVal);
+        saveData.append("color", document.getElementById('itemColor').value);
+        saveData.append("brand", document.getElementById('itemBrand').value);
+        saveData.append("date", document.getElementById('reportDate').value);
+        saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
+        appendOptionalImages(saveData);
+        
+        // Handle the matched item ID if the AI found one
+        if (hasConfirmedMatch) {
+            saveData.append("matched_item_id", aiResult.matched_item.id);
+        }
+
+        const saveRes = await fetch('/student/items/lost/report', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: saveData
+        });
+
+        if (saveRes.ok) {
+            await showLostUploadAlert('success', 'Report submitted', 'Your lost item report has been submitted.');
+            location.reload();
+        } else if (saveRes.status === 401) {
+            throw new Error("Login session expired. Please log in again.");
+        } else {
+            const errDetail = await saveRes.json();
+            throw new Error(errDetail.detail || "Failed to save report.");
+        }
+    } catch (err) {
+        await showLostUploadAlert('error', 'Submission failed', err.message);
+        console.error("Submission Error:", err);
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+    }
+}
+        // Full Reset Logic
+        async function handleCancelAll() {
+            if (await confirmDiscardLostReport()) {
+                closeModal('confirmModal');
+                closeModal('reportModal');
+                clearForm();
+            }
+        }
+async function submitReport() {
+    const itemImage = document.getElementById('itemImage').files[0];
+    const itemName = document.getElementById('itemName').value.trim();
+    const categorySelect = document.getElementById('itemCategory');
+    const reportDate = document.getElementById('reportDate').value;
+    const reportLocation = (document.getElementById('reportLocation').value || "").trim();
+
+    if (!itemImage || !itemName || !categorySelect.value || !reportDate || !reportLocation) {
+        await showLostUploadAlert(
+            'warning',
+            'Missing required details',
+            'Please upload an image, enter an item name, select a category, choose the date lost, and enter the location.'
+        );
+        return;
+    }
+
+    document.getElementById('sumName').innerText = itemName;
+
+    const catDropdown = document.getElementById('itemCategory');
+    const catName = catDropdown.options[catDropdown.selectedIndex].text;
+    document.getElementById('sumCategory').innerText = catName;
+
+    const color = document.getElementById('itemColor').value || "N/A";
+    const brand = document.getElementById('itemBrand').value || "N/A";
+    document.getElementById('sumColorBrand').innerText = `${color} / ${brand}`;
+
+    document.getElementById('sumLocation').innerText = document.getElementById('reportLocation').value || "Not specified";
+    document.getElementById('sumReporter').innerText = "Self (Student Report)";
+
+    const date = document.getElementById('reportDate').value || "N/A";
+    const time = document.getElementById('reportTime').value || "";
+    document.getElementById('sumDate').innerText = `${date} ${time}`;
+
+    openModal('confirmModal');
+    closeModal('reportModal');
+}
+
+async function executeSubmit() {
+    const confirmBtn = document.getElementById('finalConfirmBtn');
+    const token = getStudentToken();
+    const imageFile = document.getElementById('itemImage').files[0];
+    const catSelect = document.getElementById('itemCategory');
+    const catId = catSelect.value;
+    const catName = catSelect.options[catSelect.selectedIndex]?.text;
+    const locVal = (document.getElementById('reportLocation').value || "").trim();
+    const descVal = (document.getElementById('itemDesc').value || "").trim();
+    const reportDate = document.getElementById('reportDate').value;
+
+    if (!token) {
+        clearStudentSession();
+        window.location.href = "/login";
+        return;
+    }
+
+    if (!imageFile || !document.getElementById('itemName').value.trim() || !catId || !reportDate || !locVal || catName.includes("Loading")) {
+        await showLostUploadAlert(
+            'warning',
+            'Missing required details',
+            'Please complete the image, item name, category, date lost, and location before submitting.'
+        );
+        closeModal('confirmModal');
+        openModal('reportModal');
+        return;
+    }
+
+    confirmBtn.innerText = "Submitting...";
+    confirmBtn.disabled = true;
+
+    try {
+        const compareData = new FormData();
+        compareData.append("image", imageFile);
+        compareData.append("category", catName);
+        compareData.append("location", locVal || "Unknown");
+        compareData.append("description", descVal || "");
+        compareData.append("status", "lost");
+        compareData.append("brand", document.getElementById('itemBrand').value || "");
+        compareData.append("color", document.getElementById('itemColor').value || "");
+        appendOptionalImages(compareData);
+
+        const compareRes = await fetch('/api/compare-text-details', {
+            method: 'POST',
+            body: compareData
+        });
+
+        if (!compareRes.ok) throw new Error("AI Comparison failed.");
+        const aiResult = await compareRes.json();
+        const hasConfirmedMatch = aiResult?.action === "show_match" &&
+            aiResult?.matched_item?.id &&
+            (aiResult.highest_score || 0) >= 0.55;
+
+        if (hasConfirmedMatch) {
+            const matchedLocation = aiResult.matched_item.location || "Unknown location";
+            await showLostUploadAlert(
+                'success',
+                'Analysis complete',
+                `Possible strong match found. Matched item ID: ${aiResult.matched_item.id}. Category: ${aiResult.matched_item.category || catName}. Location: ${matchedLocation}. Score: ${Number(aiResult.highest_score || 0).toFixed(2)}. This will be reviewed before it becomes a real match.`
+            );
+        } else {
+            await showLostUploadAlert(
+                'info',
+                'Analysis complete',
+                `No confident match found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+            );
+        }
+
+        const saveData = new FormData();
+        saveData.append("image", imageFile);
+        saveData.append("item_name", document.getElementById('itemName').value);
+        saveData.append("category", catName);
+        saveData.append("category_id", catId);
+        saveData.append("location", locVal);
+        saveData.append("description", descVal);
+        saveData.append("color", document.getElementById('itemColor').value);
+        saveData.append("brand", document.getElementById('itemBrand').value);
+        saveData.append("date", reportDate);
+        saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding || []));
+        appendOptionalImages(saveData);
+
+        if (hasConfirmedMatch) {
+            saveData.append("matched_item_id", aiResult.matched_item.id);
+        }
+
+        const saveRes = await fetch('/student/items/lost/report', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: saveData
+        });
+
+        if (saveRes.ok) {
+            await showLostUploadAlert(
+                'success',
+                'Report submitted',
+                hasConfirmedMatch
+                    ? 'Your lost item report has been submitted and a strong possible match was detected for review.'
+                    : 'Your lost item report has been submitted successfully.'
+            );
+            location.reload();
+        } else if (saveRes.status === 401) {
+            throw new Error("Login session expired. Please log in again.");
+        } else {
+            const errDetail = await saveRes.json();
+            throw new Error(errDetail.detail || "Failed to save report.");
+        }
+    } catch (err) {
+        await showLostUploadAlert('error', 'Submission failed', err.message || 'Failed to submit the lost report.');
+        console.error("Submission Error:", err);
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerText = "Confirm & Report";
+    }
+}
+
+async function handleCancelAll() {
+    if (await confirmDiscardLostReport()) {
+        closeModal('confirmModal');
+        closeModal('reportModal');
+        clearForm();
+    }
+}
+function backToEdit() {
+    closeModal('confirmModal');  // Hide the summary
+    openModal('reportModal');    // Re-open the input form so they can change things
+}
+
+let uploadPreviewSlides = [null, null, null];
+let currentPreviewSlideIndex = 0;
+
+function getAvailablePreviewSlides() {
+    return uploadPreviewSlides
+        .map((slide, index) => slide ? { ...slide, slotIndex: index } : null)
+        .filter(Boolean);
+}
+
+function renderPreviewCarousel() {
+    const stage = document.getElementById('imagePreviewStage');
+    const prevBtn = document.getElementById('imagePreviewPrev');
+    const nextBtn = document.getElementById('imagePreviewNext');
+    const status = document.getElementById('imagePreviewStatus');
+    const availableSlides = getAvailablePreviewSlides();
+
+    if (!stage || !prevBtn || !nextBtn || !status) return;
+
+    if (!availableSlides.length) {
+        stage.innerHTML = 'Image Preview';
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        status.style.display = 'none';
+        return;
+    }
+
+    if (!uploadPreviewSlides[currentPreviewSlideIndex]) {
+        currentPreviewSlideIndex = availableSlides[0].slotIndex;
+    }
+
+    const activePosition = availableSlides.findIndex(slide => slide.slotIndex === currentPreviewSlideIndex);
+    const activeSlide = activePosition >= 0 ? availableSlides[activePosition] : availableSlides[0];
+
+    stage.innerHTML = `<img src="${activeSlide.src}" class="modal-upload-preview" alt="${activeSlide.label}">`;
+    prevBtn.style.display = availableSlides.length > 1 ? 'flex' : 'none';
+    nextBtn.style.display = availableSlides.length > 1 ? 'flex' : 'none';
+    status.style.display = 'inline-flex';
+    status.textContent = `${activePosition + 1} / ${availableSlides.length} - ${activeSlide.label}`;
+}
+
+function updatePreviewSlide(slotIndex, file, label, triggerId, defaultButtonText) {
+    const trigger = document.getElementById(triggerId);
+
+    if (!file) {
+        uploadPreviewSlides[slotIndex] = null;
+        if (trigger) trigger.textContent = defaultButtonText;
+        if (currentPreviewSlideIndex === slotIndex) {
+            const remainingSlides = getAvailablePreviewSlides();
+            currentPreviewSlideIndex = remainingSlides.length ? remainingSlides[0].slotIndex : 0;
+        }
+        renderPreviewCarousel();
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        uploadPreviewSlides[slotIndex] = { src: e.target.result, label };
+        if (trigger) trigger.textContent = `Change ${label}`;
+        currentPreviewSlideIndex = slotIndex;
+        renderPreviewCarousel();
+    };
+    reader.readAsDataURL(file);
+}
+
+function changePreviewSlide(direction) {
+    const availableSlides = getAvailablePreviewSlides();
+    if (availableSlides.length < 2) return;
+
+    const currentPosition = availableSlides.findIndex(slide => slide.slotIndex === currentPreviewSlideIndex);
+    const nextPosition = (currentPosition + direction + availableSlides.length) % availableSlides.length;
+    currentPreviewSlideIndex = availableSlides[nextPosition].slotIndex;
+    renderPreviewCarousel();
+}
+
+function appendOptionalImages(formData) {
+    const optionalImages = [
+        document.getElementById('itemImageExtra1')?.files?.[0],
+        document.getElementById('itemImageExtra2')?.files?.[0],
+    ];
+
+    optionalImages.forEach((file, index) => {
+        if (file) {
+            formData.append(`extra_image_${index + 1}`, file);
+        }
+    });
+}
+
+        // --- VIEW DETAILS ---
+       function viewItemDetails(item) {
+    const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+    document.getElementById("modalImg").src = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+    
+    // Title & Core Info
+    document.getElementById("modalTitle").innerText = item.item_name || item.category;
+    document.getElementById("modalCategory").innerText = item.category;
+    document.getElementById("modalLocation").innerText = item.location || 'Not Specified';
+    document.getElementById("modalDate").innerText = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
+    
+    // --- ADDED MISSING COLUMNS ---
+    
+    // 1. Uploader Info (Shows who reported it)
+    if (document.getElementById("modalUploader")) {
+        document.getElementById("modalUploader").innerText = item.uploader_name || `User ID: ${item.user_id}`;
+    }
+
+    // 2. Physical Traits (Brand/Color)
+    if (document.getElementById("modalBrand")) {
+        document.getElementById("modalBrand").innerText = item.brand || 'None';
+    }
+    if (document.getElementById("modalColor")) {
+        document.getElementById("modalColor").innerText = item.color || 'Not Specified';
+    }
+
+    // 3. Match Status (Visual indicator)
+    const statusEl = document.getElementById("modalStatus");
+    if (statusEl) {
+        statusEl.innerText = item.is_matched ? "✅ MATCHED" : "🔍 PENDING";
+        statusEl.style.color = item.is_matched ? "#28a745" : "#ffc107";
+    }
+
+    // Description
+    document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
+    
+    openModal('itemDetailModal');
+}
+
+        // Use this instead of window.onload to avoid overwriting other scripts
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLostItems();   // Loads the student's personal reports
+            fetchCategories(); // Fills the category dropdown
+        });
+
+        // Connect the file input to the preview div
+        document.getElementById('itemImage').addEventListener('change', function(event) {
+            updatePreviewSlide(0, event.target.files[0], 'Main Image', 'itemImageTrigger', '+ Upload Main Image');
+        });
+        document.getElementById('itemImageExtra1').addEventListener('change', function() {
+            updatePreviewSlide(1, this.files[0], 'Optional Image 2', 'itemImageExtra1Trigger', '+ Add Optional Image 2');
+        });
+        document.getElementById('itemImageExtra2').addEventListener('change', function() {
+            updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
+        });
+
+        // --- 2. MODAL CONTROLS ---
+        function openModal(id) { 
+            document.getElementById(id).style.display = 'flex'; 
+        }
+
+        function closeModal(id) { 
+            document.getElementById(id).style.display = 'none'; 
+        }
+
+        // Specifically for the report modal to clear inputs when closed
+        async function handleCloseReport() {
+            const shouldClose = await confirmDiscardLostReport();
+            if (shouldClose) {
+                closeModal('reportModal');
+                clearForm(); 
+            }
+        }
+        function previewImage(event) {
+            updatePreviewSlide(0, event.target.files[0], 'Main Image', 'itemImageTrigger', '+ Upload Main Image');
+        }
+        async function fetchCategories() {
+            try {
+                const response = await fetch('/admin/category'); 
+                const categories = await response.json();
+                
+                const dropdown = document.getElementById('itemCategory');
+                
+                // Clear the "Loading..." message
+                dropdown.innerHTML = '<option value="">-- Select Category --</option>';
+                
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.id;          // The Integer ID from your Model
+                    option.textContent = cat.name;  // The Name (e.g., "Books")
+                    dropdown.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Error loading categories:", error);
+                document.getElementById('itemCategory').innerHTML = '<option value="">Error loading list</option>';
+            }
+        }
+
+        function clearForm() {
+            document.getElementById('itemImage').value = "";
+            document.getElementById('itemImageExtra1').value = "";
+            document.getElementById('itemImageExtra2').value = "";
+            uploadPreviewSlides = [null, null, null];
+            currentPreviewSlideIndex = 0;
+            document.getElementById('itemImageTrigger').textContent = '+ Upload Main Image';
+            document.getElementById('itemImageExtra1Trigger').textContent = '+ Add Optional Image 2';
+            document.getElementById('itemImageExtra2Trigger').textContent = '+ Add Optional Image 3';
+            renderPreviewCarousel();
+            document.getElementById('itemName').value = "";
+            document.getElementById('itemCategory').value = "";
+            document.getElementById('itemColor').value = "";
+            document.getElementById('itemBrand').value = "";
+            document.getElementById('itemDesc').value = "";
+            document.getElementById('reportDate').value = "";
+            document.getElementById('reportTime').value = "";
+            document.getElementById('reportLocation').value = "";
+        }
+
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal-overlay')) {
+                event.target.style.display = 'none';
+            }
+        };
+    </script>
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/student-notifications.js"></script>
+<script src="/static/force-password-change.js"></script>
+<script src="/static/student-sidebar-access.js"></script>
+</body>
+</html>
+

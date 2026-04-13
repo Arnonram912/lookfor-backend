@@ -1,0 +1,91 @@
+.badge-similarity {
+    background-color: #28a745;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+}
+
+.btn-approve {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 5px;
+}
+
+.btn-reject {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-approve:hover, .btn-reject:hover {
+    opacity: 0.8;
+}
+/* Ensure the main content takes full height and hides overflow */
+.main-content {
+    margin-left: auto; /* Matches your sidebar width */
+    padding: 0px;
+    background: #f4f7f6;
+    min-height: 100vh;
+}
+
+.content-wrapper {
+    max-width: 100%;
+    overflow-x: hidden; /* Prevents side-scrolling */
+}
+
+/* Professional Table Container */
+.table-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    margin-top: 20px;
+    padding: 15px;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.custom-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.custom-table th {
+    background: #2c3e50;
+    color: white;
+    padding: 15px;
+    text-align: left;
+    font-weight: 600;
+}
+
+.custom-table td {
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+}
+
+/* Item Cell Styling */
+.item-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.item-img {
+    width: 50px;
+    height: 50px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 1px solid #ddd;
+}

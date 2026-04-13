@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel | LookFor STI</title>
+    <link rel="stylesheet" href="/static/admin2.o.css?v=10">
+    <link rel="stylesheet" href="/static/report.css?v=2">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="logow">Look<span>For</span></div>
+        <ul class="nav-links">
+            <li><a href="/admin/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/homew.png" class="side-icon"> Home</a></li>
+            <li data-permission="Messages"><a href="#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/msg.png" class="side-icon"> Messages</a></li>
+            <li data-permission="User-Management"><a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/userw.png" class="side-icon"> User Management</a></li>
+            <li data-permission="Lost-Reports"><a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/boxw.png" class="side-icon"> Lost Item</a></li>
+            <li><a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/foundw.png" class="side-icon"> Surrender Item</a></li>
+            <li><a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/handw.png" class="side-icon"> Claim Management</a></li>
+            <li><a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/handw.png" class="side-icon"> Confiscated Items</a></li>
+            <li class="active"><a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/folderw.png" class="side-icon"> Reports</a></li>
+            <li><a href="/admin/Profile" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/profilew.png" class="side-icon"> Profile</a></li>
+            <li><a href="/admin/Settings" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/settingw.png" class="side-icon"> Settings</a></li>
+            <li><a href="#" onclick="checkAccess('/admin/Content-management', 'Content-management'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/form.png" class="side-icon"> Content Management</a></li>
+        </ul>
+    </nav>
+
+    <main class="main-content">
+         <header class="top-bar navbar">
+    <div class="search-container">
+        
+    </div>
+
+   <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/admin/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+         <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/admin/Profile'">My Profile</li>
+                    <li onclick="window.location.href='/admin/Settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+</header>
+
+
+        <div class="page-scroll-area">
+        
+            <div class="profile-page-card">
+                <div class="action-bar">
+                <h1 class="section-title">Report <span>Module</span></h1>
+
+
+                <div class="summary-cards">
+                    <div id="chartSummaryLeft" class="card">Total Reports<br><strong id="summaryTotal">0</strong></div>
+                    <div class="card">Lost Items<br><strong id="summaryLost">0</strong></div>
+                    <div class="card">Found Items<br><strong id="summaryFound">0</strong></div>
+                    <div class="card">Confiscated Cases<br><strong id="summaryConfiscated">0</strong></div>
+                    <div id="chartSummaryRight" class="card">Claim<br><strong id="summaryClaim">0</strong></div>
+                </div>
+
+                <div class="generate-section">
+                    <select id="reportTypeSelect">
+                        <option value="all">Select Report Type</option>
+                        <option value="lost">Lost Items</option>
+                        <option value="found">Found Items</option>
+                        <option value="claim">Claim</option>
+                        <option value="confiscated">Confiscated Items</option>
+                        <option value="disposal">Disposed Items</option>
+                        <option value="all">All Reports</option>
+                    </select>
+
+                    <select id="dateRange" onchange="toggleCustomRange()">
+                        <option value="">Select Date Range</option>
+                        <option value="today">Today</option>
+                        <option value="7days">Last 1 Week</option>
+                        <option value="30days">Last 1 Month</option>
+                        <option value="3months">Last 3 Months</option>
+                        <option value="custom">Custom Range</option>
+                    </select>
+
+                    <div id="customRangeInputs" style="display:none; margin-top:0.5rem;">
+                        <span>From:</span>
+                        <input type="date" id="customStart">
+                        <span>To:</span>
+                        <input type="date" id="customEnd">
+                    </div>
+
+                    <select id="categoryFilter"><option value="">Select Category</option></select>
+                    <select id="locationFilter"><option value="">Select Location</option></select>
+                    <input type="text" id="searchInput" placeholder="Search item or reporter" style="padding:10px 12px; min-width:220px;">
+                    <button onclick="loadReportData()">Generate Report</button>
+                </div>
+
+               
+                <div class="btn-multi-select">
+                    <button class="selectall"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"> Select All</button>
+                    <button class="selectdelete" onclick="removeSelectedRows()">Remove Selected</button>
+                </div>
+
+                <table class="report-table" id="reportTable">
+                    <thead>
+                        <tr>
+                            <th>Select Items</th>
+                            <th>ID</th>
+                            <th>Item</th>
+                            <th>Category</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Reported By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTableBody"><tr><td colspan="9" style="text-align:center;">Loading report data...</td></tr></tbody>
+                </table>
+
+                
+            </div>
+        </div>
+    </main>
+
+    <div id="viewModal" class="modal">
+        <div class="modal-content" style="max-width: 900px; width: 92vw;">
+            <span class="close" onclick="closeViewModal()">&times;</span>
+            <h2>View Report</h2>
+            <div style="display:grid; grid-template-columns:minmax(320px, 1fr) minmax(280px, 340px); gap:20px; align-items:start;">
+                <div id="viewDetails"></div>
+                <div id="itemImagePanel" style="display:flex; flex-direction:column; gap:16px;">
+                    <div style="border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#f8fafc;">
+                        <h4 style="margin:0 0 10px; color:#003366;">Report Picture</h4>
+                        <img id="reportItemImage" src="" alt="Report item image" style="width:100%; max-height:220px; object-fit:contain; border-radius:8px; background:#fff; display:none;">
+                        <div id="reportItemImageEmpty" style="text-align:center; color:#666; padding:28px 12px; background:#fff; border-radius:8px;">No picture available for this report.</div>
+                    </div>
+                </div>
+                <div id="claimSidePanel" style="display:none; flex-direction:column; gap:16px;">
+                    <div style="border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#f8fafc;"><h4 style="margin:0 0 10px; color:#003366;">Claimant ID</h4><img id="claimProofImage" src="" alt="Claimant proof" style="width:100%; max-height:220px; object-fit:contain; border-radius:8px; background:#fff; display:none;"><div id="claimProofEmpty" style="text-align:center; color:#666; padding:28px 12px; background:#fff; border-radius:8px;">No claimant proof uploaded.</div></div>
+                    <div style="border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#f8fafc;"><h4 style="margin:0 0 10px; color:#003366;">Saved Report Image</h4><img id="claimReportImage" src="" alt="Claim report image" style="width:100%; max-height:220px; object-fit:contain; border-radius:8px; background:#fff; display:none;"><div id="claimReportEmpty" style="text-align:center; color:#666; padding:28px 12px; background:#fff; border-radius:8px;">No report image saved yet.</div></div>
+                    <div style="display:flex; justify-content:flex-end;"><button type="button" id="printClaimButton" onclick="printClaimReport()" style="padding:10px 16px; border:none; border-radius:8px; background:#475569; color:#fff; cursor:pointer;">Print Report</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="claimReportSaveModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:980px; width:92vw;">
+            <span class="close" onclick="closeClaimReportModal()">&times;</span>
+            <h2>Save Claim Report</h2>
+            <p style="margin-top:0; color:#666;">This saves the report to the selected claim record.</p>
+            <div style="display:grid; grid-template-columns:minmax(320px, 1fr) minmax(280px, 360px); gap:20px; align-items:start;">
+                <div id="claimReportDetails" style="border:1px solid #e5e7eb; border-radius:14px; padding:18px; background:#fff; text-align:left;"></div>
+                <div style="display:flex; flex-direction:column; gap:16px;">
+                    <div style="border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#f8fafc;"><h4 style="margin:0 0 10px; color:#003366;">Claimant ID</h4><img id="claimSaveProofImage" src="" alt="Claimant proof" style="width:100%; max-height:220px; object-fit:contain; border-radius:8px; background:#fff; display:none;"><div id="claimSaveProofEmpty" style="text-align:center; color:#666; padding:28px 12px; background:#fff; border-radius:8px;">No claimant proof uploaded.</div></div>
+                    <div style="border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#f8fafc;"><label for="claimActionSelect" style="display:block; margin-bottom:6px;">Decision Status</label><select id="claimActionSelect" style="width:100%; padding:10px 12px; margin-bottom:12px;"><option value="approve">Approve</option><option value="reject">Reject</option></select><label for="claimReportImageInput" style="display:block; margin-bottom:6px;">Upload Report Image</label><input type="file" id="claimReportImageInput" accept="image/*"><img id="claimSaveImagePreview" src="" alt="Report preview" style="width:100%; max-height:220px; object-fit:contain; border-radius:8px; margin-top:12px; background:#fff; display:none;"><div id="claimSaveImageEmpty" style="text-align:center; color:#666; padding:28px 12px; background:#fff; border-radius:8px; margin-top:12px;">No report image selected.</div></div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;"><button type="button" onclick="closeClaimReportModal()">Cancel</button><button type="button" id="saveClaimReportButton" onclick="saveClaimReport()">Save Claim Report</button></div>
+        </div>
+    </div>
+
+<script>
+     function closeAllDropdowns() {
+        const dropdowns = [
+            "notificationDropdown",
+            "messageDropdown",
+            "profileDropdown"
+        ];
+
+        dropdowns.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = "none";
+        });
+    }
+    // --- NOTIFICATION LOGIC ---
+    function toggleNotifications() {
+        const dropdown = document.getElementById("notificationDropdown");
+        dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
+    }
+
+    function toggleProfile(event) {
+        event?.stopPropagation?.();
+        const dropdown = document.getElementById("profileDropdown");
+        const isOpen = dropdown.style.display === "block";
+        closeAllDropdowns();
+        dropdown.style.display = isOpen ? "none" : "block";
+    }
+let reportRowsCache = [];
+let activeViewRow = null;
+let activeClaimRow = null;
+let printableClaimHtml = '';
+let pendingClaimFocusId = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('claimReportImageInput').addEventListener('change', previewClaimReportImage);
+    initializeReportFiltersFromUrl();
+    loadReportData();
+});
+
+function initializeReportFiltersFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const reportType = params.get('report_type');
+    const claimId = Number(params.get('claim_id'));
+
+    if (reportType && document.getElementById('reportTypeSelect')) {
+        document.getElementById('reportTypeSelect').value = reportType;
+    }
+
+    pendingClaimFocusId = Number.isNaN(claimId) ? null : claimId;
+}
+
+async function loadReportData() {
+    try {
+        const token = localStorage.getItem('admin_token');
+        const params = new URLSearchParams({
+            report_type: document.getElementById('reportTypeSelect').value || 'all',
+            date_range: document.getElementById('dateRange').value || '',
+            start_date: document.getElementById('customStart').value || '',
+            end_date: document.getElementById('customEnd').value || '',
+            category: document.getElementById('categoryFilter').value || '',
+            location: document.getElementById('locationFilter').value || '',
+            search: document.getElementById('searchInput').value || '',
+        });
+
+        const response = await fetch(`/api/admin/report-module?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) throw new Error('Failed to load report data.');
+
+        const payload = await response.json();
+        reportRowsCache = payload.rows || [];
+        updateSummaryCards(payload.summary || {});
+        populateFilterOptions(payload.filters || {});
+        renderReportTable(reportRowsCache);
+        updateChartPlaceholders(payload.summary || {});
+        focusRequestedClaimReport();
+    } catch (error) {
+        console.error('Error loading report data:', error);
+        document.getElementById('reportTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center; color:red;">Failed to load report data.</td></tr>';
+    }
+}
+
+function focusRequestedClaimReport() {
+    if (!pendingClaimFocusId) {
+        return;
+    }
+
+    const rowIndex = reportRowsCache.findIndex(row => row.row_type === 'claim' && Number(row.claim_id) === pendingClaimFocusId);
+    if (rowIndex === -1) {
+        pendingClaimFocusId = null;
+        return;
+    }
+
+    openViewModal(rowIndex);
+    pendingClaimFocusId = null;
+}
+
+function updateSummaryCards(summary) {
+    document.getElementById('summaryTotal').innerText = summary.total || 0;
+    document.getElementById('summaryLost').innerText = summary.lost || 0;
+    document.getElementById('summaryFound').innerText = summary.found || 0;
+    document.getElementById('summaryConfiscated').innerText = summary.confiscated || 0;
+    document.getElementById('summaryClaim').innerText = summary.claim || 0;
+}
+
+function updateChartPlaceholders(summary) {
+    document.getElementById('chartSummaryLeft').innerText = `Lost: ${summary.lost || 0} | Found: ${summary.found || 0}`;
+    document.getElementById('chartSummaryRight').innerText = `Claim: ${summary.claim || 0} | Confiscated: ${summary.confiscated || 0}`;
+}
+
+function populateFilterOptions(filters) {
+    refreshSelectOptions('categoryFilter', 'Select Category', filters.categories || []);
+    refreshSelectOptions('locationFilter', 'Select Location', filters.locations || []);
+}
+
+function refreshSelectOptions(selectId, placeholder, values) {
+    const select = document.getElementById(selectId);
+    const currentValue = select.value;
+    const uniqueValues = Array.from(new Set(values)).filter(Boolean);
+    select.innerHTML = `<option value="">${placeholder}</option>` + uniqueValues.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
+    if (uniqueValues.includes(currentValue)) select.value = currentValue;
+}
+
+function renderReportTable(rows) {
+    const tbody = document.getElementById('reportTableBody');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No reports found for the current filters.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map((row, index) => {
+        const actionButtons = row.row_type === 'claim'
+            ? `<button type="button" onclick="openViewModal(${index})">View</button><button type="button" onclick="openEditModal(${index})">Edit</button>`
+            : `<button type="button" onclick="openViewModal(${index})">View</button><button type="button" onclick="openDeleteModal(${index})">Delete</button>`;
+        return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}"></td><td>${escapeHtml(row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td>${actionButtons}</td></tr>`;
+    }).join('');
+}
+
+function toggleCustomRange() {
+    const range = document.getElementById('dateRange').value;
+    document.getElementById('customRangeInputs').style.display = range === 'custom' ? 'block' : 'none';
+}
+
+function openReportModal() { loadReportData(); }
+function closeReportModal() {}
+
+function openViewModal(index) {
+    const row = reportRowsCache[index];
+    if (!row) return;
+    activeViewRow = row;
+    document.getElementById('viewDetails').innerHTML = row.row_type === 'claim' && row.claim_payload
+        ? buildClaimReportDetails(row.claim_payload)
+        : buildDetailsHtml(row.details || {});
+    setImagePanel('reportItemImage', 'reportItemImageEmpty', row.image_path);
+
+    if (row.row_type === 'claim' && row.claim_payload) {
+        const claim = row.claim_payload;
+        document.getElementById('claimSidePanel').style.display = 'flex';
+        setImagePanel('claimProofImage', 'claimProofEmpty', claim.claimant?.proof_id_image);
+        setImagePanel('claimReportImage', 'claimReportEmpty', claim.report_image);
+        printableClaimHtml = buildPrintableClaimHtml(claim);
+        document.getElementById('printClaimButton').style.display = 'inline-flex';
+    } else {
+        document.getElementById('claimSidePanel').style.display = 'none';
+        printableClaimHtml = '';
+    }
+    document.getElementById('viewModal').style.display = 'flex';
+}
+
+function buildDetailsHtml(details) {
+    return Object.entries(details).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value || 'Not specified')}</p>`).join('');
+}
+
+function closeViewModal() { document.getElementById('viewModal').style.display = 'none'; }
+function openEditModal(index) {
+    const row = reportRowsCache[index];
+    if (!row) {
+        return;
+    }
+
+    if (row.row_type === 'claim') {
+        openClaimReportModal(index);
+        const saveButton = document.getElementById('saveClaimReportButton');
+        saveButton.innerText = 'Save Changes';
+        return;
+    }
+
+    alert('Edit is only connected for claim rows right now.');
+}
+function closeEditModal() {}
+function saveEdit() {}
+function openDeleteModal(index) {
+    const row = reportRowsCache[index];
+    if (!row) {
+        return;
+    }
+
+    activeViewRow = { index, row };
+    document.getElementById('deleteModal').style.display = 'flex';
+}
+function closeDeleteModal() { document.getElementById('deleteModal').style.display = 'none'; }
+function confirmDelete() {
+    if (activeViewRow && typeof activeViewRow.index === 'number') {
+        reportRowsCache = reportRowsCache.filter((_, idx) => idx !== activeViewRow.index);
+        renderReportTable(reportRowsCache);
+    }
+    activeViewRow = null;
+    closeDeleteModal();
+}
+
+function toggleSelectAll(source) {
+    document.querySelectorAll('.rowCheckbox').forEach(cb => { cb.checked = source.checked; });
+}
+
+function removeSelectedRows() {
+    const selected = Array.from(document.querySelectorAll('.rowCheckbox:checked')).map(cb => Number(cb.dataset.index)).filter(index => !Number.isNaN(index));
+    if (!selected.length) { alert('Select at least one row first.'); return; }
+    reportRowsCache = reportRowsCache.filter((_, index) => !selected.includes(index));
+    renderReportTable(reportRowsCache);
+    document.getElementById('selectAll').checked = false;
+}
+
+function openClaimReportModal(index) {
+    const row = reportRowsCache[index];
+    if (!row || row.row_type !== 'claim' || !row.claim_payload) {
+        alert('This row is not connected to a claim report.');
+        return;
+    }
+    activeClaimRow = row;
+    document.getElementById('claimReportDetails').innerHTML = buildClaimReportDetails(row.claim_payload);
+    setImagePanel('claimSaveProofImage', 'claimSaveProofEmpty', row.claim_payload.claimant?.proof_id_image);
+    document.getElementById('claimActionSelect').value = (row.status || '').toLowerCase() === 'rejected' ? 'reject' : 'approve';
+    const preview = document.getElementById('claimSaveImagePreview');
+    const empty = document.getElementById('claimSaveImageEmpty');
+    document.getElementById('claimReportImageInput').value = '';
+    if (row.claim_payload.report_image) {
+        preview.src = row.claim_payload.report_image.startsWith('/') ? row.claim_payload.report_image : `/${row.claim_payload.report_image}`;
+        preview.style.display = 'block';
+        empty.style.display = 'none';
+    } else {
+        preview.removeAttribute('src');
+        preview.style.display = 'none';
+        empty.style.display = 'block';
+    }
+    document.getElementById('claimReportSaveModal').style.display = 'flex';
+}
+
+function buildClaimReportDetails(claim) {
+    const claimant = claim.claimant || {};
+    const item = claim.item_description || {};
+    return `<div style="margin-bottom:18px;"><h4 style="margin:0 0 10px; color:#003366;">Claim Details</h4><p><strong>Item name:</strong> ${escapeHtml(claim.item_name || '-')}</p><p><strong>Date claimed:</strong> ${escapeHtml(formatDisplayDate(claim.date_claimed))}</p><p><strong>Status:</strong> ${escapeHtml(claim.status || 'Pending')}</p></div><div style="margin-bottom:18px;"><h4 style="margin:0 0 10px; color:#003366;">Claimant Details</h4><p><strong>Full name:</strong> ${escapeHtml(claimant.full_name || '-')}</p><p><strong>Student/Employee ID:</strong> ${escapeHtml(claimant.student_employee_id || '-')}</p><p><strong>Department/Course:</strong> ${escapeHtml(claimant.department_course || '-')}</p></div><div><h4 style="margin:0 0 10px; color:#003366;">Item Description</h4><p><strong>Item Name:</strong> ${escapeHtml(item.item_name || '-')}</p><p><strong>Brand:</strong> ${escapeHtml(item.brand || '-')}</p><p><strong>Color:</strong> ${escapeHtml(item.color || '-')}</p><p><strong>Date Lost:</strong> ${escapeHtml(formatDisplayDate(item.date_lost))}</p><p><strong>Location Lost:</strong> ${escapeHtml(item.location_lost || '-')}</p></div>`;
+}
+
+function closeClaimReportModal() { document.getElementById('claimReportSaveModal').style.display = 'none'; }
+
+function previewClaimReportImage(event) {
+    const file = event.target.files[0];
+    const preview = document.getElementById('claimSaveImagePreview');
+    const empty = document.getElementById('claimSaveImageEmpty');
+    if (!file) {
+        preview.removeAttribute('src'); preview.style.display = 'none'; empty.style.display = 'block'; return;
+    }
+    preview.src = URL.createObjectURL(file); preview.style.display = 'block'; empty.style.display = 'none';
+}
+
+async function saveClaimReport() {
+    if (!activeClaimRow || !activeClaimRow.claim_id) { alert('No claim is selected.'); return; }
+    const token = localStorage.getItem('admin_token');
+    const button = document.getElementById('saveClaimReportButton');
+    const formData = new FormData();
+    formData.append('action', document.getElementById('claimActionSelect').value);
+    const imageFile = document.getElementById('claimReportImageInput').files[0];
+    if (imageFile) formData.append('report_image', imageFile);
+    button.disabled = true;
+    const originalLabel = button.innerText;
+    button.innerText = 'Saving...';
+    try {
+        const response = await fetch(`/api/admin/claims/${activeClaimRow.claim_id}/decision-report`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to save claim report.');
+        }
+        const result = await response.json();
+        activeClaimRow.claim_payload = result.report;
+        activeClaimRow.status = result.report.status;
+        activeClaimRow.date = result.report.date_claimed;
+        activeClaimRow.details = {
+            'Claim ID': activeClaimRow.claim_id,
+            'Item name': result.report.item_name,
+            'Status': result.report.status,
+            'Date claimed': result.report.date_claimed || 'Not specified',
+            'Claimant': result.report.claimant.full_name,
+            'Student/Employee ID': result.report.claimant.student_employee_id,
+            'Department/Course': result.report.claimant.department_course,
+            'Brand': result.report.item_description.brand,
+            'Color': result.report.item_description.color,
+            'Date Lost': result.report.item_description.date_lost || 'Not specified',
+            'Location Lost': result.report.item_description.location_lost,
+        };
+        renderReportTable(reportRowsCache);
+        closeClaimReportModal();
+        alert('Claim report saved successfully.');
+    } catch (error) {
+        console.error('Error saving claim report:', error);
+        alert(error.message || 'Failed to save claim report.');
+    } finally {
+        button.disabled = false;
+        button.innerText = originalLabel;
+    }
+}
+
+function setImagePanel(imageId, emptyId, path) {
+    const image = document.getElementById(imageId);
+    const empty = document.getElementById(emptyId);
+    if (path) {
+        image.src = path.startsWith('/') ? path : `/${path}`;
+        image.style.display = 'block';
+        empty.style.display = 'none';
+    } else {
+        image.removeAttribute('src');
+        image.style.display = 'none';
+        empty.style.display = 'block';
+    }
+}
+
+function buildPrintableClaimHtml(claim) {
+    const claimant = claim.claimant || {};
+    const item = claim.item_description || {};
+    const proofImage = claimant.proof_id_image ? `<img src="${claimant.proof_id_image.startsWith('/') ? claimant.proof_id_image : `/${claimant.proof_id_image}`}" style="width:100%; max-height:240px; object-fit:contain; border:1px solid #ddd; border-radius:8px;">` : '<div style="padding:20px; border:1px solid #ddd; border-radius:8px; color:#666;">No claimant proof uploaded.</div>';
+    const reportImage = claim.report_image ? `<img src="${claim.report_image.startsWith('/') ? claim.report_image : `/${claim.report_image}`}" style="width:100%; max-height:240px; object-fit:contain; border:1px solid #ddd; border-radius:8px;">` : '<div style="padding:20px; border:1px solid #ddd; border-radius:8px; color:#666;">No report image saved.</div>';
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Claim Report</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111827;}h1,h2{margin-bottom:10px;}.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;align-items:start;}.section{border:1px solid #d1d5db;border-radius:12px;padding:16px;margin-bottom:16px;}p{margin:8px 0;}.images{display:flex;flex-direction:column;gap:16px;}</style></head><body><h1>Claim Report</h1><div class="grid"><div><div class="section"><h2>Claim Details</h2><p><strong>Item name:</strong> ${escapeHtml(claim.item_name || '-')}</p><p><strong>Date claimed:</strong> ${escapeHtml(formatDisplayDate(claim.date_claimed))}</p><p><strong>Status:</strong> ${escapeHtml(claim.status || '-')}</p></div><div class="section"><h2>Claimant Details</h2><p><strong>Full name:</strong> ${escapeHtml(claimant.full_name || '-')}</p><p><strong>Student/Employee ID:</strong> ${escapeHtml(claimant.student_employee_id || '-')}</p><p><strong>Department/Course:</strong> ${escapeHtml(claimant.department_course || '-')}</p></div><div class="section"><h2>Item Description</h2><p><strong>Item Name:</strong> ${escapeHtml(item.item_name || '-')}</p><p><strong>Brand:</strong> ${escapeHtml(item.brand || '-')}</p><p><strong>Color:</strong> ${escapeHtml(item.color || '-')}</p><p><strong>Date Lost:</strong> ${escapeHtml(formatDisplayDate(item.date_lost))}</p><p><strong>Location Lost:</strong> ${escapeHtml(item.location_lost || '-')}</p></div></div><div class="images"><div class="section"><h2>Claimant ID</h2>${proofImage}</div><div class="section"><h2>Saved Report Image</h2>${reportImage}</div></div></div></body></html>`;
+}
+
+function printClaimReport() {
+    if (!printableClaimHtml) { alert('Open a claim report first before printing.'); return; }
+    const printWindow = window.open('', '_blank', 'width=960,height=720');
+    printWindow.document.open();
+    printWindow.document.write(printableClaimHtml);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+}
+
+function formatDisplayDate(value) {
+    if (!value) return 'Not specified';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function formatSimpleDate(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function checkAccess(targetUrl, permission) {
+    const token = localStorage.getItem('admin_token');
+    if (!token) { window.location.href = '/login'; return; }
+    try {
+        const response = await fetch('/admin/my-permissions', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) throw new Error('Unauthorized');
+        const permissions = await response.json();
+        if (permissions.includes(permission)) window.location.href = targetUrl; else showAccessDeniedPopup(permission);
+    } catch (error) {
+        console.error('Access check failed:', error);
+        showAccessDeniedPopup(permission);
+    }
+}
+
+function showAccessDeniedPopup(permName) {
+    const overlay = document.createElement('div');
+    overlay.id = 'access-denied-modal';
+    overlay.style = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 9999; backdrop-filter: blur(4px);';
+    overlay.innerHTML = `<div style="background: white; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);"><div style="font-size: 50px; margin-bottom: 20px;">Locked</div><h2 style="color: #d9534f; margin-bottom: 10px; font-family: 'Montserrat', sans-serif;">Access Denied</h2><p style="color: #555; line-height: 1.5;">Your account does not have the <strong>${permName}</strong> permission required to view this page.</p><button onclick="document.getElementById('access-denied-modal').remove()" style="margin-top: 25px; padding: 12px 30px; background: #003366; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Close</button></div>`;
+    document.body.appendChild(overlay);
+}
+
+function toggleNotifications() {
+    const dropdown = document.getElementById('notificationDropdown');
+    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+}
+
+function toggleProfile() {
+    const dropdown = document.getElementById('profileDropdown');
+    dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+}
+
+function logout() {
+        localStorage.clear();
+        window.location.href = "/";
+    }
+</script>
+
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/force-password-change.js"></script>
+<script src="/static/admin-notifications.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,386 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Admin Panel | LookFor STI</title> 
+    <script src="{{ url_for('static', path='js/script.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='admin_settings.css') }}?v=9"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+
+</head> 
+
+<body> 
+
+  
+
+    <nav class="sidebar"> 
+
+            <div class="logow">Look<span>For</span></div>  
+  <ul class="nav-links"> 
+
+           <li>
+                <a href="/admin/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li data-permission="Messages">
+                <a href= "#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+             <li data-permission="User-Management">
+                <a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" 
+                style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/userw.png" class="side-icon"> User Management
+                </a>
+            </li>
+
+
+            <li data-permission="Lost-Reports">
+                <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
+                
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                </a>
+            </li>
+
+            <li  class="#">
+                 <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrender Item
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Claim Management
+                </a>
+            </li>
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon">  Confiscated Items
+                </a>
+            </li>
+
+            <li class="#">
+                 <a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/folderw.png" class="side-icon">  Reports
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/admin/Profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="active">
+                <a href="/admin/Settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+             <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Content-management', 'Content-management'); return false;" 
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/form.png" class="side-icon">  Content Management
+                </a>
+            </li>
+
+        </ul> 
+    </nav> 
+    
+
+  
+  <main class="main-content"> 
+
+        <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/admin/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/admin/Profile'">My Profile</li>
+                    <li onclick="window.location.href='/admin/Settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+     
+
+</header>
+    <div class="page-scroll-area">
+
+
+<div class="settings-grid">
+    <h1 class="section-title">Settings</h1>
+    <section class="settings-card">
+        <h3>Privacy & Security</h3>
+        <div class="setting-item">
+            <label>Two-Factor Authentication</label>
+            <input type="checkbox" id="2fa-toggle" class="switch">
+        </div>
+        <div class="setting-item">
+            <label>Session Management</label>
+            <button class="btn-outline">Logout all other devices</button>
+        </div>
+    </section>
+
+    <section class="settings-card">
+        <h3>Notifications</h3>
+        <div class="setting-item">
+            <label>Push Alerts</label>
+            <input type="checkbox" id="push-toggle" class="switch" checked>
+        </div>
+        <div class="setting-item">
+            <label>Sound/Vibration</label>
+            <select id="notif-sound">
+                <option value="default">Default STI Tone</option>
+                <option value="mute">Mute</option>
+            </select>
+        </div>
+    </section>
+
+    <section class="settings-card">
+        <h3>Display Layout</h3>
+        <div class="setting-item">
+            <label>Theme Mode</label>
+            <button id="theme-toggle" onclick="toggleTheme()">Toggle Dark/Light</button>
+        </div>
+        <div class="setting-item">
+            <label>Font Size</label>
+            <input type="range" id="font-slider" min="12" max="24" value="16">
+            <span id="font-value">16px</span>
+        </div>
+    </section>
+</div>
+
+<div class="settings-footer">
+    <button class="upload-btn" onclick="saveSettings()">Save All Changes</button>
+    <button class="btn-archive-big" style="background:#888;">Reset to Default</button>
+</div>
+
+
+
+
+<script>
+function closeAllDropdowns() {
+        const dropdowns = [
+            "notificationDropdown",
+            "messageDropdown",
+            "profileDropdown"
+        ];
+
+        dropdowns.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = "none";
+        });
+    }
+    // --- NOTIFICATION LOGIC ---
+    function toggleNotifications() {
+        const dropdown = document.getElementById("notificationDropdown");
+        dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
+    }
+
+    function toggleProfile(event) {
+        event?.stopPropagation?.();
+        const dropdown = document.getElementById("profileDropdown");
+        const isOpen = dropdown.style.display === "block";
+        closeAllDropdowns();
+        dropdown.style.display = isOpen ? "none" : "block";
+    }
+
+ async function checkAccess(targetUrl, permission) {
+    const token = localStorage.getItem("admin_token");
+    
+    if (!token) {
+        window.location.href = "/login";
+        return;
+    }
+
+    try {
+        // Fetch fresh permissions from the backend
+        const response = await fetch("/admin/my-permissions", {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (!response.ok) throw new Error("Unauthorized");
+
+        const permissions = await response.json();
+
+        // Check if the required permission exists in the user's list
+        if (permissions.includes(permission)) {
+            window.location.href = targetUrl;
+        } else {
+            showAccessDeniedPopup(permission);
+        }
+    } catch (error) {
+        console.error("Access check failed:", error);
+        showAccessDeniedPopup(permission);
+    }
+}
+
+function showAccessDeniedPopup(permName) {
+    // Create the overlay
+    const overlay = document.createElement('div');
+    overlay.id = "access-denied-modal";
+    overlay.style = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.7); display: flex; 
+        justify-content: center; align-items: center; z-index: 9999;
+        backdrop-filter: blur(4px);
+    `;
+
+    // Create the modal box
+    overlay.innerHTML = `
+        <div style="background: white; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="font-size: 50px; margin-bottom: 20px;">🔒</div>
+            <h2 style="color: #d9534f; margin-bottom: 10px; font-family: 'Montserrat', sans-serif;">Access Denied</h2>
+            <p style="color: #555; line-height: 1.5;">
+                Your account does not have the <strong>${permName}</strong> permission required to view this page.
+            </p>
+            <button onclick="document.getElementById('access-denied-modal').remove()" 
+                style="margin-top: 25px; padding: 12px 30px; background: #003366; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                Close
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
+function getAuthToken() {
+    return localStorage.getItem('admin_token');
+}
+
+function getSettingsEndpoint() {
+    return '/admin/update-settings';
+}
+
+function updateFontSize(size) {
+    document.documentElement.style.setProperty('--base-font-size', size + 'px');
+    document.getElementById('font-value').innerText = size + 'px';
+    localStorage.setItem('admin-font-size', size);
+}
+
+function toggleTheme() {
+    const isDark = document.body.classList.toggle('dark-theme');
+    localStorage.setItem('admin-theme', isDark ? 'dark' : 'light');
+}
+
+function saveSettings() {
+    saveSettingsToDB();
+}
+
+async function saveSettingsToDB() {
+    const authToken = getAuthToken();
+    if (!authToken) {
+        alert("Login session expired. Please log in again.");
+        window.location.href = "/login";
+        return;
+    }
+
+    const settings = {
+        two_factor: document.getElementById('2fa-toggle').checked,
+        notifications: document.getElementById('push-toggle').checked,
+        theme: localStorage.getItem('admin-theme') || 'light',
+        font_size: parseInt(localStorage.getItem('admin-font-size')) || 16,
+    };
+
+    const response = await fetch(getSettingsEndpoint(), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(settings)
+    });
+
+    if (response.ok) {
+        alert("Settings synchronized with account!");
+    }
+}
+
+async function loadSettings() {
+    const authToken = getAuthToken();
+    if (!authToken) return;
+
+    const response = await fetch('/auth/settings', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (!response.ok) return;
+
+    const settings = await response.json();
+    document.getElementById('2fa-toggle').checked = !!settings.two_factor;
+    document.getElementById('push-toggle').checked = !!settings.notifications;
+    localStorage.setItem('admin-theme', settings.theme || 'light');
+    localStorage.setItem('admin-font-size', settings.font_size || 16);
+    updateFontSize(settings.font_size || 16);
+    document.getElementById('font-slider').value = settings.font_size || 16;
+}
+
+document.getElementById('font-slider').addEventListener('input', (event) => {
+    updateFontSize(event.target.value);
+});
+
+loadSettings();
+function logout() {
+        localStorage.clear();
+        window.location.href = "/";
+    }
+</script>
+
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/force-password-change.js"></script>
+<script src="/static/admin-notifications.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+    
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LookFor - Lost and Found</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='landing.css') }}?v=5.1">
+</head>
+<body>
+
+    <header class="navbar">
+        
+        
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav>
+            <ul>
+                <li><a href="/admin/Content-management">Content Management</a></li>
+                <li><a href="/admin/Content-Editor" class="active">Home</a></li>
+                <li><a href="/admin/Content-management/features" >Features</a></li>
+                <li><a href="/admin/Content-management/about">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script&display=swap" rel="stylesheet">
+<div class="cms-controls" style="position: fixed; top: 80px; right: 20px; z-index: 1000; display: flex; gap: 10px;">
+    <button id="edit-mode-btn" onclick="toggleEditMode()" class="btn-primary" style="background: #ffc107; color: #000; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+        ✏️ Edit Content
+    </button>
+    <button id="save-cms-btn" onclick="saveDirectChanges()" class="btn-primary" style="display: none; background: #28a745; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+        💾 Save Changes
+    </button>
+</div>
+    <section class="hero">
+        <div class="hero-content">
+            <h1 id="cms-hero-title">Found something?<br>Lost something?</h1>
+            <p id="cms-hero-desc">Connect with your community to reunite people with their belongings</p>
+            <div class="hero-btns">
+                <a href="/login" class="btn-primary">Begin Reporting</a>
+                <a href="/admin/Content-management/features" class="btn-secondary">Explore Features</a>
+
+            </div>
+        </div>
+    </section>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <script>
+    // This script runs when the page loads to fetch the latest "manipulated" text
+   async function loadAllContent() {
+    try {
+        const response = await fetch('/api/content/landing');
+        const data = await response.json();
+
+        // --- LOAD HERO SECTION ---
+        if (data.hero) {
+            if (document.getElementById('cms-hero-title')) {
+                document.getElementById('cms-hero-title').innerHTML = data.hero.title || "Found something?<br>Lost something?";
+            }
+            if (document.getElementById('cms-hero-desc')) {
+                document.getElementById('cms-hero-desc').innerText = data.hero.description || "Connect with your community to reunite people with their belongings";
+            }
+
+            if (data.hero.image_path) {
+                const heroSection = document.querySelector('.hero');
+                if (heroSection) {
+                    // Added leading / to ensure pathing is absolute
+                    const path = data.hero.image_path.startsWith('/') ? data.hero.image_path : '/' + data.hero.image_path;
+                    heroSection.style.backgroundImage = `linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)), url('${path}')`;
+                }
+            }
+        }
+
+        // --- LOAD WHY CHOOSE US SECTION ---
+        if (data.why_choose_us) {
+            if (document.getElementById('cms-why-title')) {
+                document.getElementById('cms-why-title').innerHTML = data.why_choose_us.title || "Make reuniting with your <br><span>lost items easier.</span>";
+            }
+            
+            if (data.why_choose_us.description) {
+                const parts = data.why_choose_us.description.split('|||');
+                if (document.getElementById('cms-why-desc-1')) document.getElementById('cms-why-desc-1').innerText = parts[0] || "LookFor is a platform that uses AI to help you match your lost items to the found items. Making the finding of lost item easier and convenient.";
+                if (document.getElementById('cms-why-desc-2')) document.getElementById('cms-why-desc-2').innerText = parts[1] || "An instrument to make the lost and found system innovate through the use of AI image-text matching with proven accuracy. This platform provides user-friendly report system that creates more interactive lost and found system just for STI Novaliches. Start to join the community and reunite with your lost item today with LookFor.";
+            }
+
+            if (data.why_choose_us.image_path) {
+                const whyImg = document.getElementById('cms-why-img');
+                if (whyImg) {
+                    // Added leading / to ensure pathing is absolute
+                    whyImg.src = data.why_choose_us.image_path.startsWith('/') ? data.why_choose_us.image_path : '/' + data.why_choose_us.image_path;
+                }
+            }
+        }
+
+        // We use data.cta here to match the backend 'cta' key we discussed
+// --- LOAD CTA SECTION ---
+if (data.cta_feature) { 
+    if (document.getElementById('cms-cta-title')) {
+        document.getElementById('cms-cta-title').innerHTML = data.cta_feature.title || "Don't lose hope.<br>Find it with <span class=\"logo\">Look<span>for</span></span>!";
+    }
+    if (document.getElementById('cms-cta-desc')) {
+        document.getElementById('cms-cta-desc').innerText = data.cta_feature.description || "Join our community and reunite with your lost items";
+    }
+    // FIX: Changed from data.cta to data.cta_feature
+    if (data.cta_feature.image_path) {
+        const ctaImg = document.getElementById('cms-cta-img');
+        if (ctaImg) {
+            const path = data.cta_feature.image_path.startsWith('/') 
+                ? data.cta_feature.image_path 
+                : '/' + data.cta_feature.image_path;
+            ctaImg.src = path;
+        }
+    }
+}
+// --- 4. LOAD REUNITE (PARTICLES) SECTION ---
+        if (data.reunite) {
+            // Load Title
+            if (document.getElementById('cms-reunite-title')) {
+                document.getElementById('cms-reunite-title').innerHTML = data.reunite.title || "Reunite with your Lost Items Faster with <span class=\"logo\">Look<span>for</span></span>";
+            }
+            // Load Description and List Items (Split by |||)
+            if (data.reunite.description) {
+                const parts = data.reunite.description.split('|||');
+                // parts[0] = Subtext, parts[1] = List 1, parts[2] = List 2, parts[3] = List 3
+                if (document.getElementById('cms-reunite-subtext')) 
+                    document.getElementById('cms-reunite-subtext').innerText = parts[0] || "LookFor utilizes advanced AI technology to enhance the lost and found system of STI College Novaliches from reporting and surrendering of found items to finding and retrieving of lost items.";
+                if (document.getElementById('cms-reunite-li-1')) 
+                    document.getElementById('cms-reunite-li-1').innerText = parts[1] || "Explore our community-driven platform";
+                if (document.getElementById('cms-reunite-li-2')) 
+                    document.getElementById('cms-reunite-li-2').innerText = parts[2] || "Helpful AI powered image-text matching";
+                if (document.getElementById('cms-reunite-li-3')) 
+                    document.getElementById('cms-reunite-li-3').innerText = parts[3] || "Track your item's progress with notifications";
+            }
+        }
+
+        if (data.how_it_works) {
+            if (document.getElementById('cms-how-title')) {
+                document.getElementById('cms-how-title').innerHTML = data.how_it_works.title || "How LookFor Works";
+            }
+            const parts = data.how_it_works.description.split('|||');
+            // Assuming the order is: step1 title, step1 desc, step2 title, step2 desc, step3 title, step3 desc
+            if (document.getElementById('cms-step-1-title')) 
+                document.getElementById('cms-step-1-title').innerText = parts[0] || "";
+            if (document.getElementById('cms-step-1-desc')) 
+                document.getElementById('cms-step-1-desc').innerText = parts[1] || "";
+            if (document.getElementById('cms-step-2-title')) 
+                document.getElementById('cms-step-2-title').innerText = parts[2] || "";
+            if (document.getElementById('cms-step-2-desc')) 
+                document.getElementById('cms-step-2-desc').innerText = parts[3] || "";
+            if (document.getElementById('cms-step-3-title')) 
+                document.getElementById('cms-step-3-title').innerText = parts[4] || "";
+            if (document.getElementById('cms-step-3-desc')) 
+                document.getElementById('cms-step-3-desc').innerText = parts[5] || "";
+        }
+
+        if (data.features_main) {
+            if (document.getElementById('cms-feat-main-title')) {
+                document.getElementById('cms-feat-main-title').innerHTML = data.features_main.title || "Everything you need to reunite <br><span>with your lost item</span>";
+            }
+            if (document.getElementById('cms-feat-main-sub')) {
+                document.getElementById('cms-feat-main-sub').innerText = data.features_main.description || "From AI image-text matching to progress tracking, and community engagement, LookFor makes lost items find faster and easier";
+            }
+        }
+
+        if (Array.isArray(data.feature_cards)) {
+            data.feature_cards.forEach((card, index) => {
+                const cardNumber = index + 1;
+                const titleEl = document.getElementById(`cms-feat-${cardNumber}-title`);
+                const descEl = document.getElementById(`cms-feat-${cardNumber}-desc`);
+                const imgEl = document.getElementById(`cms-feat-${cardNumber}-img`);
+                const fallbackTitles = [
+                    "AI Image-Text Matching",
+                    "Lost and Found Report",
+                    "Conversation Chatbox",
+                    "Instant Notification"
+                ];
+                const fallbackDescs = [
+                    "Get image-text matching to quickly match the lost and found item",
+                    "Report lost and found item to easily reunite the item with its owner",
+                    "Connect with administrator to further discuss the surrendering and retrieving...",
+                    "Receive notifications and alerts real-time to monitor the changes of item status"
+                ];
+                if (titleEl) titleEl.innerText = card.title || fallbackTitles[index];
+                if (descEl) descEl.innerText = card.description || fallbackDescs[index];
+                if (imgEl && card.image_path) {
+                    const path = card.image_path.startsWith('/') ? card.image_path : '/' + card.image_path;
+                    imgEl.src = path;
+                }
+            });
+        }
+    } catch (err) {
+        console.error("CMS Error:", err);
+    }
+}
+
+// --- CALL THE FUNCTION HERE ---
+document.addEventListener('DOMContentLoaded', loadAllContent);
+    </script>
+
+<section class="cta-feature">
+    <div class="feature-card animate__animated animate__zoomIn">
+        <div class="feature-text">
+            <h2 id="cms-cta-title" class="animate__animated animate__fadeInLeft animate__delay-1s">
+                Don't lose hope.<br>Find it with <span class="logo">Look<span>for</span></span>!
+            </h2>
+            <p id="cms-cta-desc" class="animate__animated animate__fadeInLeft animate__delay-1s">
+                Join our community and reunite with your lost items
+            </p>
+
+            <div class="feature-btns animate__animated animate__fadeInUp animate__delay-2s">
+                <a href="/login" class="btn-yellow pulse-animation">Get started</a>
+                <a href="/admin/Content-management/features" class="btn-link">Explore Features &rarr;</a>
+            </div>
+        </div>
+        <div class="feature-image">
+    <input type="file" 
+           id="cms-cta-file-input" 
+           style="display: none;" 
+           accept="image/*" 
+           onchange="previewImage(event, 'cms-cta-img')">
+
+    <img id="cms-cta-img" 
+         src="/static/images/students.png" 
+         alt="Community illustration" 
+         class="floating-animation"
+         style="cursor: pointer;"
+         onclick="triggerFileWindow('cms-cta-file-input')">
+</div>
+</section>
+
+<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+
+<section class="why-choose-us" data-aos="fade-up">
+    <div class="container">
+        <div class="content-wrapper">
+            <div class="icon-side" data-aos="zoom-in" data-aos-delay="200">
+                <div class="lost-box-icon">
+                    <input type="file" 
+                    id="cms-why-file-input"
+                    style="display: none;" 
+                    accept="image/*" 
+                    onchange="previewImage(event, 'cms-why-img')">
+                    <img src="/static/images/things.png" 
+                        alt="Lost Items Icon" 
+                        id="cms-why-img" 
+                        onclick="triggerFileWindow('cms-why-file-input')" 
+                        style="cursor: default; transition: 0.3s; max-width: 100%;">
+                </div>
+            </div>
+
+            <div class="text-side">
+                <h3 class="sub-headline" id="cms-why-sub" contenteditable="false">Why Choose Us</h3>
+                
+                <h2 class="main-headline" id="cms-why-title" contenteditable="false">
+                    Make reuniting with your <br><span>lost items easier.</span>
+                </h2>
+                
+                <div class="description">
+                    <p id="cms-why-desc-1" contenteditable="false">
+                        LookFor is a platform that uses AI to help you match your lost items to the found items. Making the finding of lost item easier and convenient.
+                    </p>
+                    
+                    <p id="cms-why-desc-2" contenteditable="false">
+                        An instrument to make the lost and found system innovate through the use of AI image-text matching with proven accuracy. This platform provides user-friendly report system that creates more interactive lost and found system just for STI Novaliches. Start to join the community and reunite with your lost item today with LookFor.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script>
+  AOS.init({ duration: 1000, once: true });
+</script>
+
+<section id="particles-js" class="final-features">
+    <div class="content-container" data-aos="zoom-in">
+        <h2 id="cms-reunite-title" class="reunite-header">
+            Reunite with your Lost Items Faster with <span class="logo">Look<span>for</span></span>
+        </h2>
+
+        <p id="cms-reunite-subtext" class="feature-subtext">
+            LookFor utilizes advanced AI technology to enhance the lost and found system of STI College Novaliches—from reporting and surrendering of found items to finding and retrieving of lost items.
+        </p>
+
+        <ul class="check-list">
+            <li>
+                <span class="check-icon">✔</span> 
+                <span id="cms-reunite-li-1">Explore our community-driven platform</span>
+            </li>
+            <li>
+                <span class="check-icon">✔</span> 
+                <span id="cms-reunite-li-2">Helpful AI powered image-text matching</span>
+            </li>
+            <li>
+                <span class="check-icon">✔</span> 
+                <span id="cms-reunite-li-3">Track your item's progress with notifications</span>
+            </li>
+        </ul>
+
+        <a href="/login" class="btn-primary large-btn">Start Reporting Now</a>
+    </div>
+</section>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+<section class="how-it-works">
+    <div class="container">
+        <h2 id="cms-how-title" class="section-title animate__animated animate__fadeInDown">How LookFor Works</h2>
+        
+        <div class="steps-wrapper">
+            <div class="step-card">
+                <h3 id="cms-step-1-title">Report</h3>
+                <p id="cms-step-1-desc">Lost something? Submit a report with descriptions and photos to alert our team.</p>
+            </div>
+            <div class="step-card">
+                <h3 id="cms-step-2-title">Match</h3>
+                <p id="cms-step-2-desc">Our system cross-references your report with items surrendered...</p>
+            </div>
+            <div class="step-card">
+                <h3 id="cms-step-3-title">Recover</h3>
+                <p id="cms-step-3-desc">Receive a notification, verify your ownership via chat, and claim your item!</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+<script>
+    particlesJS('particles-js', {
+        "particles": {
+            "number": { "value": 80 },
+            "color": { "value": "#005BAB" },
+            "shape": { "type": "circle" },
+            "opacity": { "value": 0.2 },
+            "size": { "value": 3 },
+            "line_linked": { "enable": true, "distance": 150, "color": "#005BAB", "opacity": 0.2, "width": 1 },
+            "move": { "enable": true, "speed": 2 }
+        },
+        "interactivity": {
+            "events": { "onhover": { "enable": true, "mode": "repulse" } }
+        }
+    });
+</script>
+<div id="canvas-container"></div>
+
+<section class="features-grid-section" data-aos="fade-up">
+    <div class="container">
+        <header class="section-header">
+            <h2 id="cms-feat-main-title">Everything you need to reunite <br><span>with your lost item</span></h2>
+            <p id="cms-feat-main-sub">From AI image-text matching to progress tracking, and community engagement, LookFor makes lost items find faster and easier</p>
+        </header>
+
+        <div class="grid-container">
+            <div class="feature-item">
+                <div class="icon-box">
+                    <input type="file" id="cms-feat-1-file" style="display: none;" accept="image/*" onchange="previewImage(event, 'cms-feat-1-img')">
+                    <img id="cms-feat-1-img" src="/static/images/ai.png" alt="AI Icon" onclick="triggerFileWindow('cms-feat-1-file')">
+                </div>
+                <div class="text-box">
+                    <h3 id="cms-feat-1-title">AI Image-Text Matching</h3>
+                    <p id="cms-feat-1-desc">Get image-text matching to quickly match the lost and found item</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">
+                    <input type="file" id="cms-feat-2-file" style="display: none;" accept="image/*" onchange="previewImage(event, 'cms-feat-2-img')">
+                    <img id="cms-feat-2-img" src="/static/images/glass.png" alt="Report Icon" onclick="triggerFileWindow('cms-feat-2-file')">
+                </div>
+                <div class="text-box">
+                    <h3 id="cms-feat-2-title">Lost and Found Report</h3>
+                    <p id="cms-feat-2-desc">Report lost and found item to easily reunite the item with its owner</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">
+                    <input type="file" id="cms-feat-3-file" style="display: none;" accept="image/*" onchange="previewImage(event, 'cms-feat-3-img')">
+                    <img id="cms-feat-3-img" src="/static/images/chat.png" alt="Chat Icon" onclick="triggerFileWindow('cms-feat-3-file')">
+                </div>
+                <div class="text-box">
+                    <h3 id="cms-feat-3-title">Conversation Chatbox</h3>
+                    <p id="cms-feat-3-desc">Connect with administrator to further discuss the surrendering and retrieving...</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <div class="icon-box">
+                    <input type="file" id="cms-feat-4-file" style="display: none;" accept="image/*" onchange="previewImage(event, 'cms-feat-4-img')">
+                    <img id="cms-feat-4-img" src="/static/images/notif.png" alt="Notification Icon" onclick="triggerFileWindow('cms-feat-4-file')">
+                </div>
+                <div class="text-box">
+                    <h3 id="cms-feat-4-title">Instant Notification</h3>
+                    <p id="cms-feat-4-desc">Receive notifications and alerts real-time to monitor the changes of item status</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    for (let i = 0; i < 5000; i++) {
+        vertices.push(THREE.MathUtils.randFloatSpread(2000)); // x
+        vertices.push(THREE.MathUtils.randFloatSpread(2000)); // y
+        vertices.push(THREE.MathUtils.randFloatSpread(2000)); // z
+    }
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const material = new THREE.PointsMaterial({ color: 0x005BAB, size: 2 });
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+
+    camera.position.z = 1000;
+
+    function animate() {
+        requestAnimationFrame(animate);
+        points.rotation.x += 0.0005;
+        points.rotation.y += 0.0005;
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+</script>
+<section class="faq-section" data-aos="fade-up">
+    <div class="container">
+        <h2 class="section-title">Frequently asked questions</h2>
+        
+        <div class="faq-container">
+            <div class="faq-card">
+                <h3>Where is the Admin Office Located?</h3>
+                <p>You can find the admin at 3<sup>rd</sup> floor of the STI College Novaliches Building.</p>
+            </div>
+
+            <div class="faq-card">
+                <h3>How long do you keep unclaimed items?</h3>
+                <p>Items are kept for the entire semester. After this period the unclaimed items are disposed according to the school policy.</p>
+            </div>
+
+            <div class="faq-card">
+                <h3>What proof do I need to claim an item?</h3>
+                <p>You need to present your School ID and be able to describe the unique features of the item.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer class="social-footer">
+    <div class="footer-icons">
+        <a href="#"><i class="fab fa-youtube"></i> YouTube</a>
+        <a href="#"><i class="fab fa-instagram"></i>Facebook</a>
+        <a href="#"><i class="fab fa-facebook-f"></i>Instagram</a>
+        <a href="#"><i class="fab fa-x-twitter"></i>X</a>
+    </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/typed.js@2.0.12"></script>
+<script>
+  var typed = new Typed('.section-title', {
+    strings: ['Frequently asked questions', 'Got questions?', 'We have answers.'],
+    typeSpeed: 50,
+    backSpeed: 30,
+    loop: true
+  });
+</script>
+<script>// Simple scroll observer to trigger transitions
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('animate__fadeInUp');
+        }
+    });
+});
+
+document.querySelectorAll('.step-card').forEach((card) => {
+    observer.observe(card);
+});</script>
+
+<script>// Highlight active nav link based on scroll position
+const sections = document.querySelectorAll("section");
+const navLinks = document.querySelectorAll(".navbar nav ul li a");
+
+window.addEventListener("scroll", () => {
+  let current = "";
+
+  sections.forEach(section => {
+    const sectionTop = section.offsetTop;
+    const sectionHeight = section.clientHeight;
+    if (pageYOffset >= sectionTop - sectionHeight / 3) {
+      current = section.getAttribute("id");
+    }
+  });
+
+  navLinks.forEach(link => {
+    link.classList.remove("active");
+    if (link.getAttribute("href").includes(current)) {
+      link.classList.add("active");
+    }
+  });
+});
+// Shrink navbar on scroll
+let lastScrollTop = 0;
+const navbar = document.querySelector(".navbar");
+
+window.addEventListener("scroll", () => {
+  let scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+  if (lastScrollTop >scrollTop ) {
+    // scrolling down → show navbar
+    navbar.classList.remove("hidden");
+  } else {
+    // scrolling up → hide navbar
+    navbar.classList.add("hidden");
+  }
+
+  lastScrollTop = scrollTop <= 0 ? 0 : scrollTop; // avoid negative values
+
+
+
+
+  
+});
+// --- CMS EDIT MODE LOGIC (Must be outside the scroll listener) ---
+let isEditMode = false;
+
+function toggleEditMode() {
+    isEditMode = !isEditMode;
+    
+    // Text elements logic (as we did before)
+    const textElements = [
+        'cms-hero-title', 
+        'cms-hero-desc', 
+        'cms-why-sub', 
+        'cms-why-title', 
+        'cms-why-desc-1', 
+        'cms-why-desc-2',
+        'cms-cta-title', 
+        'cms-cta-desc',// --- NEW REUNITE IDs ---
+        'cms-reunite-title', 
+        'cms-reunite-subtext', 
+        'cms-reunite-li-1', 
+        'cms-reunite-li-2', 
+        'cms-reunite-li-3',
+        'cms-step-1-title', 'cms-step-1-desc',
+        'cms-step-2-title', 'cms-step-2-desc',
+        'cms-step-3-title', 'cms-step-3-desc',
+        'cms-feat-main-title', 'cms-feat-main-sub',
+        'cms-feat-1-title', 'cms-feat-1-desc',
+        'cms-feat-2-title', 'cms-feat-2-desc',
+        'cms-feat-3-title', 'cms-feat-3-desc',
+        'cms-feat-4-title', 'cms-feat-4-desc'];
+    textElements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.contentEditable = isEditMode ? "true" : "false";
+            el.style.border = isEditMode ? "2px dashed #ffc107" : "none";
+        }
+    });
+
+    // --- NEW: Image Logic ---
+    const whyImg = document.getElementById('cms-why-img');
+    const ctaImg = document.getElementById('cms-cta-img');
+    const featImgs = ['cms-feat-1-img', 'cms-feat-2-img', 'cms-feat-3-img', 'cms-feat-4-img'];
+    [whyImg, ctaImg, ...featImgs.map(id => document.getElementById(id))].forEach(img => {
+        if (img) {
+            img.style.border = isEditMode ? "4px solid #ffc107" : "none";
+            img.style.cursor = isEditMode ? "pointer" : "default";
+            img.title = isEditMode ? "Click to change image path" : "";
+        }
+    });
+
+    // Button logic
+    const editBtn = document.getElementById('edit-mode-btn');
+    const saveBtn = document.getElementById('save-cms-btn');
+    editBtn.innerHTML = isEditMode ? "🚫 Cancel" : "✏️ Edit Content";
+    saveBtn.style.display = isEditMode ? "block" : "none";
+}
+function triggerFileWindow(targetId) {
+    console.log("Attempting to open input:", targetId);
+    if (!isEditMode) {
+        console.warn("Edit mode is OFF. Click the Edit button first.");
+        return;
+    }
+    const input = document.getElementById(targetId);
+    if (input) {
+        input.click();
+    } else {
+        console.error("Could not find input with ID:", targetId);
+    }
+}
+
+function previewImage(event, outputId) {
+    console.log("File selected. Attempting to preview in:", outputId);
+    const reader = new FileReader();
+    reader.onload = function() {
+        const output = document.getElementById(outputId);
+        if (output) {
+            output.src = reader.result;
+            console.log("Preview source updated successfully.");
+        } else {
+            console.error("Could not find image tag with ID:", outputId);
+        }
+    };
+    
+    if (event.target.files[0]) {
+        reader.readAsDataURL(event.target.files[0]);
+    } else {
+        console.warn("No file was actually selected.");
+    }
+}
+
+async function saveDirectChanges() {
+    const saveBtn = document.getElementById('save-cms-btn');
+    
+    // Inputs
+    const whyFileInput = document.getElementById('cms-why-file-input');
+    const ctaFileInput = document.getElementById('cms-cta-file-input');
+    
+    saveBtn.innerHTML = "⏳ Saving...";
+    saveBtn.disabled = true;
+
+    const formData = new FormData();
+
+    // 1. Hero
+    formData.append("hero_title", document.getElementById('cms-hero-title').innerHTML);
+    formData.append("hero_desc", document.getElementById('cms-hero-desc').innerText);
+
+    // 2. Why Choose Us
+    formData.append("why_title", document.getElementById('cms-why-title').innerHTML);
+    formData.append("why_desc_1", document.getElementById('cms-why-desc-1').innerText);
+    formData.append("why_desc_2", document.getElementById('cms-why-desc-2').innerText);
+    if (whyFileInput.files[0]) formData.append("why_img", whyFileInput.files[0]);
+
+    // 3. CTA Section (New)
+    formData.append("cta_title", document.getElementById('cms-cta-title').innerHTML);
+    formData.append("cta_desc", document.getElementById('cms-cta-desc').innerText);
+    if (ctaFileInput.files[0]) formData.append("cta_img", ctaFileInput.files[0]);
+
+    // --- REUNITE SECTION DATA ---
+    formData.append("reunite_title", document.getElementById('cms-reunite-title').innerHTML);
+    // Inside your saveDirectChanges function:
+    const reuniteSub = document.getElementById('cms-reunite-subtext').innerText;
+    const li1 = document.getElementById('cms-reunite-li-1').innerText;
+    const li2 = document.getElementById('cms-reunite-li-2').innerText;
+    const li3 = document.getElementById('cms-reunite-li-3').innerText;
+
+    // --- 5. NEW: HOW IT WORKS SECTION DATA ---
+    const howItWorksTitle = document.getElementById('cms-how-title').innerHTML;
+    const step1T = document.getElementById('cms-step-1-title').innerText;
+    const step1D = document.getElementById('cms-step-1-desc').innerText;
+    const step2T = document.getElementById('cms-step-2-title').innerText;
+    const step2D = document.getElementById('cms-step-2-desc').innerText;
+    const step3T = document.getElementById('cms-step-3-title').innerText;
+    const step3D = document.getElementById('cms-step-3-desc').innerText;
+
+// Combine them into one string
+const combinedDesc = `${reuniteSub}|||${li1}|||${li2}|||${li3}`;
+const howItWorksCombined = `${step1T}|||${step1D}|||${step2T}|||${step2D}|||${step3T}|||${step3D}`;
+formData.append("how_it_works_title", howItWorksTitle);
+formData.append("how_it_works_desc", howItWorksCombined);
+
+// Append this to match your Python "reunite_desc"
+formData.append("reunite_desc", combinedDesc);
+formData.append("features_main_title", document.getElementById('cms-feat-main-title').innerHTML);
+formData.append("features_main_sub", document.getElementById('cms-feat-main-sub').innerText);
+
+for (let i = 1; i <= 4; i++) {
+    formData.append(`feature_${i}_title`, document.getElementById(`cms-feat-${i}-title`).innerText);
+    formData.append(`feature_${i}_desc`, document.getElementById(`cms-feat-${i}-desc`).innerText);
+    const featureFileInput = document.getElementById(`cms-feat-${i}-file`);
+    if (featureFileInput && featureFileInput.files[0]) {
+        formData.append(`feature_${i}_img`, featureFileInput.files[0]);
+    }
+}
+
+    try {
+        const response = await fetch('/admin/api/update-content/bulk', {
+            method: 'POST',
+            headers: { 
+                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+            },
+            body: formData 
+        });
+
+        if (response.ok) {
+            alert("✨ All changes saved to system!");
+            toggleEditMode();
+        } else {
+            const result = await response.json();
+            alert("❌ Save failed: " + (result.detail || "Unknown error"));
+        }
+    } catch (err) {
+        alert("❌ Network error.");
+    } finally {
+        saveBtn.innerHTML = "💾 Save Changes";
+        saveBtn.disabled = false;
+    }
+}
+loadAllContent();
+</script>
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/force-password-change.js"></script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+(function () {
+    const STORAGE_KEY = "active_bulk_registration_job_id";
+    const POLL_INTERVAL_MS = 3000;
+    let poller = null;
+
+    function getJobId() {
+        return localStorage.getItem(STORAGE_KEY);
+    }
+
+    function clearJobId() {
+        localStorage.removeItem(STORAGE_KEY);
+    }
+
+    function ensureBanner() {
+        let banner = document.getElementById("adminBulkJobBanner");
+        if (banner) return banner;
+
+        banner = document.createElement("div");
+        banner.id = "adminBulkJobBanner";
+        banner.style.cssText = [
+            "display:none",
+            "position:fixed",
+            "right:20px",
+            "bottom:20px",
+            "width:320px",
+            "padding:16px",
+            "border-radius:16px",
+            "background:linear-gradient(135deg,#0f2f57,#1e4f86)",
+            "color:#fff",
+            "box-shadow:0 14px 34px rgba(0,51,102,.22)",
+            "z-index:9999",
+            "font-family:Montserrat,sans-serif"
+        ].join(";");
+
+        banner.innerHTML = `
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+                <div>
+                    <div id="adminBulkJobBannerTitle" style="font-size:15px; font-weight:700;">Student upload in progress</div>
+                    <div id="adminBulkJobBannerMessage" style="margin-top:4px; font-size:12px; opacity:.92;">Processing students in the background.</div>
+                </div>
+                <button id="adminBulkJobBannerDismiss" type="button" style="background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; line-height:1;">×</button>
+            </div>
+            <div style="margin-top:12px; height:10px; border-radius:999px; background:rgba(255,255,255,.18); overflow:hidden;">
+                <div id="adminBulkJobBannerProgress" style="width:0%; height:100%; background:linear-gradient(90deg,#f7b500,#ffd95a); transition:width .25s ease;"></div>
+            </div>
+            <div id="adminBulkJobBannerMeta" style="margin-top:10px; font-size:12px; opacity:.92;">Preparing background registration...</div>
+            <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+                <button id="adminBulkJobBannerOpen" type="button" style="display:none; border:none; border-radius:999px; padding:8px 14px; background:#ffd95a; color:#0f2f57; font-weight:700; cursor:pointer;">Open User Management</button>
+            </div>
+        `;
+
+        document.body.appendChild(banner);
+
+        document.getElementById("adminBulkJobBannerDismiss")?.addEventListener("click", () => {
+            clearJobId();
+            hideBanner();
+            stopPolling();
+        });
+
+        document.getElementById("adminBulkJobBannerOpen")?.addEventListener("click", () => {
+            window.location.href = "/admin/User-Management?tab=student";
+        });
+
+        return banner;
+    }
+
+    function hideBanner() {
+        const banner = document.getElementById("adminBulkJobBanner");
+        if (banner) banner.style.display = "none";
+    }
+
+    function renderBanner(job) {
+        if (window.location.pathname === "/admin/User-Management") {
+            hideBanner();
+            return;
+        }
+
+        const banner = ensureBanner();
+        const title = document.getElementById("adminBulkJobBannerTitle");
+        const message = document.getElementById("adminBulkJobBannerMessage");
+        const meta = document.getElementById("adminBulkJobBannerMeta");
+        const progress = document.getElementById("adminBulkJobBannerProgress");
+        const openBtn = document.getElementById("adminBulkJobBannerOpen");
+
+        if (!banner || !title || !message || !meta || !progress || !openBtn) return;
+
+        banner.style.display = "block";
+        progress.style.width = `${job.progress || 0}%`;
+
+        const summary = job.summary || {};
+        const processed = job.processed || 0;
+        const total = job.total || 0;
+
+        if (job.status === "completed") {
+            title.innerText = "Student upload completed";
+            message.innerText = "The background registration finished successfully.";
+            meta.innerText = `Processed ${processed}/${total}. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
+            openBtn.style.display = "inline-flex";
+            stopPolling();
+            return;
+        }
+
+        if (job.status === "failed") {
+            title.innerText = "Student upload failed";
+            message.innerText = job.error || job.message || "The background registration stopped before finishing.";
+            meta.innerText = `Processed ${processed}/${total} students before it stopped.`;
+            openBtn.style.display = "inline-flex";
+            stopPolling();
+            return;
+        }
+
+        title.innerText = job.status === "queued" ? "Student upload queued" : "Student upload in progress";
+        message.innerText = job.message || "Processing students in the background while you keep using the system.";
+        meta.innerText = `Processed ${processed}/${total}. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
+        openBtn.style.display = "none";
+    }
+
+    async function pollJobStatus() {
+        const token = localStorage.getItem("admin_token");
+        const jobId = getJobId();
+        if (!token || !jobId) {
+            hideBanner();
+            stopPolling();
+            return;
+        }
+
+        try {
+            const response = await fetch(`/admin/bulk-register-students/status/${jobId}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            const job = await response.json();
+            if (!response.ok) {
+                throw new Error(job.detail || "Failed to fetch bulk registration status.");
+            }
+
+            renderBanner(job);
+        } catch (error) {
+            console.error("Cross-page bulk registration polling failed:", error);
+            clearJobId();
+            hideBanner();
+            stopPolling();
+        }
+    }
+
+    function stopPolling() {
+        if (poller) {
+            clearInterval(poller);
+            poller = null;
+        }
+    }
+
+    function startPolling() {
+        if (!getJobId() || !localStorage.getItem("admin_token")) return;
+        if (poller) clearInterval(poller);
+        pollJobStatus();
+        poller = setInterval(pollJobStatus, POLL_INTERVAL_MS);
+    }
+
+    startPolling();
+    window.addEventListener("pageshow", startPolling);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+            startPolling();
+        }
+    });
+})();

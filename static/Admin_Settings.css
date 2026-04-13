@@ -1,0 +1,133 @@
+/* admin2.o.css additions */
+:root {
+  --card-bg: #ffffff;
+  --sti-blue: #005bab;
+  --text-dark: #333;
+  --border-light: rgba(0, 0, 0, 0.1);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --shadow-strong: 4px 4px 0px #000;
+}
+
+body.dark-theme {
+    --bg-color: #1a1c23;
+    --card-bg: #242631;
+    --text-color: #e1e1e1;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-size: var(--base-font-size);
+    transition: all 0.3s ease;
+}
+
+/* ==================================================
+   VARIABLES
+================================================== */
+
+
+/* ==================================================
+   SETTINGS CARD
+================================================== */
+.settings-card {
+  background: var(--card-bg);
+  padding: 24px;
+  border-radius: 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-soft);
+}
+
+/* ==================================================
+   SETTING ITEM
+================================================== */
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  margin: 8px 0;
+  border-bottom: 1px solid var(--border-light);
+  font-family: Arial, sans-serif;
+}
+
+.setting-item:last-child {
+  border-bottom: none;
+}
+
+.setting-item label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+/* ==================================================
+   BUTTONS
+================================================== */
+.btn-outline {
+  height: 32px;
+  padding: 0 12px;
+  color: #fff;
+  background: var(--sti-blue);
+  border: 1px solid #000;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.btn-outline:hover {
+  background: #004a91;
+}
+
+.btn-outline:active {
+  transform: scale(0.97);
+}
+
+/* ==================================================
+   RESET BUTTON (Primary)
+================================================== */
+.btn-reset {
+  background-color: var(--sti-blue);
+  color: #fff;
+  border: 2px solid #333;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-weight: bold;
+  font-size: 16px;
+  cursor: pointer;
+  margin: 0 0 30px 10px;
+  box-shadow: var(--shadow-strong);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.btn-reset:hover {
+  transform: translateY(-2px);
+  box-shadow: 6px 6px 0px #000;
+}
+
+.btn-reset:active {
+  transform: translateY(0);
+  box-shadow: 3px 3px 0px #000;
+}
+
+#notif-sound {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background-color: #f9f9f9;
+  color: #333;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+#notif-sound:hover {
+  border-color: #0078d7;
+  background-color: #eef6ff;
+}
+
+#notif-sound:focus {
+  outline: none;
+  border-color: #0078d7;
+  box-shadow: 0 0 4px rgba(0, 120, 215, 0.6);
+}

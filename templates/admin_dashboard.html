@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel | LookFor STI</title>
+    
+    <link rel="stylesheet" href="{{ url_for('static', path='admin.css') }}?v=6.0">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+    
+    
+</head>
+
+
+
+<body class="dashboard-body">
+
+    <nav class="navbar admin-nav">
+    <div class="nav-logo">LookFor <small>(Admin)</small></div>
+    <ul class="topbar-menu">
+        <li><a href="/admin/dashboard" class="nav-item active">Home</a></li>
+        
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif">No new notifications</div>
+                </div>
+            </div>
+        </li>
+
+        <li><a href="javascript:void(0)" class="logout-link" onclick="logout()">Logout</a></li>
+    </ul>
+</nav>
+
+    <div class="dashboard-container">
+        <div class="alert-box info">
+            <strong>System Notice:</strong> 3 students are currently looking for "Calculators". Check inventory.
+        </div>
+        
+        <div class="summary-grid">
+            <div class="stat-card" onclick="openFoundItemsModal()"><h3 id="foundCount">0</h3><p>Items Found</p></div>
+            <div class="stat-card"><h3>12</h3><p>Items Lost</p></div>
+            <div class="stat-card"><h3>08</h3><p>Successfully Claimed</p></div>
+            <div class="stat-card" onclick="openPendingSurrenderModal()"><h3 id="pendingCount">0</h3><p>Pending Surrender</p>
+</div>
+        </div>
+
+        <div class="admin-actions">
+            <button class="btn-primary success-btn" onclick="openModal('uploadModal')">+ Upload Found Item</button>
+            <button class="btn-primary" onclick="openModal('bulkRegisterModal')">+ Bulk Register Students</button>
+            <button class="btn-primary" onclick="openFoundItemsModal()">📦 View Found Items</button>
+        </div>
+<!-- LEFT SIDEBAR -->
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">LookFor Admin</div>
+        <div class="sidebar-toggle" onclick="toggleSidebar()">☰</div>
+    </div>
+    <ul class="sidebar-menu">
+        <li onclick="openFoundItemsModal()"><span class="icon">📦</span><span class="text">Found Items</span></li>
+        <li onclick="openPendingSurrenderModal()"><span class="icon">📝</span><span class="text">Pending Surrender</span></li>
+        <li onclick="openModal('uploadModal')"><span class="icon">➕</span><span class="text">Upload Item</span></li>
+        <li onclick="openModal('bulkRegisterModal')"><span class="icon">👥</span><span class="text">Bulk Register</span></li>
+        <li onclick="toggleChat()"><span class="icon">💬</span><span class="text">Chat</span></li>
+        <li onclick="logout()"><span class="icon">🚪</span><span class="text">Logout</span></li>
+    </ul>
+</div>
+      
+    </div>
+
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('uploadModal')">&times;</span>
+            <h2>Upload Found Item</h2>
+            <form id="uploadForm" onsubmit="handleUpload(event)">
+                <div class="form-group">
+                    <label>Item Name</label>
+                    <input type="text" id="itemName" placeholder="e.g. Black Wallet" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="itemCat">
+                        <option>Electronics</option>
+                        <option>Documents/IDs</option>
+                        <option>Personal Belongings</option>
+                        <option>Others</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary success-btn">Post Item</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="bulkRegisterModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('bulkRegisterModal')">&times;</span>
+            <h2>Bulk Register Students</h2>
+            <p>Enter STI Emails (one per line):</p>
+            <textarea id="bulkEmails" placeholder="user@novaliches.sti.edu.ph" style="width: 100%; height: 150px; margin: 15px 0; padding: 10px;"></textarea>
+            <button class="btn-primary success-btn" onclick="submitBulk()" style="width: 100%;">Generate Accounts</button>
+        </div>
+    </div>
+
+    <div id="foundItemsModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                <h2>Found Items Inventory</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button class="refresh-btn" onclick="loadFoundItems()" style="padding: 5px 15px;">🔄 Sync AI</button>
+                    <span class="close-modal" onclick="closeModal('foundItemsModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="filter-bar" style="display: flex; gap: 10px; margin-bottom: 20px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+                    <input type="text" id="filterCategory" placeholder="Category..." oninput="loadFoundItems()">
+                    <input type="text" id="filterLocation" placeholder="Location..." oninput="loadFoundItems()">
+                    <input type="date" id="filterDate" onchange="loadFoundItems()">
+                    <button onclick="clearFilters()" class="btn-secondary">Reset</button>
+                </div>
+                <div class="items-grid" id="itemsGrid">
+                    </div>
+            </div>
+            <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
+                <button class="btn-secondary" onclick="closeModal('foundItemsModal')">Close Window</button>
+            </div>
+        </div>
+    </div>
+     <div id="bulkRegisterModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal('bulkRegisterModal')">&times;</span>
+            <h2>Bulk Register Students</h2>
+            <p>Enter STI Emails (one per line):</p>
+            <textarea id="bulkEmails" placeholder="user@novaliches.sti.edu.ph" style="width: 100%; height: 150px; margin: 15px 0; padding: 10px;"></textarea>
+            <button class="btn-primary success-btn" onclick="submitBulk()" style="width: 100%;">Generate Accounts</button>
+        </div>
+    </div>
+    <div id="bulkResultModal" class="modal">
+        <div class="modal-content report-style">
+            <div class="modal-header">
+                <span class="close-modal" onclick="closeModal('bulkResultModal')">&times;</span>
+                <h2>Registration Report</h2>
+            </div>
+            <div class="modal-body">
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>Student Email</th>
+                            <th>Temporary Password</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bulkResultBody"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" onclick="window.print()">Print</button>
+                <button class="btn-secondary" onclick="closeModal('bulkResultModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-widget" id="chatWidget" style="display:none;">
+        <div class="chat-header" onclick="toggleChat()">
+            <span>Chat with Finder</span>
+            <span class="status-dot"></span>
+        </div>
+        <div class="chat-body" id="chatBody">
+            <div class="message user">Hello! How can I help you?</div>
+            <div class="message admin">I lost my wallet. Has it been found?</div>
+        </div>
+        <div class="chat-footer">
+            <input type="text" placeholder="Type a message..." id="chatInput">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+    <div class="chat-toggle" onclick="toggleChat()">💬</div>
+
+    <div id="adminActionModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2 id="adminModalTitle">Items</h2>
+            <span class="close-modal" onclick="closeModal('adminActionModal')">&times;</span>
+        </div>
+        <div id="adminModalList" class="modal-body" style="max-height: 450px; overflow-y: auto;">
+            </div>
+    </div>
+</div>
+
+    <script>
+    // --- GLOBAL STATE ---
+    let notifications = [];
+    window.allPending = []; // Initialize to prevent "undefined" errors
+    window.allFound = [];
+    function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('collapsed');
+}
+    // --- NOTIFICATION LOGIC ---
+    function toggleNotifications() {
+        const dropdown = document.getElementById("notificationDropdown");
+        dropdown.style.display =
+            dropdown.style.display === "block" ? "none" : "block";
+    }
+
+    async function loadNotifications() {
+        const token = localStorage.getItem("admin_token");
+        try {
+            const res = await fetch("/admin/notifications", {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to fetch");
+            const data = await res.json();
+            notifications = data; 
+            updateNotificationUI();
+        } catch (err) {
+            console.error("Notification Sync Error:", err);
+        }
+    }
+
+    function updateNotificationUI() {
+        const list = document.getElementById("notificationList");
+        const emptyText = document.getElementById("emptyNotif");
+        const countBadge = document.getElementById("notificationCount");
+        if (!list) return;
+
+        list.innerHTML = "";
+
+        if (notifications && notifications.length > 0) {
+            if (emptyText) emptyText.style.display = "none";
+            notifications.forEach(n => {
+                const li = document.createElement("li");
+                const unreadClass = !n.is_read ? "unread" : "";
+                const icon = n.type === 'match' ? '🔥' : '🔔';
+                li.innerHTML = `
+                    <div class="notif-msg ${unreadClass}" onclick="handleNotifClick(${n.id})" style="cursor:pointer; border-bottom:1px solid #eee; padding: 8px 0;">
+                        <strong>${icon} Alert:</strong> ${n.message}
+                        <br><small style="color:gray;">${new Date(n.created_at).toLocaleTimeString()}</small>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+            countBadge.innerText = notifications.length;
+            countBadge.style.display = "block";
+        } else {
+            if (emptyText) emptyText.style.display = "block";
+            countBadge.style.display = "none";
+        }
+
+        const unread = notifications.filter(n => !n.is_read).length;
+        countBadge.innerText = unread;
+        countBadge.style.display = unread > 0 ? "block" : "none";
+    }
+
+    async function handleNotifClick(notifId) {
+        const token = localStorage.getItem("admin_token");
+        const notif = notifications.find(n => n.id === notifId);
+        if (notif) {
+            notif.is_read = true;
+            updateNotificationUI();
+        }
+        try {
+            await fetch(`/admin/notifications/read/${notifId}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (notif?.type === "user_management_students") {
+                window.location.href = "/admin/User-Management?tab=student";
+                return;
+            }
+            if (notif?.type === "user_management_admin") {
+                window.location.href = "/admin/User-Management?tab=admin";
+                return;
+            }
+            loadNotifications();
+        } catch (err) {
+            console.error("Error marking as read:", err);
+        }
+    }
+
+    function notifyNewFoundItem(itemName, finderName) {
+        const newNotif = {
+            id: Date.now(),
+            message: `New Found Item: "${itemName}" reported by ${finderName}`,
+            created_at: new Date().toISOString(),
+            is_read: false
+        };
+        notifications.unshift(newNotif);
+        updateNotificationUI();
+    }
+
+    // --- DASHBOARD STATS & ACTIONS ---
+    async function updateDashboardStats() {
+        const token = localStorage.getItem("admin_token");
+        try {
+            const resPending = await fetch('/admin/pending-items', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const pendingItems = await resPending.json();
+            document.getElementById('pendingCount').innerText = pendingItems.length;
+            window.allPending = pendingItems;
+
+            const resFound = await fetch('/admin/items/found', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const foundItems = await resFound.json();
+            document.getElementById('foundCount').innerText = foundItems.length;
+            window.allFound = foundItems;
+        } catch (err) {
+            console.error("Stats sync failed");
+        }
+    }
+
+    function openPendingSurrenderModal() {
+        const container = document.getElementById('adminModalList');
+        document.getElementById('adminModalTitle').innerText = "Pending Surrender Items";
+        
+        if (!window.allPending || window.allPending.length === 0) {
+            container.innerHTML = "<p style='text-align:center; padding:20px;'>No pending approvals.</p>";
+        } else {
+            container.innerHTML = window.allPending.map(item => `
+                <div class="modal-item-row" style="display:flex; align-items:center; gap:15px; padding:10px; border-bottom:1px solid #eee;">
+                   <img src="/static/${item.image_path}" style="width:60px; height:60px; object-fit:cover; border-radius:5px;">
+                    <div style="flex:1;">
+                        <strong>${item.category}</strong>
+                        <p style="font-size:12px; margin:0;">${item.description}</p>
+                    </div>
+                    <div style="display:flex; gap:5px;">
+                        <button onclick="processAction(${item.id}, 'approve')" style="background:#28a745; color:white; border:none; padding:5px 10px; border-radius:3px; cursor:pointer;">Approve</button>
+                        <button onclick="processAction(${item.id}, 'archive')" style="background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:3px; cursor:pointer;">Reject</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        openModal('adminActionModal');
+    }
+
+    async function processAction(id, action) {
+        const token = localStorage.getItem("admin_token");
+        const endpoint = action === 'approve' ? `/admin/approve/${id}` : `/admin/archive/${id}`;
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                closeModal('adminActionModal');
+                updateDashboardStats();
+                alert(`Item ${action}d successfully.`);
+            }
+        } catch (err) {
+            alert("Action failed.");
+        }
+    }
+
+    // --- FOUND ITEMS LOGIC ---
+    function openFoundItemsModal() {
+        openModal('foundItemsModal');
+        loadFoundItems();
+    }
+
+    async function loadFoundItems() {
+        const grid = document.getElementById("itemsGrid");
+        if (!grid) return;
+
+        // 1. Capture the filter values from your HTML inputs
+        const category = document.getElementById("filterCategory")?.value || "";
+        const location = document.getElementById("filterLocation")?.value || "";
+        const date = document.getElementById("filterDate")?.value || "";
+
+        grid.innerHTML = '<p class="loading-text">Loading...</p>';
+
+        try {
+            // 2. Append the filters as Query Parameters to the URL
+            const url = `/admin/items/found?category=${encodeURIComponent(category)}&location=${encodeURIComponent(location)}&date=${date}`;
+            
+            const res = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            });
+
+            const items = await res.json();
+            
+            if (!items?.length) {
+                grid.innerHTML = '<p class="empty-state">No items match your filters.</p>';
+                return;
+            }
+
+            // 3. Render the grid (Same logic as your original code)
+            grid.innerHTML = items.map(item => {
+                const cleanPath = (item.image_path || "").replace(/\\/g, '/');
+                const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+                
+                return `
+                <div class="item-card" data-item-id="${item.id}">
+                    <div class="item-image-wrapper">
+                        <img src="${imageUrl}" alt="${item.category || 'Item'}" onerror="this.onerror=null; this.src='https://via.placeholder.com/150?text=No+Image';">
+                    </div>
+                    <div class="item-content">
+                        <h4>${escapeHtml(item.category)}</h4>
+                        <p><strong>Location:</strong> ${escapeHtml(item.location || 'N/A')}</p>
+                        <p>${escapeHtml(item.description)}</p>
+                        <div class="item-footer">
+                            <span>${item.date ? new Date(item.date).toLocaleDateString() : 'No Date'}</span>
+                            <button onclick="archiveFound(${item.id})">Archive</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (err) {
+            grid.innerHTML = `<p class="error-state">Error: ${err.message}</p>`;
+        }
+    }
+    async function archiveFound(itemId) {
+        if (!confirm('Archive this item?')) return;
+        const token = localStorage.getItem("admin_token");
+        try {
+            const res = await fetch(`/admin/archive/${itemId}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const card = document.querySelector(`[data-item-id="${itemId}"]`);
+                if (card) card.remove();
+                const grid = document.getElementById("itemsGrid");
+                if (grid.children.length === 0) grid.innerHTML = '<p class="empty-state">No found items yet.</p>';
+            }
+        } catch (err) {
+            alert('Error archiving item');
+        }
+    }
+
+    // --- BULK REGISTRATION & UTILS ---
+    async function submitBulk() {
+        const btn = document.querySelector("#bulkRegisterModal .success-btn");
+        const modalContent = document.querySelector("#bulkRegisterModal .modal-content");
+        const textArea = document.getElementById('bulkEmails');
+        const token = localStorage.getItem("admin_token");
+        const rawEmails = textArea.value.split('\n').map(e => e.trim()).filter(e => e !== "");
+        const validEmails = rawEmails.filter(e => e.endsWith("@novaliches.sti.edu.ph"));
+
+        if (validEmails.length === 0) {
+            modalContent.classList.add('shake');
+            setTimeout(() => modalContent.classList.remove('shake'), 400);
+            return alert("Please enter valid STI emails.");
+        }
+        btn.innerText = "Processing...";
+        try {
+            const response = await fetch('/admin/bulk-register-students', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(validEmails)
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const tbody = document.getElementById('bulkResultBody');
+                tbody.innerHTML = data.map((item, index) => {
+                    const isRegistered = item.temp_password === "Already Registered";
+                    return `
+                        <tr>
+                            <td>${item.email}</td>
+                            <td id="pass-cell-${index}">
+                                ${isRegistered ? `<button class="btn-primary" style="font-size:10px; padding:2px 5px;" onclick="resetSingle('${item.email}', ${index})">Reset</button>` : `<code>${item.temp_password}</code>`}
+                            </td>
+                        </tr>`;
+                }).join('');
+                closeModal('bulkRegisterModal');
+                setTimeout(() => openModal('bulkResultModal'), 300);
+                textArea.value = "";
+            }
+        } catch (err) { alert("Bulk registration failed."); }
+        finally { btn.innerText = "Generate Accounts"; }
+    }
+
+    async function resetSingle(email, index) {
+        const token = localStorage.getItem("admin_token");
+        const cell = document.getElementById(`pass-cell-${index}`);
+        if (!confirm(`Reset password for ${email}?`)) return;
+        cell.innerHTML = "Processing...";
+        try {
+            const response = await fetch('/admin/reset-student-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ email: email })
+            });
+            const result = await response.json();
+            if (response.ok) {
+                cell.innerHTML = `<code style="color: #28a745;">${result.new_temp_password}</code>`;
+                alert("Password reset successfully!");
+            }
+        } catch (err) { cell.innerHTML = "Failed"; }
+    }
+
+    function openModal(id) {
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = "flex";
+    }
+
+    function closeModal(id) {
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = 'none';
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function toggleChat() {
+        const chat = document.getElementById('chatWidget');
+        chat.style.display = (chat.style.display === 'none') ? 'flex' : 'none';
+    }
+
+    function logout() {
+        localStorage.clear();
+        window.location.href = "/";
+    }
+
+    // --- LIFECYCLE HANDLERS ---
+    window.onload = function() {
+        loadNotifications();
+        loadFoundItems();
+    };
+
+    window.addEventListener("DOMContentLoaded", () => {
+        if (!localStorage.getItem("admin_token")) window.location.href = "/";
+        updateDashboardStats();
+        setInterval(loadNotifications, 20000);
+        setInterval(updateDashboardStats, 30000);
+    });
+
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.style.display = 'none';
+        }
+    };
+</script>
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/force-password-change.js"></script>
+</body>
+</html>

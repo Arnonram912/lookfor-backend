@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LookFor | Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='landing.css') }}?v=5.0">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        .reset-btn {
+    background-color: #f39c12; /* STI Orange/Warning */
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.reset-btn:hover {
+    background-color: #e67e22;
+}
+
+/* Make sure the temp-pass looks like a code snippet */
+.temp-pass {
+    font-family: 'Courier New', monospace;
+    background: #f4f4f4;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    font-weight: 600;
+}
+
+#loginError {
+    display: none;
+}
+
+#mfaGroup {
+    display: none;
+}
+
+#resetCodeGroup,
+#newPasswordGroup,
+#confirmPasswordGroup,
+#resetHelp {
+    display: none;
+}
+
+/* MODAL OVERLAY */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+/* MODAL BOX */
+.modal-box {
+    width: 100%;
+    max-width: 420px;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 28px 24px 22px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    position: relative;
+    animation: modalPop 0.2s ease;
+}
+
+/* ANIMATION */
+@keyframes modalPop {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* TITLE */
+.modal-box h3 {
+    margin: 0 0 8px;
+    color: #003366;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+/* SUBTITLE */
+.modal-subtitle {
+    margin: 0 0 18px;
+    color: #666;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+/* CLOSE BUTTON */
+.modal-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    border: none;
+    background: transparent;
+    font-size: 1.8rem;
+    cursor: pointer;
+    color: #666;
+}
+
+.modal-close:hover {
+    color: #000;
+}
+
+/* ACTION BUTTONS */
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.modal-cancel-btn,
+.modal-send-btn {
+    border: none;
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* CANCEL */
+.modal-cancel-btn {
+    background: #e9edf3;
+    color: #333;
+}
+
+/* SEND BUTTON */
+.modal-send-btn {
+    background: #005BAB;
+    color: white;
+}
+
+.modal-send-btn:hover {
+    background: #004a8d;
+}
+    </style>
+</head>
+<body>
+    <div class="background-overlay">
+    <div class="login-container">
+        <h1 class="logo">Look<span>For</span></h1>
+        <h2 class="login-title">Login</h2>
+        <p class="subtitle">Sign in to continue.</p>
+
+        <form class="login-form" id="loginForm">
+            <div class="input-group">
+                <label for="email">EMAIL</label>
+                <input type="email" id="email" name="username" placeholder="delacruz@novaliches.sti.edu.ph" required>
+            </div>
+
+            <div class="input-group" id="passwordGroup">
+                <label for="password">PASSWORD</label>
+                <input type="password" id="password" name="password" placeholder="******" required>
+                <span id="loginError" class="error-text">Invalid STI email or password.</span>
+            </div>
+
+            <div class="input-group" id="mfaGroup">
+                <label for="mfaCode">VERIFICATION CODE</label>
+                <input type="text" id="mfaCode" inputmode="numeric" maxlength="6" placeholder="Enter the 6-digit code">
+                <span id="mfaHelp" class="error-text" style="font-size:15px;display:block;color:#3c4148;">
+                    Enter the code sent to your email.
+                </span>
+            </div>
+
+            <div class="input-group" id="resetCodeGroup">
+                <label for="resetCode">RESET CODE</label>
+                <input type="text" id="resetCode" inputmode="numeric" maxlength="6" placeholder="Enter the 6-digit reset code">
+            </div>
+
+            <div class="input-group" id="newPasswordGroup">
+                <label for="newPassword">NEW PASSWORD</label>
+                <input type="password" id="newPassword" placeholder="Enter your new password">
+            </div>
+
+            <div class="input-group" id="confirmPasswordGroup">
+                <label for="confirmPassword">CONFIRM PASSWORD</label>
+                <input type="password" id="confirmPassword" placeholder="Confirm your new password">
+                <span id="resetHelp" class="error-text" style="display:block;color:#e8eef7;">
+                    Enter the reset code sent to your email, then choose a new password.
+                </span>
+            </div>
+
+            <button type="submit" class="login-btn">Log in</button>
+        </form>
+
+       
+
+        <a href="#" class="forgot-password" id="forgotPasswordLink">Forgot Password?</a>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div id="forgotPasswordModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+        <button type="button" class="modal-close" id="closeForgotModal">&times;</button>
+
+        <h3>Recover Password</h3>
+        <p class="modal-subtitle">
+            Please input your email to recover your password.
+        </p>
+
+        <div class="input-group">
+            <label for="forgotEmail">EMAIL</label>
+            <input type="email" id="forgotEmail" placeholder="delacruz@novaliches.sti.edu.ph">
+            <span id="forgotModalError" class="error-text" style="display:none;">
+                Please enter your email.
+            </span>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="modal-cancel-btn" id="cancelForgotModal">
+                Cancel
+            </button>
+
+            <button type="button" class="modal-send-btn" id="sendResetFromModal">
+                Send Reset Code
+            </button>
+        </div>
+    </div>
+</div>
+    </div>
+</div>
+    <script>
+    const loginForm = document.getElementById('loginForm');
+    const btn = loginForm.querySelector('.login-btn');
+    const container = document.querySelector('.login-container');
+    const errorMsg = document.getElementById('loginError');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const passwordGroup = document.getElementById('passwordGroup');
+    const mfaGroup = document.getElementById('mfaGroup');
+    const mfaCodeInput = document.getElementById('mfaCode');
+    const mfaHelp = document.getElementById('mfaHelp');
+    const resetCodeGroup = document.getElementById('resetCodeGroup');
+    const resetCodeInput = document.getElementById('resetCode');
+    const newPasswordGroup = document.getElementById('newPasswordGroup');
+    const newPasswordInput = document.getElementById('newPassword');
+    const confirmPasswordGroup = document.getElementById('confirmPasswordGroup');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    const resetHelp = document.getElementById('resetHelp');
+    const forgotPasswordLink = document.getElementById('forgotPasswordLink');
+
+    // MODAL ELEMENTS
+    const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+    const forgotEmailInput = document.getElementById('forgotEmail');
+    const forgotModalError = document.getElementById('forgotModalError');
+    const closeForgotModal = document.getElementById('closeForgotModal');
+    const cancelForgotModal = document.getElementById('cancelForgotModal');
+    const sendResetFromModal = document.getElementById('sendResetFromModal');
+
+    let authMode = 'login';
+
+    function resetErrors() {
+        errorMsg.style.display = 'none';
+        [emailInput, passwordInput, mfaCodeInput, resetCodeInput, newPasswordInput, confirmPasswordInput]
+            .forEach(input => input.classList.remove('input-error'));
+
+        if (forgotEmailInput) forgotEmailInput.classList.remove('input-error');
+        if (forgotModalError) forgotModalError.style.display = 'none';
+    }
+
+    function showLoginError(message) {
+        container.classList.add('shake');
+        errorMsg.textContent = message;
+        errorMsg.style.display = 'block';
+        setTimeout(() => container.classList.remove('shake'), 500);
+    }
+
+    function decodeJwtPayload(token) {
+        try {
+            return JSON.parse(atob(token.split('.')[1]));
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function finishLogin(data) {
+        const payload = decodeJwtPayload(data.access_token);
+        if (!payload) {
+            showLoginError('Invalid login session. Please try again.');
+            return;
+        }
+
+        const existingAdminToken = localStorage.getItem("admin_token");
+        const existingStudentToken = localStorage.getItem("token");
+
+        if (payload.is_admin) {
+            localStorage.setItem("admin_token", data.access_token);
+
+            if (existingStudentToken) {
+                const studentPayload = decodeJwtPayload(existingStudentToken);
+                if (studentPayload?.is_admin) {
+                    localStorage.removeItem("token");
+                }
+            }
+        } else {
+            localStorage.setItem("token", data.access_token);
+
+            if (existingAdminToken) {
+                const adminPayload = decodeJwtPayload(existingAdminToken);
+                if (adminPayload && !adminPayload.is_admin) {
+                    localStorage.removeItem("admin_token");
+                }
+            }
+        }
+
+        if (payload.is_admin) {
+            document.cookie = `admin_access_token=${data.access_token}; path=/; max-age=86400; SameSite=Strict`;
+        } else {
+            document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+        }
+
+        localStorage.setItem("is_admin", payload.is_admin);
+        localStorage.setItem("user_email", payload.sub);
+        localStorage.removeItem("pending_login_email");
+
+        if (payload.is_admin) {
+            window.location.href = "/admin/dashboard";
+        } else {
+            window.location.href = "/student/dashboard";
+        }
+    }
+
+    function switchToLoginMode() {
+        authMode = 'login';
+        localStorage.removeItem("pending_login_email");
+        localStorage.removeItem("pending_reset_email");
+        passwordGroup.style.display = 'block';
+        mfaGroup.style.display = 'none';
+        resetCodeGroup.style.display = 'none';
+        newPasswordGroup.style.display = 'none';
+        confirmPasswordGroup.style.display = 'none';
+        emailInput.readOnly = false;
+        passwordInput.required = true;
+        mfaCodeInput.required = false;
+        resetCodeInput.required = false;
+        newPasswordInput.required = false;
+        confirmPasswordInput.required = false;
+        btn.textContent = 'Log in';
+        btn.disabled = false;
+        forgotPasswordLink.textContent = 'Forgot Password?';
+    }
+
+    function switchToMfaStep(email, expiresInMinutes) {
+        authMode = 'mfa';
+        localStorage.setItem("pending_login_email", email);
+        passwordGroup.style.display = 'none';
+        mfaGroup.style.display = 'block';
+        resetCodeGroup.style.display = 'none';
+        newPasswordGroup.style.display = 'none';
+        confirmPasswordGroup.style.display = 'none';
+        emailInput.readOnly = true;
+        passwordInput.required = false;
+        mfaCodeInput.required = true;
+        btn.textContent = 'Verify code';
+        btn.disabled = false;
+        mfaHelp.textContent = `A 6-digit code was sent to ${email}. It expires in ${expiresInMinutes} minutes.`;
+        mfaCodeInput.focus();
+        forgotPasswordLink.textContent = 'Back to login';
+    }
+
+    function switchToResetStep(email, expiresInMinutes) {
+        authMode = 'reset';
+        localStorage.setItem("pending_reset_email", email);
+        passwordGroup.style.display = 'none';
+        mfaGroup.style.display = 'none';
+        resetCodeGroup.style.display = 'block';
+        newPasswordGroup.style.display = 'block';
+        confirmPasswordGroup.style.display = 'block';
+        emailInput.readOnly = true;
+        emailInput.value = email;
+        passwordInput.required = false;
+        mfaCodeInput.required = false;
+        resetCodeInput.required = true;
+        newPasswordInput.required = true;
+        confirmPasswordInput.required = true;
+        btn.textContent = 'Reset password';
+        btn.disabled = false;
+        resetHelp.textContent = `A 6-digit reset code was sent to ${email}. It expires in ${expiresInMinutes} minutes.`;
+        resetCodeInput.focus();
+        forgotPasswordLink.textContent = 'Back to login';
+    }
+
+    function openForgotPasswordModal() {
+        forgotPasswordModal.style.display = 'flex';
+        forgotEmailInput.value = emailInput.value.trim();
+        forgotEmailInput.classList.remove('input-error');
+        forgotModalError.style.display = 'none';
+        setTimeout(() => forgotEmailInput.focus(), 50);
+    }
+
+    function closeForgotPasswordModalFn() {
+        forgotPasswordModal.style.display = 'none';
+        forgotModalError.style.display = 'none';
+        forgotEmailInput.classList.remove('input-error');
+    }
+
+    window.addEventListener('click', (e) => {
+        if (e.target === forgotPasswordModal) {
+            closeForgotPasswordModalFn();
+        }
+    });
+
+    async function submitPasswordStep() {
+        const response = await fetch('/token', {
+            method: 'POST',
+            body: new FormData(loginForm)
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.detail || 'invalid_login');
+        }
+
+        if (data.step === "mfa_required") {
+            switchToMfaStep(data.email, data.expires_in_minutes || 10);
+            return;
+        }
+
+        finishLogin(data);
+    }
+
+    async function submitMfaStep() {
+        const response = await fetch('/auth/verify-mfa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: localStorage.getItem("pending_login_email") || emailInput.value,
+                code: mfaCodeInput.value.trim()
+            })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.detail || 'invalid_mfa_code');
+        }
+
+        finishLogin(data);
+    }
+
+    async function requestPasswordResetCode(resetEmail) {
+        const email = (resetEmail || '').trim();
+
+        if (!email) {
+            forgotEmailInput.classList.add('input-error');
+            forgotModalError.textContent = 'Please enter your email.';
+            forgotModalError.style.display = 'block';
+            throw new Error('missing_reset_email');
+        }
+
+        const response = await fetch('/auth/request-password-reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.detail || 'password_reset_request_failed');
+        }
+
+        emailInput.value = data.email || email;
+        closeForgotPasswordModalFn();
+        switchToResetStep(data.email || email, data.expires_in_minutes || 10);
+    }
+
+    async function submitPasswordResetStep() {
+        const resetCode = resetCodeInput.value.trim();
+        const newPassword = newPasswordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
+
+        if (!resetCode) {
+            resetCodeInput.classList.add('input-error');
+            throw new Error('missing_reset_code');
+        }
+
+        if (newPassword.length < 8) {
+            newPasswordInput.classList.add('input-error');
+            throw new Error('password_too_short');
+        }
+
+        if (newPassword !== confirmPassword) {
+            newPasswordInput.classList.add('input-error');
+            confirmPasswordInput.classList.add('input-error');
+            throw new Error('password_mismatch');
+        }
+
+        const response = await fetch('/auth/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: localStorage.getItem("pending_reset_email") || emailInput.value.trim(),
+                code: resetCode,
+                new_password: newPassword
+            })
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.detail || 'password_reset_failed');
+        }
+
+        switchToLoginMode();
+        passwordInput.value = '';
+        resetCodeInput.value = '';
+        newPasswordInput.value = '';
+        confirmPasswordInput.value = '';
+        showLoginError('Password reset complete. You can log in with your new password.');
+        errorMsg.style.display = 'block';
+    }
+
+    forgotPasswordLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        resetErrors();
+
+        if (authMode === 'mfa' || authMode === 'reset') {
+            switchToLoginMode();
+            return;
+        }
+
+        openForgotPasswordModal();
+    });
+
+    closeForgotModal.addEventListener('click', closeForgotPasswordModalFn);
+    cancelForgotModal.addEventListener('click', closeForgotPasswordModalFn);
+
+    sendResetFromModal.addEventListener('click', async () => {
+        forgotModalError.style.display = 'none';
+        forgotEmailInput.classList.remove('input-error');
+
+        sendResetFromModal.disabled = true;
+        sendResetFromModal.textContent = 'Sending...';
+
+        try {
+            await requestPasswordResetCode(forgotEmailInput.value);
+            btn.textContent = 'Reset password';
+            btn.disabled = false;
+        } catch (error) {
+            const message = String(error.message || '');
+
+            if (message.includes('missing_reset_email')) {
+                forgotEmailInput.classList.add('input-error');
+                forgotModalError.textContent = 'Please enter your email.';
+                forgotModalError.style.display = 'block';
+            } else if (message.includes('user_not_found')) {
+                forgotEmailInput.classList.add('input-error');
+                forgotModalError.textContent = 'We could not find an account with that email.';
+                forgotModalError.style.display = 'block';
+            } else if (message.includes('password_reset_email_failed')) {
+                forgotModalError.textContent = 'Could not send the reset code. Check Gmail SMTP settings.';
+                forgotModalError.style.display = 'block';
+            } else {
+                forgotModalError.textContent = 'Could not start the password reset. Please try again.';
+                forgotModalError.style.display = 'block';
+            }
+        } finally {
+            sendResetFromModal.disabled = false;
+            sendResetFromModal.textContent = 'Send Reset Code';
+        }
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        resetErrors();
+        btn.textContent = authMode === 'mfa'
+            ? 'Checking code...'
+            : authMode === 'reset'
+                ? 'Resetting password...'
+                : 'Verifying...';
+        btn.disabled = true;
+
+        try {
+            if (authMode === 'mfa') {
+                await submitMfaStep();
+            } else if (authMode === 'reset') {
+                await submitPasswordResetStep();
+            } else {
+                await submitPasswordStep();
+            }
+        } catch (error) {
+            btn.disabled = false;
+            btn.textContent = authMode === 'mfa'
+                ? 'Verify code'
+                : authMode === 'reset'
+                    ? 'Reset password'
+                    : 'Log in';
+
+            const message = String(error.message || '');
+            if (message.includes('invalid_mfa_code')) {
+                mfaCodeInput.classList.add('input-error');
+                showLoginError('Invalid verification code.');
+                return;
+            }
+
+            if (message.includes('mfa_session_expired')) {
+                switchToLoginMode();
+                showLoginError('Verification expired. Please log in again.');
+                return;
+            }
+
+            if (message.includes('mfa_email_failed')) {
+                showLoginError('Could not send the verification code. Check Gmail SMTP settings.');
+                return;
+            }
+
+            if (message.includes('user_not_found')) {
+                emailInput.classList.add('input-error');
+                showLoginError('We could not find an account with that email.');
+                return;
+            }
+
+            if (message.includes('missing_reset_code')) {
+                showLoginError('Enter the reset code sent to your email.');
+                return;
+            }
+
+            if (message.includes('password_mismatch')) {
+                showLoginError('The new password and confirmation password do not match.');
+                return;
+            }
+
+            if (message.includes('password_too_short')) {
+                showLoginError('Your new password must be at least 8 characters long.');
+                return;
+            }
+
+            if (message.includes('invalid_reset_code')) {
+                resetCodeInput.classList.add('input-error');
+                showLoginError('Invalid password reset code.');
+                return;
+            }
+
+            if (message.includes('password_reset_session_expired')) {
+                switchToLoginMode();
+                showLoginError('Password reset expired. Request a new reset code.');
+                return;
+            }
+
+            [emailInput, passwordInput].forEach(i => i.classList.add('input-error'));
+            showLoginError('Invalid STI email or password.');
+        }
+    });
+
+    function logout() {
+        localStorage.clear();
+        document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+        window.location.replace("/login");
+    }
+
+    switchToLoginMode();
+</script>
+</body>
+</html>

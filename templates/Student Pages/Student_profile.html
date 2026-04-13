@@ -1,0 +1,685 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Student Panel | LookFor STI</title> 
+
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='profile.css') }}?v=15"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+</head> 
+
+<body> 
+
+  
+
+    <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+        <ul class="nav-links"> 
+
+           <li class="#">
+                <a href="/student/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li>
+                <a href="/student/Messages"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/Lost-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/Found-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Item
+                </a>
+            </li>
+
+
+            <li class="active">
+                <a href="/student/profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+           
+            
+
+        </ul> 
+
+    </nav> 
+    
+
+  
+  <main class="main-content"> 
+
+       <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/student/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/admin/Profile'">My Profile</li>
+                    <li onclick="window.location.href='/admin/Settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+     
+     
+
+</header>
+
+    <div class="page-scroll-area">
+        <div class="profile-page-card">
+        <h2 class="profile-title">Profile</h2>
+        <div class="profile-hero">
+            <div class="profile-hero-left">
+                
+                <div class="avatar-upload modern-avatar">
+                    <div class="avatar-preview">
+                        <img id="display-pic" src="/static/photos/default-avatar.png" alt="Profile Picture">
+                    </div>
+
+                    <label for="imageUpload" class="upload-label modern-upload-btn">
+                        <span>📷</span>
+                        <input type="file" id="imageUpload" accept="image/*" hidden>
+                    </label>
+                </div>
+
+                <button id="applyProfileImageBtn"
+                        type="button"
+                        class="save-btn apply-btn"
+                        onclick="saveProfileChanges()"
+                        style="display:none;">
+                    Apply Changes
+                </button>
+            </div>
+
+            <div class="profile-hero-right">
+                <h1 id="display-name" class="profile-big-name">Loading...</h1>
+
+                <div class="profile-email-row">
+                    <span class="email-icon">✉</span>
+                    <p id="display-email">---</p>
+                </div>
+
+                <div class="profile-action-row">
+                    <span class="status-indicator">Active Student</span>
+                    <button type="button"
+                            id="changePasswordBtn"
+                            class="profile-password-trigger"
+                            onclick="openModal('passwordModal'); return false;">
+                        Change Password
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="profile-info-section">
+            <div class="info-header modern-info-header">
+                <div class="title-accent"></div>
+                <h3>User Information</h3>
+            </div>
+
+            <div class="info-display-grid modern-info-grid">
+                <div class="info-card">
+                    <div class="info-icon">👤</div>
+                    <div class="info-text">
+                        <label>Full Name</label>
+                        <p id="label-name">---</p>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-icon">#</div>
+                    <div class="info-text">
+                        <label id="label-id-title">Student Number</label>
+                        <p id="label-student-no">---</p>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <div class="info-icon">🎓</div>
+                    <div class="info-text">
+                        <label id="label-course-title">Course</label>
+                        <p id="label-course">---</p>
+                    </div>
+                </div>
+
+                <div class="info-card" id="level-info-item">
+                    <div class="info-icon">📅</div>
+                    <div class="info-text">
+                        <label id="label-level-title">Year Level</label>
+                        <p id="label-section">---</p>
+                    </div>
+                </div>
+
+                <div class="info-card full-width">
+                    <div class="info-icon">📧</div>
+                    <div class="info-text">
+                        <label>Email Address</label>
+                        <p id="label-email">---</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="activity-section modern-activity">
+            <h3>Recent Activity</h3>
+            <div class="timeline" id="activity-timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <span class="activity-time">2 hours ago</span>
+                        <p>Approved claim for <strong>"Blue Wallet"</strong></p>
+                    </div>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <span class="activity-time">Yesterday</span>
+                        <p>Updated profile information</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+            </div>
+    </div>
+
+<div id="passwordModal" class="password-modal-overlay">
+    <div class="password-modal-card">
+        <div class="password-modal-header">
+            <div class="password-modal-brand">
+                <span class="password-modal-badge">STI Account Security</span>
+                <h3>Change Password</h3>
+                <p class="password-modal-subtext">Keep your LookFor account protected with a stronger password that follows STI security standards.</p>
+            </div>
+            <button type="button" class="password-close-btn" onclick="closeModal('passwordModal')" aria-label="Close password modal">&times;</button>
+        </div>
+        <form id="passwordForm" class="password-modal-body">
+            <div class="password-rule-banner">
+                <span class="password-rule-icon">🔐</span>
+                <div>
+                    <strong>Password Requirements</strong>
+                    <p>At least 8 characters with letters, a number, and a special character.</p>
+                </div>
+            </div>
+            <div class="password-field">
+                <label for="current-password">Current Password</label>
+                <input type="password" id="current-password" placeholder="Enter your current password">
+            </div>
+            <div class="password-field">
+                <label for="new-password">New Password</label>
+                <input type="password" id="new-password" placeholder="Enter a new password">
+            </div>
+            <div class="password-field">
+                <label for="confirm-password">Confirm Password</label>
+                <input type="password" id="confirm-password" placeholder="Re-enter your new password">
+            </div>
+            <p class="password-hint">Choose a password that is easy for you to remember but difficult for others to guess.</p>
+            <button type="button" class="password-save-btn" onclick="saveNewPassword()">Update Password</button>
+        </form>
+    </div>
+</div>
+</main>
+
+
+
+
+
+
+<script>
+
+// Function to show the modal
+ function toggleNotifications() { toggleDropdown('notificationDropdown'); }
+function toggleMessages() { toggleDropdown('messageDropdown'); }
+function toggleProfile() { toggleDropdown('profileDropdown'); }
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    const isOpen = dropdown.style.display === "block";
+    
+    // Close all first to prevent overlap
+    document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+            .forEach(el => el.style.display = 'none');
+            
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "flex";
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+function withSwalAbovePasswordModal(runSwal) {
+    const passwordModal = document.getElementById('passwordModal');
+    const isPasswordModalOpen = passwordModal && getComputedStyle(passwordModal).display !== 'none';
+
+    if (isPasswordModalOpen) {
+        passwordModal.classList.add('swal-underlay');
+    }
+
+    const finish = () => {
+        if (passwordModal) {
+            passwordModal.classList.remove('swal-underlay');
+        }
+    };
+
+    if (!window.Swal) {
+        const result = runSwal();
+        finish();
+        return result;
+    }
+
+    return Promise.resolve(runSwal()).finally(finish);
+}
+
+function showProfileAlert(icon, title, text = "") {
+    if (window.Swal) {
+        return withSwalAbovePasswordModal(() =>
+            Swal.fire({
+                icon,
+                title,
+                text,
+                confirmButtonColor: '#005bab',
+                didOpen: () => {
+                    const container = Swal.getContainer();
+                    if (container) {
+                        container.style.zIndex = '30000';
+                    }
+                }
+            })
+        );
+    }
+
+    alert(text || title);
+    return Promise.resolve();
+}
+
+async function confirmProfileAction(title, text, confirmButtonText = 'Confirm') {
+    if (!window.Swal) {
+        return confirm(text || title);
+    }
+
+    const result = await withSwalAbovePasswordModal(() =>
+        Swal.fire({
+            icon: 'question',
+            title,
+            text,
+            showCancelButton: true,
+            confirmButtonText,
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#005bab',
+            cancelButtonColor: '#6c757d',
+            didOpen: () => {
+                const container = Swal.getContainer();
+                if (container) {
+                    container.style.zIndex = '30000';
+                }
+            }
+        })
+    );
+
+    return result.isConfirmed;
+}
+
+function decodeTokenPayload(token) {
+    try {
+        return JSON.parse(atob(token.split(".")[1]));
+    } catch (error) {
+        return null;
+    }
+}
+
+function getStudentToken() {
+    const studentToken = localStorage.getItem('token');
+    if (studentToken) return studentToken;
+
+    const fallbackToken = localStorage.getItem('admin_token');
+    const payload = decodeTokenPayload(fallbackToken || '');
+    return payload && !payload.is_admin ? fallbackToken : null;
+}
+
+function clearStudentSession() {
+    localStorage.removeItem('token');
+
+    const fallbackToken = localStorage.getItem('admin_token');
+    const payload = decodeTokenPayload(fallbackToken || '');
+    if (payload && !payload.is_admin) {
+        localStorage.removeItem('admin_token');
+    }
+}
+
+function logout() {
+    clearStudentSession();
+    window.location.href = "/login";
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+    // Close dropdowns if clicking outside nav items
+    if (!event.target.closest('.topbar-menu') && !event.target.closest('.profile-container')) {
+        document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+                .forEach(el => el.style.display = 'none');
+    }
+};
+
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const passwordModal = document.getElementById('passwordModal');
+    const passwordTrigger = document.getElementById('changePasswordBtn');
+    const passwordCloseBtn = document.querySelector('.password-close-btn');
+    const passwordSaveBtn = document.querySelector('.password-save-btn');
+    const isWithinPasswordButton = (event) => {
+        if (!passwordTrigger) return false;
+        const rect = passwordTrigger.getBoundingClientRect();
+
+        return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            event.clientX >= rect.left &&
+            event.clientX <= rect.right &&
+            event.clientY >= rect.top &&
+            event.clientY <= rect.bottom
+        );
+    };
+
+    const forceOpenPasswordModal = (event) => {
+        if (!passwordTrigger || !isWithinPasswordButton(event)) return;
+        if (passwordModal && passwordModal.style.display === 'flex') return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        openModal('passwordModal');
+    };
+
+    if (passwordTrigger) {
+        passwordTrigger.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openModal('passwordModal');
+        });
+    }
+
+    document.addEventListener('click', forceOpenPasswordModal, true);
+    document.addEventListener('pointerdown', forceOpenPasswordModal, true);
+    document.addEventListener('mousemove', (event) => {
+        document.body.style.cursor = isWithinPasswordButton(event) ? 'pointer' : '';
+    }, true);
+
+    if (passwordCloseBtn) {
+        passwordCloseBtn.addEventListener('click', () => closeModal('passwordModal'));
+    }
+
+    if (passwordSaveBtn) {
+        passwordSaveBtn.addEventListener('click', saveNewPassword);
+    }
+
+    if (passwordModal) {
+        passwordModal.addEventListener('click', (event) => {
+            if (event.target === passwordModal) {
+                closeModal('passwordModal');
+            }
+        });
+    }
+
+    const token = getStudentToken();
+    if (!token) { clearStudentSession(); window.location.href = "/login"; return; }
+
+    const response = await fetch('/api/current-user', {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+        clearStudentSession();
+        window.location.href = "/login";
+        return;
+    }
+
+    const user = await response.json();
+    const roleLabel = String(user.role_label || "").toLowerCase();
+    const isFaculty = roleLabel === "faculty";
+    const displayLevel = user.level || user.section || "N/A";
+    const idTitle = document.getElementById('label-id-title');
+    const courseTitle = document.getElementById('label-course-title');
+    const levelItem = document.getElementById('level-info-item');
+
+    // 1. Update Profile Image (with Cache Busting)
+    const profilePic = user.profile_pic ? `/${user.profile_pic}?t=${new Date().getTime()}` : '/static/photos/default-avatar.png';
+    document.getElementById('display-pic').src = profilePic;
+
+    // 2. Update Static Display Labels (What user sees first)
+    document.getElementById('label-name').innerText = user.full_name || "N/A";
+    document.getElementById('label-student-no').innerText = user.student_no || "N/A";
+    document.getElementById('label-course').innerText = isFaculty ? (user.department || "N/A") : (user.course || "N/A");
+    document.getElementById('label-email').innerText = user.email || "N/A";
+
+    if (idTitle) idTitle.innerText = isFaculty ? "Faculty ID" : "Student Number";
+    if (courseTitle) courseTitle.innerText = isFaculty ? "Department" : "Course";
+
+    if (isFaculty) {
+        if (levelItem) levelItem.style.display = "none";
+    } else {
+        if (levelItem) levelItem.style.display = "";
+        document.getElementById('label-section').innerText = displayLevel;
+    }
+    
+    // 4. Update Header/Sidebar Title
+    document.getElementById('display-name').innerText = user.full_name || "Student";
+    document.getElementById('display-email').innerText = user.email;
+    
+    const indicator = document.querySelector('.status-indicator');
+    if (indicator) {
+        if (user.is_admin) {
+            indicator.innerText = "Active Admin";
+            indicator.className = "status-indicator admin";
+        } else if (isFaculty) {
+            indicator.innerText = "Active Faculty";
+            indicator.className = "status-indicator admin";
+        } else if (user.is_student_active) {
+            indicator.innerText = "Active Student";
+            indicator.className = "status-indicator student";
+        } else {
+            indicator.innerText = "Deactivated Student";
+            indicator.className = "status-indicator";
+        }
+    }
+});
+async function saveNewPassword() {
+    const token = getStudentToken();
+    const currentPass = document.getElementById('current-password').value;
+    const newPass = document.getElementById('new-password').value;
+    const confirmPass = document.getElementById('confirm-password').value;
+    const passwordRule = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+    if (!currentPass) {
+        await showProfileAlert('warning', 'Current password required', 'Please enter your current password.');
+        return;
+    }
+
+    if (!passwordRule.test(newPass)) {
+        await showProfileAlert(
+            'warning',
+            'Password requirements not met',
+            'New password must be at least 8 characters long and include letters, a number, and a special character.'
+        );
+        return;
+    }
+
+    if (newPass !== confirmPass) {
+        await showProfileAlert('warning', 'Passwords do not match', 'Please make sure your new password and confirmation match.');
+        return;
+    }
+
+    const confirmed = await confirmProfileAction(
+        'Change password?',
+        'Your account password will be updated immediately.',
+        'Yes, update it'
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    const response = await fetch('/auth/change-password', {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ 
+            current_password: currentPass, 
+            new_password: newPass 
+        })
+    });
+
+    if (response.ok) {
+        await showProfileAlert('success', 'Password updated', 'Your password has been updated successfully.');
+        closeModal('passwordModal');
+        document.getElementById('passwordForm').reset();
+    } else {
+        const err = await response.json();
+        await showProfileAlert('error', 'Password update failed', err.detail || 'Failed to update password.');
+    }
+}
+
+async function saveProfileChanges() {
+    const token = getStudentToken();
+    if (!token) {
+        clearStudentSession();
+        window.location.href = "/login";
+        return;
+    }
+    const formData = new FormData();
+    
+    const fileInput = document.getElementById('imageUpload');
+    
+    if (fileInput.files[0]) {
+        formData.append("profile_img", fileInput.files[0]);
+    }
+
+    const hasChanges = Boolean(fileInput.files[0]);
+
+    if (!hasChanges) {
+        await showProfileAlert('info', 'No changes detected', 'Upload a profile image first before saving.');
+        return;
+    }
+
+    const confirmed = await confirmProfileAction(
+        'Apply profile changes?',
+        'Your profile picture will be updated.',
+        'Yes, apply changes'
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/student/update-profile', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}` // This must be included
+            },
+            body: formData
+        });
+
+        if (response.ok) {
+            await showProfileAlert('success', 'Profile updated', 'Your profile has been updated successfully.');
+            location.reload();
+        } else {
+            const errorData = await response.json();
+            await showProfileAlert('error', 'Profile update failed', errorData.detail || 'Could not save changes.');
+        }
+    } catch (err) {
+        console.error("Fetch error:", err);
+        await showProfileAlert('error', 'Server error', 'Please check your connection and try again.');
+    }
+}
+// 4. HELPER: Image Preview
+document.getElementById('imageUpload').onchange = evt => {
+    const [file] = document.getElementById('imageUpload').files;
+    if (file) {
+        document.getElementById('display-pic').src = URL.createObjectURL(file);
+        document.getElementById('applyProfileImageBtn').style.display = 'block';
+    }
+};
+</script>
+
+<script src="/static/session-keepalive.js?v=2"></script>
+<script src="/static/force-password-change.js?v=2"></script>
+<script src="/static/student-sidebar-access.js?v=2"></script>
+<script src="/static/student-notifications.js?v=2"></script>
+</body>
+</html>
+

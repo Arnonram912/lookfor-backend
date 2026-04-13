@@ -1,0 +1,1136 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+
+<head> 
+
+    <meta charset="UTF-8"> 
+
+    <title>Student Panel | LookFor STI</title> 
+
+    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='Messages.css') }}?v=12"> 
+
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
+
+    <style>
+        body.student-message-page {
+            min-height: 100vh;
+        }
+
+        .student-message-layout .page-scroll-area {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            padding: 20px;
+            overflow: hidden;
+            background: linear-gradient(180deg, #edf4fb 0%, #e3eef9 100%);
+        }
+
+        .student-message-layout .fb-messenger {
+            flex: 1;
+            min-height: 0;
+            height: auto;
+            border-radius: 24px;
+            border: 1px solid #d4e2f1;
+            background:
+                radial-gradient(circle at top right, rgba(255, 212, 71, 0.12), transparent 28%),
+                linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+            box-shadow: 0 22px 48px rgba(11, 49, 84, 0.12);
+        }
+
+        .student-message-layout .fb-sidebar,
+        .student-message-layout .fb-chat,
+        .student-message-layout .conversation-list,
+        .student-message-layout .chat-messages {
+            min-height: 0;
+        }
+
+        .student-message-layout .fb-sidebar {
+            width: min(360px, 34%);
+        }
+
+        .student-message-layout .fb-chat {
+            flex: 1;
+            width: auto;
+        }
+
+        .student-message-layout .chat-header {
+            flex-shrink: 0;
+            padding: 18px 22px;
+            align-items: center;
+            gap: 16px;
+            background: rgba(255, 255, 255, 0.92);
+        }
+
+        .student-message-layout .chat-header h3 {
+            margin: 0;
+            color: #14395f;
+        }
+
+        .student-message-layout .chat-header small {
+            color: #6c7d91;
+        }
+
+        .student-message-layout .chat-messages {
+            padding: 22px;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(227, 238, 249, 0.68)),
+                #eef4fb;
+        }
+
+        .student-message-layout .chat-input {
+            flex-shrink: 0;
+            gap: 12px;
+            padding: 16px 18px;
+            align-items: flex-end;
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .student-message-layout .chat-input textarea {
+            min-height: 52px;
+            max-height: 170px;
+            padding: 12px 14px;
+            resize: vertical;
+        }
+
+        .student-message-layout .chat-input button {
+            margin-left: 0;
+            min-height: 52px;
+            padding: 0 20px;
+            font-weight: 700;
+        }
+
+        #composeModal {
+            background: radial-gradient(circle at top, rgba(18, 79, 138, 0.28), rgba(0, 28, 61, 0.82));
+            padding: 24px;
+        }
+
+        #composeModal .compose-modal-card {
+            width: min(980px, calc(100vw - 48px));
+            max-height: calc(100vh - 48px);
+            overflow: auto;
+            padding: 0;
+            border-radius: 28px;
+            border: 2px solid rgba(0, 91, 171, 0.28);
+            background:
+                radial-gradient(circle at top right, rgba(255, 212, 71, 0.2), transparent 32%),
+                linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+            box-shadow: 0 24px 60px rgba(0, 24, 51, 0.3);
+        }
+
+        #composeModal .close-modal {
+            right: 22px;
+            top: 20px;
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(0, 91, 171, 0.18);
+            color: #0f3b66;
+            font-size: 24px;
+            box-shadow: 0 8px 20px rgba(0, 51, 102, 0.12);
+            z-index: 2;
+        }
+
+        #composeModal .compose-modal-header {
+            padding: 38px 40px 28px;
+            background:
+                linear-gradient(135deg, rgba(0, 51, 102, 0.98), rgba(0, 91, 171, 0.94)),
+                linear-gradient(180deg, #003366, #005bab);
+            color: #fff;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #composeModal .compose-modal-header::after {
+            content: "";
+            position: absolute;
+            inset: auto -40px -60px auto;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            background: rgba(255, 212, 71, 0.18);
+            filter: blur(2px);
+        }
+
+        #composeModal .compose-eyebrow {
+            margin: 0 0 10px;
+            color: #ffd447;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.18em;
+        }
+
+        #composeModal .compose-modal-header h3 {
+            margin: 0;
+            color: #fff;
+            font-size: 34px;
+            line-height: 1.1;
+            font-weight: 800;
+            max-width: 520px;
+        }
+
+        #composeModal .compose-subtitle {
+            margin: 12px 0 0;
+            color: rgba(255, 255, 255, 0.88);
+            font-size: 15px;
+            line-height: 1.6;
+            max-width: 620px;
+        }
+
+        #composeModal .compose-modal-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+            gap: 22px;
+            padding: 26px 28px 18px;
+            align-items: start;
+        }
+
+        #composeModal .compose-panel {
+            border-radius: 22px;
+            border: 1px solid #d6e3f2;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 14px 34px rgba(0, 42, 89, 0.08);
+        }
+
+        #composeModal .compose-message-panel {
+            background: linear-gradient(180deg, #fffef9 0%, #fff8db 100%);
+            border-color: #f2dea0;
+        }
+
+        #composeModal .compose-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        #composeModal .compose-panel-header h4 {
+            margin: 0 0 6px;
+            color: #14395f;
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        #composeModal .compose-panel-header p {
+            margin: 0;
+            color: #63758a;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        #composeModal .compose-count-pill {
+            background: #eaf3ff;
+            color: #005bab;
+            border: 1px solid #bcd7f2;
+            min-width: 110px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            text-align: center;
+        }
+
+        #composeModal .compose-search-input,
+        #composeModal .compose-message-textarea {
+            width: 100%;
+            border: 1px solid #c9d7e6;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 14px;
+            background: #fbfdff;
+            box-sizing: border-box;
+            transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+        }
+
+        #composeModal .compose-search-input:focus,
+        #composeModal .compose-message-textarea:focus {
+            outline: none;
+            border-color: #005bab;
+            box-shadow: 0 0 0 4px rgba(0, 91, 171, 0.12);
+            background: #fff;
+        }
+
+        #composeModal .compose-message-textarea {
+            min-height: 360px;
+            resize: vertical;
+            background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.96));
+        }
+
+        #composeModal .compose-student-list {
+            margin-top: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 360px;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        #composeModal .compose-student-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border: 1px solid #dbe6f2;
+            cursor: pointer;
+            transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease, background .14s ease;
+        }
+
+        #composeModal .compose-student-option:hover {
+            transform: translateY(-1px);
+            border-color: #7fb0df;
+            box-shadow: 0 12px 28px rgba(0, 76, 145, 0.12);
+            background: linear-gradient(180deg, #ffffff 0%, #f2f8ff 100%);
+        }
+
+        #composeModal .compose-student-option:has(input:checked) {
+            border-color: #005bab;
+            background: linear-gradient(180deg, #eef6ff 0%, #e4f0ff 100%);
+            box-shadow: 0 14px 30px rgba(0, 76, 145, 0.16);
+        }
+
+        #composeModal .compose-student-checkbox {
+            width: 18px !important;
+            min-width: 18px;
+            height: 18px;
+            margin: 3px 0 0;
+            accent-color: #005bab;
+            flex: 0 0 auto;
+        }
+
+        #composeModal .compose-student-copy {
+            flex: 1;
+            min-width: 0;
+        }
+
+        #composeModal .compose-student-name {
+            color: #16395f;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.4;
+        }
+
+        #composeModal .compose-student-meta {
+            color: #66788b;
+            font-size: 13px;
+            margin-top: 4px;
+            line-height: 1.45;
+        }
+
+        #composeModal .compose-empty-state {
+            border: 1px dashed #c9d7e6;
+            border-radius: 18px;
+            padding: 22px 18px;
+            text-align: center;
+            color: #63758a;
+            background: #f9fbfd;
+        }
+
+        #composeModal .compose-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 0 28px 28px;
+        }
+
+        #composeModal .compose-cancel-btn,
+        #composeModal .compose-send-btn {
+            min-width: 190px;
+            padding: 14px 18px;
+            border-radius: 16px;
+            border: none;
+            font-weight: 800;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+        }
+
+        #composeModal .compose-cancel-btn {
+            border: 1px solid #ccd9e6;
+            background: #f5f8fb;
+            color: #294766;
+        }
+
+        #composeModal .compose-send-btn {
+            border: 2px solid #1f3550;
+            background: #ffd447;
+            color: #0d2f57;
+            box-shadow: 4px 4px 0 #1f3550;
+        }
+
+        #composeModal .compose-send-btn:hover {
+            transform: translate(1px, 1px);
+            box-shadow: 2px 2px 0 #1f3550;
+        }
+
+        @media (max-width: 900px) {
+            .student-message-layout .page-scroll-area {
+                padding: 16px;
+            }
+
+            .student-message-layout .fb-messenger {
+                flex-direction: column;
+            }
+
+            .student-message-layout .fb-sidebar {
+                width: 100%;
+                max-height: 320px;
+                border-right: none;
+                border-bottom: 1px solid #dbe4ee;
+            }
+
+            .student-message-layout .fb-chat {
+                width: 100%;
+            }
+
+            #composeModal .compose-modal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            #composeModal .compose-message-textarea {
+                min-height: 220px;
+            }
+        }
+    </style>
+
+</head> 
+
+<body class="student-message-page"> 
+
+  
+
+   <nav class="sidebar"> 
+
+        <div class="logow">Look<span>For</span></div> 
+
+        <ul class="nav-links"> 
+
+           <li class="#">
+                <a href="/student/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/homew.png" class="side-icon"> Home
+                </a>
+            </li>
+
+            <li class="active">
+                <a href="/student/Messages"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/msg.png" class="side-icon"> Messages
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/Lost-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/Found-report"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Item
+                </a>
+            </li>
+
+
+            <li class="#">
+                <a href="/student/profile"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/profilew.png" class="side-icon">  Profile
+                </a>
+            </li>
+
+            <li class="#">
+                <a href="/student/settings"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/settingw.png" class="side-icon">  Settings
+                </a>
+            </li>
+
+           
+            
+
+        </ul> 
+
+    </nav> 
+    
+    
+
+  
+  <main class="main-content student-message-layout"> 
+
+       
+       <header class="top-bar navbar">
+       <div class="search-container"> 
+
+
+    </div> 
+
+    <ul class="topbar-menu">
+        <li>           <!-- 💬 MESSAGES -->
+           <div class="message-container">
+                <a href="/student/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                    💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
+                </a>
+            </div>
+        </li>
+        <li>
+            <div class="notification-container">
+                <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
+                    🔔 <span id="notificationCount" class="badge red">0</span>
+                </span>
+                <div id="notificationDropdown" class="notification-dropdown">
+                    <h3>Recent Matches & Alerts</h3>
+                    <ul id="notificationList"></ul>
+                    <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
+                </div>
+            </div>
+        </li>
+        <!-- 👤 PROFILE -->
+        <div class="profile-container">
+        <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+            <i class="fa fa-user"></i>
+            
+        </span>
+        </div>
+
+
+            <div id="profileDropdown" class="profile-dropdown">
+                <h3>Account</h3>
+                <ul class="profiledrop">
+                    <li class="profiledrop" onclick="window.location.href='/student/profile'">My Profile</li>
+                    <li onclick="window.location.href='/student/settings'">Settings</li>
+                    <li onclick="logout()" class="logout-item">Logout</li>
+                </ul>
+            </div>
+        </div>
+       
+    </ul>
+     
+
+</header>
+
+<div class="page-scroll-area">
+<div class="fb-messenger">
+
+    <!-- LEFT SIDE - CONVERSATIONS -->
+    <div class="fb-sidebar">
+
+        
+         <div class="fb-sidebar-header">
+            <div class="section-title"><span>Messages</span></div>
+            <button class="compose-btn" type="button" onclick="openComposeModal()">+ Compose</button>
+        </div>
+
+        <div class="fb-search">
+            <input type="text" id="searchConversation" placeholder="Search..." onkeyup="filterConversations()">
+        </div>
+
+      <ul class="conversation-list" id="conversationList"></ul>
+    
+
+          
+
+    </div>
+
+    <!-- RIGHT SIDE - CHAT AREA -->
+    <div class="fb-chat">
+        <div class="chat-header">
+            <div>
+                <h3 id="chatUserName">Select a conversation</h3>
+                <small id="chatStatus"></small>
+            </div>
+            <div class="chat-actions">
+              <!--  <button onclick="deleteMessage()">Delete</button> -->
+            </div>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <!-- Thread messages load here -->
+        </div>
+
+        <div class="chat-input">
+            <textarea id="replyMessage" placeholder="Type your reply..."></textarea>
+            <button onclick="sendReply()">Send</button>
+        </div>
+
+    </div>
+</div>
+</div>
+
+<div id="conversationContextMenu" style="display:none; position:fixed; z-index:10000; min-width:190px; background:#fff; border:1px solid #d6e3f2; border-radius:14px; box-shadow:0 18px 40px rgba(0, 24, 51, 0.18); padding:8px;">
+    <button type="button" onclick="handleDeleteConversation()" style="width:100%; border:none; background:transparent; color:#b42318; text-align:left; padding:10px 12px; border-radius:10px; cursor:pointer; font-weight:700;">
+        Delete conversation
+    </button>
+</div>
+
+<div id="composeModal" class="modal">
+    <div class="modal-content compose-modal-card">
+        <span class="close-modal" onclick="closeCompose()">&times;</span>
+        <div class="compose-modal-header">
+            <p class="compose-eyebrow">LOOKFOR MESSAGING</p>
+            <h3>Compose Message</h3>
+            <p class="compose-subtitle">Choose one or more admins and send the same message to each of them.</p>
+        </div>
+
+        <div class="compose-modal-grid">
+            <div class="compose-panel">
+                <div class="compose-panel-header">
+                    <div>
+                        <h4>Select Recipients</h4>
+                        <p>Search and choose the admins who should receive this chat message.</p>
+                    </div>
+                    <span id="composeRecipientCount" class="compose-count-pill">0 selected</span>
+                </div>
+                <input type="text" id="composeStudentSearch" class="compose-search-input" placeholder="Search admins..." onkeyup="filterComposeStudents()">
+                <div id="composeStudentList" class="compose-student-list"></div>
+            </div>
+
+            <div class="compose-panel compose-message-panel">
+                <div class="compose-panel-header">
+                    <div>
+                        <h4>Chat Message</h4>
+                        <p>Write one message and it will be sent to every selected admin.</p>
+                    </div>
+                </div>
+                <textarea id="newContent" class="compose-message-textarea" placeholder="Type your message"></textarea>
+            </div>
+        </div>
+
+        <div class="modal-actions compose-modal-actions">
+            <button class="compose-cancel-btn" onclick="closeCompose()">Cancel</button>
+            <button class="compose-send-btn" onclick="sendNewMessage()">Send to Selected Admins</button>
+        </div>
+    </div>
+</div>
+
+
+
+
+<script>
+
+let availableComposeRecipients = [];
+let searchTimeout = null;
+let contextConversationTarget = null;
+
+function attachConversationContextMenu(node, userId, userName) {
+    if (!node) return;
+    node.oncontextmenu = (event) => {
+        event.preventDefault();
+        openConversationContextMenu(event, userId, userName);
+    };
+}
+
+function openConversationContextMenu(event, userId, userName) {
+    const menu = document.getElementById("conversationContextMenu");
+    if (!menu) return;
+
+    contextConversationTarget = { userId, userName };
+    menu.style.display = "block";
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+}
+
+function closeConversationContextMenu() {
+    const menu = document.getElementById("conversationContextMenu");
+    if (menu) menu.style.display = "none";
+}
+
+async function handleDeleteConversation() {
+    if (!contextConversationTarget) return;
+
+    const { userId, userName } = contextConversationTarget;
+    closeConversationContextMenu();
+
+    if (!confirm(`Delete your entire conversation with ${userName || "this user"}?`)) {
+        contextConversationTarget = null;
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/messages/conversation/${userId}`, {
+            method: "DELETE",
+            headers: getAuthHeader()
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || "Failed to delete conversation.");
+        }
+
+        if (currentChatId === userId) {
+            currentChatId = null;
+            document.getElementById("chatUserName").innerText = "Select a conversation";
+            document.getElementById("chatStatus").innerText = "";
+            document.getElementById("chatMessages").innerHTML = "";
+            document.getElementById("replyMessage").value = "";
+        }
+
+        await loadUniversalUsers();
+    } catch (error) {
+        console.error("Delete conversation failed:", error);
+        alert(error.message || "Failed to delete conversation.");
+    } finally {
+        contextConversationTarget = null;
+    }
+}
+
+function updateComposeRecipientCount() {
+    const count = document.querySelectorAll(".compose-student-checkbox:checked").length;
+    const countNode = document.getElementById("composeRecipientCount");
+    if (countNode) {
+        countNode.textContent = `${count} selected`;
+    }
+}
+    
+async function loadComposeRecipients() {
+    try {
+        const response = await fetch(`/api/users/search?q=`, {
+            headers: getAuthHeader()
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to load recipients.");
+        }
+
+        const users = await response.json();
+        availableComposeRecipients = (Array.isArray(users) ? users : []).filter(user => user.role_label === "Admin");
+    } catch (error) {
+        console.error("Failed to load compose recipients:", error);
+        availableComposeRecipients = [];
+    }
+}
+
+function openComposeModal() {
+    const modal = document.getElementById("composeModal");
+    if (!modal) return;
+    loadComposeRecipients().then(() => renderComposeStudentList());
+    document.getElementById("composeStudentSearch").value = "";
+    document.getElementById("newContent").value = "";
+    updateComposeRecipientCount();
+    modal.style.display = "flex";
+}
+
+function closeCompose() {
+    const modal = document.getElementById("composeModal");
+    if (modal) modal.style.display = "none";
+}
+
+function renderUserNameWithRole(user) {
+    const name = user?.full_name || user?.email || "Admin";
+    const role = user?.role_label ? ` • ${user.role_label}` : "";
+    return `${name}${role}`;
+}
+
+function renderUserMeta(user) {
+    return user?.email || "Official support";
+}
+
+function renderComposeStudentList(searchTerm = "") {
+    const list = document.getElementById("composeStudentList");
+    if (!list) return;
+
+    const filter = String(searchTerm || "").trim().toLowerCase();
+    const recipients = availableComposeRecipients.filter(recipient => {
+        const name = String(recipient.full_name || "").toLowerCase();
+        const email = String(recipient.email || "").toLowerCase();
+        return !filter || name.includes(filter) || email.includes(filter);
+    });
+
+    if (!recipients.length) {
+        list.innerHTML = `<div class="compose-empty-state">No admins found.</div>`;
+        updateComposeRecipientCount();
+        return;
+    }
+
+    list.innerHTML = recipients.map(recipient => `
+        <label class="compose-student-option">
+            <input type="checkbox" class="compose-student-checkbox" value="${recipient.id}" onchange="updateComposeRecipientCount()">
+            <div class="compose-student-copy">
+                <div class="compose-student-name">${renderUserNameWithRole(recipient)}</div>
+                <div class="compose-student-meta">${renderUserMeta(recipient)}</div>
+            </div>
+        </label>
+    `).join("");
+    updateComposeRecipientCount();
+}
+
+function filterComposeStudents() {
+    const query = document.getElementById("composeStudentSearch")?.value || "";
+    renderComposeStudentList(query);
+}
+
+async function sendNewMessage() {
+    const selectedIds = Array.from(document.querySelectorAll(".compose-student-checkbox:checked"))
+        .map(input => Number(input.value))
+        .filter(Boolean);
+    const content = document.getElementById("newContent")?.value.trim() || "";
+
+    if (!selectedIds.length) {
+        alert("Please select at least one admin.");
+        return;
+    }
+
+    if (!content) {
+        alert("Please enter your message.");
+        return;
+    }
+
+    try {
+        for (const recipientId of selectedIds) {
+            const formData = new FormData();
+            formData.append("recipient_id", recipientId);
+            formData.append("content", content);
+
+            const response = await fetch("/api/messages/send", {
+                method: "POST",
+                body: formData,
+                headers: getAuthHeader()
+            });
+
+            if (!response.ok) {
+                const result = await response.json().catch(() => ({}));
+                throw new Error(result.detail || result.message || "Failed to send messages.");
+            }
+        }
+
+        closeCompose();
+        await loadUniversalUsers();
+        if (selectedIds[0]) {
+            const recipient = availableComposeRecipients.find(user => user.id === selectedIds[0]);
+            await openChat(selectedIds[0], recipient?.full_name || recipient?.email || "Admin");
+        }
+        alert(`Message sent to ${selectedIds.length} admin(s).`);
+    } catch (error) {
+        console.error("Compose send failed:", error);
+        alert(error.message || "Failed to send messages.");
+    }
+}
+
+function toggleNotifications() { toggleDropdown('notificationDropdown'); }
+function toggleMessages() { toggleDropdown('messageDropdown'); }
+function toggleProfile() { toggleDropdown('profileDropdown'); }
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    const isOpen = dropdown.style.display === "block";
+    
+    // Close all first to prevent overlap
+    document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+            .forEach(el => el.style.display = 'none');
+            
+    dropdown.style.display = isOpen ? "none" : "block";
+}
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = "flex";
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.style.display = 'none';
+}
+
+function logout() {
+    localStorage.clear();
+    window.location.href = "/";
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+    if (!event.target.closest('#conversationContextMenu')) {
+        closeConversationContextMenu();
+    }
+    // Close dropdowns if clicking outside nav items
+    if (!event.target.closest('.topbar-menu') && !event.target.closest('.profile-container')) {
+        document.querySelectorAll('.message-dropdown, .notification-dropdown, .profile-dropdown')
+                .forEach(el => el.style.display = 'none');
+    }
+};
+
+let currentChatId = null;
+
+// 1. FIXED: Checks for both 'token' and 'admin_token'
+const getAuthHeader = () => {
+    const token = localStorage.getItem("token") || localStorage.getItem("admin_token");
+    return { 'Authorization': `Bearer ${token}` };
+};
+function filterConversations() {
+    const input = document.getElementById('searchConversation');
+    const filter = input.value.toLowerCase();
+    const listItems = document.querySelectorAll('.conversation-item');
+
+    // Local Filter (Existing History)
+    listItems.forEach(item => {
+        const nameText = item.querySelector('.convo-name').innerText.toLowerCase();
+        const previewText = item.querySelector('.convo-preview').innerText.toLowerCase();
+        
+        if (nameText.includes(filter) || previewText.includes(filter)) {
+            item.style.display = ""; 
+        } else {
+            item.style.display = "none"; 
+        }
+    });
+
+    // Global Search (New Students)
+    clearTimeout(searchTimeout);
+    if (filter.length >= 3) {
+        // Wait 500ms after user stops typing to search database
+        searchTimeout = setTimeout(() => {
+            searchGlobalUsers(filter);
+        }, 500);
+    }
+}
+
+function getRoleBadgeClass(roleLabel) {
+    const normalized = String(roleLabel || "").toLowerCase();
+    if (normalized === "faculty") return "role-badge faculty";
+    if (normalized === "student") return "role-badge student";
+    if (normalized === "admin") return "role-badge admin";
+    return "role-badge";
+}
+
+function renderUserNameWithRole(user) {
+    const name = user?.full_name || user?.email || "Unknown User";
+    const roleLabel = user?.role_label || "User";
+    return `${name} <span class="${getRoleBadgeClass(roleLabel)}">${roleLabel}</span>`;
+}
+
+function renderUserMeta(user) {
+    const roleLabel = user?.role_label || "User";
+    if (roleLabel === "Faculty") {
+        return `Faculty ID: ${user?.student_no || user?.email || "N/A"}`;
+    }
+    if (roleLabel === "Student") {
+        return `Student No: ${user?.student_no || user?.email || "N/A"}`;
+    }
+    return user?.email || roleLabel;
+}
+
+async function loadStudents() {
+    try {
+        const response = await fetch("/api/users/list", { 
+            headers: getAuthHeader() 
+        });
+        const users = await response.json();
+        const list = document.getElementById("conversationList");
+        list.innerHTML = ""; 
+
+        users.forEach((user) => {
+            if (!user.is_admin) {
+                const li = document.createElement("li");
+                
+                // Add unread-bold class if the backend flag is true
+                const unreadClass = user.has_unread ? "unread-bold" : "";
+                li.className = `conversation-item ${unreadClass}`;
+                li.id = `convo-${user.id}`;
+                
+                li.innerHTML = `
+                    <img src="/static/photos/profilew.png" class="avatar">
+                    <div class="convo-info">
+                        <span class="convo-name">${user.full_name}</span>
+                        <span class="convo-preview">Student ID: ${user.email}</span>
+                    </div>
+                `;
+
+                // Handle clicking the student
+                li.onclick = () => openChat(user.id, user.email);
+                attachConversationContextMenu(li, user.id, user.full_name || user.email || "this user");
+                list.appendChild(li);
+            }
+        });
+    } catch (error) {
+        console.error("Error loading students:", error);
+    }
+    // At the very end of loadStudents()
+filterConversations();
+}
+async function searchGlobalUsers(query) {
+    try {
+        // Use the correct helper (getAdminAuthHeader or getAuthHeader)
+        const headers = typeof getAdminAuthHeader === "function" ? getAdminAuthHeader() : getAuthHeader();
+        
+        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
+            headers: headers
+        });
+        
+        const globalUsers = await response.json();
+        const list = document.getElementById("conversationList");
+
+        globalUsers.forEach(user => {
+            // Only add if they aren't already in the sidebar
+            if (!document.getElementById(`convo-${user.id}`)) {
+                const li = document.createElement("li");
+                li.className = "conversation-item search-result"; 
+                li.id = `convo-${user.id}`;
+                li.innerHTML = `
+                    <img src="/static/photos/profilew.png" class="avatar">
+                    <div class="convo-info">
+                        <span class="convo-name">${renderUserNameWithRole(user)}</span>
+                        <span class="convo-preview">${renderUserMeta(user)}</span>
+                    </div>
+                `;
+                li.onclick = () => openChat(user.id, user.full_name || user.email);
+                attachConversationContextMenu(li, user.id, user.full_name || user.email || "this user");
+                list.appendChild(li);
+            }
+        });
+    } catch (e) {
+        console.error("Global search failed:", e);
+    }
+}
+// 2. FIXED: Robust Time Formatter for Philippine Time
+function formatTime(dateString) {
+    if (!dateString) return "";
+    let isoString = dateString.replace(" ", "T");
+    if (!isoString.includes("+") && !isoString.includes("Z")) {
+        isoString += "+08:00"; // Force PHT
+    }
+    const date = new Date(isoString);
+    return isNaN(date.getTime()) ? "Just now" : date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', minute: '2-digit', hour12: true 
+    });
+}
+
+async function loadUniversalUsers() {
+    try {
+        const response = await fetch("/api/users/list", {
+            headers: getAuthHeader() 
+        });
+
+        if (response.status === 401) {
+            window.location.href = "/login"; 
+            return;
+        }
+
+        const users = await response.json();
+        const list = document.getElementById("conversationList");
+        list.innerHTML = "";
+
+       users.forEach((userData) => {
+            const li = document.createElement("li");
+            
+            // 1. Logic Check: Only show as bold if it's unread AND NOT the currently open chat
+            const isCurrentlyOpen = (userData.id === currentChatId);
+            const unreadClass = (userData.has_unread && !isCurrentlyOpen) ? "unread-bold" : "";
+
+            li.className = `conversation-item ${unreadClass}`.trim();
+            li.id = `convo-${userData.id}`;
+
+            li.innerHTML = `
+                <img src="/static/photos/profilew.png" class="avatar">
+                <div class="convo-info">
+                    <span class="convo-name">${renderUserNameWithRole(userData)}</span>
+                    <span class="convo-preview">${renderUserMeta(userData)}</span>
+                </div>
+            `;
+
+            li.onclick = () => openChat(userData.id, userData.full_name || userData.email);
+            attachConversationContextMenu(li, userData.id, userData.full_name || userData.email || "this user");
+            list.appendChild(li);
+        });
+    } catch (error) {
+        console.error("Error loading users:", error);
+    }
+}
+
+
+
+async function loadHistory(userId) {
+    const chatBox = document.getElementById("chatMessages");
+    try {
+        const response = await fetch(`/api/messages/history/${userId}`, { headers: getAuthHeader() });
+        const messages = await response.json();
+        
+        // Anti-flicker: Only update if there are new messages
+        const currentCount = chatBox.querySelectorAll('.message-row').length;
+        if (messages.length === currentCount) return;
+
+        chatBox.innerHTML = ""; 
+        messages.forEach(msg => {
+            const isFromSelectedUser = msg.sender_id === userId;
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `message-row ${isFromSelectedUser ? 'received' : 'sent'}`;
+            messageDiv.innerHTML = `
+                <div class="message-bubble">
+                    <p>${msg.content}</p>
+                    <span class="message-time">${formatTime(msg.created_at)}</span>
+                </div>
+            `;
+            chatBox.appendChild(messageDiv);
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+    } catch (error) { console.error("History Error:", error); }
+}
+
+async function openChat(targetId, targetName) {
+    currentChatId = targetId; 
+    
+    // 1. UI UPDATE: Find the clicked element and remove the bold class
+    const convoItem = document.getElementById(`convo-${targetId}`);
+    if (convoItem) {
+        convoItem.classList.remove("unread-bold");
+    }
+
+    // 2. BACKEND UPDATE: Tell the server these messages are now read
+    try {
+        await fetch(`/api/messages/read/${targetId}`, {
+            method: "POST",
+            headers: getAuthHeader()
+        });
+    } catch (error) {
+        console.error("Failed to sync read status:", error);
+    }
+
+    // 3. Load the actual messages
+    const nameHeader = document.getElementById("chatUserName");
+    if (nameHeader) nameHeader.innerText = targetName;
+    
+    loadHistory(targetId); 
+}
+
+async function sendReply() {
+    const messageInput = document.getElementById("replyMessage");
+    const content = messageInput.value.trim();
+    if (!content || !currentChatId) return;
+
+    const formData = new FormData();
+    formData.append("recipient_id", currentChatId);
+    formData.append("content", content);
+
+    const response = await fetch("/api/messages/send", {
+        method: "POST",
+        body: formData,
+        headers: getAuthHeader()
+    });
+
+    if (response.ok) {
+        messageInput.value = "";
+        loadHistory(currentChatId);
+    }
+}
+
+
+window.onload = loadUniversalUsers;
+</script>
+<script src="/static/session-keepalive.js"></script>
+<script src="/static/student-notifications.js"></script>
+<script src="/static/force-password-change.js"></script>
+<script src="/static/student-sidebar-access.js"></script>
+</body>
+</html>
+
