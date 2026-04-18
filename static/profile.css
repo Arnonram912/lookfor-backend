@@ -3,6 +3,7 @@
     gap: 30px;
     max-width: 1000px;
     margin: 0 auto;
+    flex-direction: row-reverse;
 }
 .info-header {
     font-size: 3rem;
