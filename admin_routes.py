@@ -25,9 +25,9 @@ from models import SettingsUpdate
 from security import get_current_user
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-from utils import save_file, resolve_category_name
+from utils import save_file, resolve_category_name, validate_upload_file_size
 from sqlalchemy import or_
-
+from concurrent.futures import ThreadPoolExecutor
 
 
 class AdminCreate(BaseModel):
@@ -76,6 +76,12 @@ class StudentActivationRequest(BaseModel):
     user_ids: list[int]
 
 
+class UserBatchActionResult(BaseModel):
+    message: str
+    count: int
+    requested_count: int
+
+
 def user_is_faculty_account(user: models.User) -> bool:
     if not user or user.is_admin:
         return False
@@ -119,6 +125,36 @@ def ensure_pending_claim_for_pair(
     )
     db.add(new_claim)
     return new_claim
+
+
+def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | None:
+    if not raw_possible_matches:
+        return None
+
+    try:
+        parsed_matches = json.loads(raw_possible_matches)
+    except Exception:
+        return None
+
+    if not isinstance(parsed_matches, list):
+        return None
+
+    cleaned_matches = []
+    for match in parsed_matches[:3]:
+        if not isinstance(match, dict):
+            continue
+        cleaned_matches.append({
+            "id": match.get("id"),
+            "score": match.get("score"),
+            "category": match.get("category"),
+            "location": match.get("location"),
+            "image_path": match.get("image_path"),
+            "brand": match.get("brand"),
+            "color": match.get("color"),
+            "description": match.get("description"),
+        })
+
+    return json.dumps(cleaned_matches) if cleaned_matches else None
 
 
 def student_has_portal_access(user: models.User) -> bool:
@@ -332,18 +368,42 @@ def compute_item_match_score(lost_item: models.Item, found_item: models.Item) ->
     return round(score, 4)
 
 
+print("🔥 MONSTER VERSION LOADED")
+
+
 def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate_action: str):
     db = SessionLocal()
     started_at = datetime.utcnow()
 
     results = []
-    seen_student_nos = set()
-    seen_emails = set()
     created_count = 0
     replaced_count = 0
     ignored_count = 0
 
     total_students = len(users_list)
+
+    # Tuning knobs
+    lookup_chunk_size = 150      # SQL Server safe lookup chunk
+    commit_chunk_size = 100      # update progress after each 100-row commit
+    hash_workers = min(8, max(2, (os.cpu_count() or 4)))
+
+    def push_bulk_progress(processed_count: int, message: str | None = None):
+        safe_processed = min(max(processed_count, 0), total_students)
+        update_payload = {
+            "processed": safe_processed,
+            "progress": int((safe_processed / total_students) * 100) if total_students else 100,
+            "summary": {
+                "total": total_students,
+                "created": created_count,
+                "replaced": replaced_count,
+                "ignored": ignored_count,
+                "duplicate_action": duplicate_action
+            }
+        }
+        if message is not None:
+            update_payload["message"] = message
+        update_bulk_job(job_id, **update_payload)
+
     update_bulk_job(
         job_id,
         status="running",
@@ -355,9 +415,41 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
     )
 
     try:
-        for index, s in enumerate(users_list, start=1):
+        if total_students == 0:
+            update_bulk_job(
+                job_id,
+                status="completed",
+                finished_at=datetime.utcnow().isoformat(),
+                progress=100,
+                processed=0,
+                total=0,
+                results=[],
+                summary={
+                    "total": 0,
+                    "created": 0,
+                    "replaced": 0,
+                    "ignored": 0,
+                    "duplicate_action": duplicate_action
+                },
+                message="No users to process."
+            )
+            return
+
+        def chunked(seq, size):
+            for i in range(0, len(seq), size):
+                yield seq[i:i + size]
+
+        # ---------------------------------------------------------
+        # PASS 1: normalize rows + detect duplicates inside upload
+        # ---------------------------------------------------------
+        normalized_rows = []
+        seen_student_nos = set()
+        seen_emails = set()
+
+        for s in users_list:
             source_type = str(s.get("source_type", "student")).strip().lower()
             is_employee_import = source_type == "employee"
+
             s_id = str(s.get("student_no", "")).strip()
             last_n = str(s.get("last_name", "")).strip()
             first_n = str(s.get("first_name", "")).strip()
@@ -369,162 +461,45 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             display_name = str(s.get("display_name", "")).strip()
             initial_permissions = [STUDENT_ACCESS_PERMISSION] if is_employee_import else []
 
-            last_6 = s_id[-6:]
+            last_6 = s_id[-6:] if s_id else ""
             email_addr = (
                 build_faculty_email(first_n, last_n)
                 if is_employee_import and s_id
-                else (f"{last_n.lower().replace(' ', '')}.{last_6}@novaliches.sti.edu.ph" if s_id and last_n else "")
+                else (
+                    f"{last_n.lower().replace(' ', '')}.{last_6}@novaliches.sti.edu.ph"
+                    if s_id and last_n else ""
+                )
             )
+
+            if is_employee_import and not department:
+                department = infer_employee_account_label(s_id)
+
             default_pass = f"STI{s_id}" if s_id else ""
             new_full_name = (
                 display_name
                 or f"{first_n} {middle_n} {last_n}".replace("  ", " ").strip()
             )
 
-            if is_employee_import and not department:
-                department = infer_employee_account_label(s_id)
-            existing_user = None
+            row = {
+                "source_type": source_type,
+                "is_employee_import": is_employee_import,
+                "student_no": s_id,
+                "last_name": last_n,
+                "first_name": first_n,
+                "middle_name": middle_n,
+                "course": course,
+                "level": level,
+                "batch_id": batch_val,
+                "department": department,
+                "display_name": display_name,
+                "permissions": json.dumps(initial_permissions),
+                "email": email_addr,
+                "temp_password": default_pass,
+                "full_name": new_full_name,
+                "hashed_password": None
+            }
 
-            try:
-                if not s_id or not first_n or not last_n:
-                    ignored_count += 1
-                    results.append({
-                        "email": email_addr,
-                        "student_no": s_id or "N/A",
-                        "full_name": new_full_name or "Invalid Row",
-                        "course": course,
-                        "department": department,
-                        "level": level,
-                        "batch_id": batch_val,
-                        "temp_password": "",
-                        "status": "Ignored - Missing required fields"
-                    })
-                elif s_id in seen_student_nos or email_addr in seen_emails:
-                    ignored_count += 1
-                    results.append({
-                        "email": email_addr,
-                        "student_no": s_id,
-                        "full_name": new_full_name,
-                        "course": course,
-                        "department": department,
-                        "level": level,
-                        "batch_id": batch_val,
-                        "temp_password": "",
-                        "status": "Ignored - Duplicate in upload"
-                    })
-                else:
-                    seen_student_nos.add(s_id)
-                    seen_emails.add(email_addr)
-
-                    existing_user = db.query(models.User).filter(
-                        (models.User.student_no == s_id) | (models.User.email == email_addr)
-                    ).first()
-
-                    if existing_user:
-                        if existing_user.is_admin:
-                            ignored_count += 1
-                            results.append({
-                                "email": email_addr,
-                                "student_no": s_id,
-                                "full_name": new_full_name,
-                                "course": course,
-                                "department": department,
-                                "level": level,
-                                "batch_id": batch_val,
-                                "temp_password": "",
-                                "status": "Ignored - Conflicts with existing admin"
-                            })
-                        elif duplicate_action == "ignore":
-                            ignored_count += 1
-                            results.append({
-                                "email": existing_user.email,
-                                "student_no": existing_user.student_no,
-                                "full_name": existing_user.full_name or new_full_name,
-                                "course": existing_user.course or course,
-                                "department": existing_user.department or department,
-                                "level": existing_user.level or level,
-                                "batch_id": existing_user.batch_id or batch_val,
-                                "temp_password": "",
-                                "status": "Ignored - Already registered"
-                            })
-                        else:
-                            existing_user.first_name = first_n
-                            existing_user.middle_name = middle_n
-                            existing_user.last_name = last_n
-                            existing_user.full_name = new_full_name
-                            existing_user.student_no = s_id
-                            existing_user.email = email_addr
-                            existing_user.course = course
-                            existing_user.department = department
-                            existing_user.level = level
-                            existing_user.batch_id = batch_val
-                            existing_user.hashed_password = pwd_context.hash(default_pass)
-                            existing_user.must_change_password = True
-                            existing_user.is_archived = False
-                            existing_user.is_admin = False
-                            existing_user.permissions = json.dumps(initial_permissions)
-
-                            replaced_count += 1
-                            results.append({
-                                "email": email_addr,
-                                "student_no": s_id,
-                                "full_name": new_full_name,
-                                "course": course,
-                                "department": department,
-                                "level": level,
-                                "batch_id": batch_val,
-                                "temp_password": default_pass,
-                                "status": "Replaced existing user"
-                            })
-                    else:
-                        user_obj = models.User(
-                            first_name=first_n,
-                            middle_name=middle_n,
-                            last_name=last_n,
-                            full_name=new_full_name,
-                            student_no=s_id,
-                            email=email_addr,
-                            course=course,
-                            department=department,
-                            level=level,
-                            batch_id=batch_val,
-                            hashed_password=pwd_context.hash(default_pass),
-                            is_admin=False,
-                            must_change_password=True,
-                            permissions=json.dumps(initial_permissions)
-                        )
-                        db.add(user_obj)
-                        created_count += 1
-
-                        results.append({
-                            "email": email_addr,
-                            "student_no": s_id,
-                            "full_name": new_full_name,
-                                "course": course,
-                                "department": department,
-                                "level": level,
-                                "batch_id": batch_val,
-                                "temp_password": default_pass,
-                            "status": "Created"
-                        })
-
-                    if results and results[-1].get("status") in {"Created", "Replaced existing user"}:
-                        db.commit()
-            except IntegrityError:
-                db.rollback()
-
-                last_result = results[-1] if results else None
-                if last_result and last_result.get("student_no") == s_id:
-                    last_result["temp_password"] = ""
-                    last_result["status"] = "Ignored - Duplicate email or student number conflict"
-
-                    if duplicate_action == "replace" and existing_user and not existing_user.is_admin:
-                        replaced_count = max(replaced_count - 1, 0)
-                    else:
-                        created_count = max(created_count - 1, 0)
-                ignored_count += 1
-            except Exception as row_error:
-                db.rollback()
+            if not s_id or not first_n or not last_n:
                 ignored_count += 1
                 results.append({
                     "email": email_addr,
@@ -535,21 +510,401 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                     "level": level,
                     "batch_id": batch_val,
                     "temp_password": "",
-                    "status": f"Failed - {str(row_error)[:120]}"
+                    "status": "Ignored - Missing required fields"
                 })
+                continue
 
-            update_bulk_job(
-                job_id,
-                processed=index,
-                progress=int((index / total_students) * 100) if total_students else 100,
-                summary={
-                    "total": total_students,
-                    "created": created_count,
-                    "replaced": replaced_count,
-                    "ignored": ignored_count,
-                    "duplicate_action": duplicate_action
-                }
-            )
+            email_key = email_addr.lower() if email_addr else ""
+            if s_id in seen_student_nos or (email_key and email_key in seen_emails):
+                ignored_count += 1
+                results.append({
+                    "email": email_addr,
+                    "student_no": s_id,
+                    "full_name": new_full_name,
+                    "course": course,
+                    "department": department,
+                    "level": level,
+                    "batch_id": batch_val,
+                    "temp_password": "",
+                    "status": "Ignored - Duplicate in upload"
+                })
+                continue
+
+            seen_student_nos.add(s_id)
+            if email_key:
+                seen_emails.add(email_key)
+
+            normalized_rows.append(row)
+
+        processed_seed = len(results)
+        push_bulk_progress(
+            processed_seed,
+            "Validating uploaded users before registration..."
+        )
+
+        # ---------------------------------------------------------
+        # PASS 2: preload possible existing users in SQL Server-safe chunks
+        # ---------------------------------------------------------
+        student_nos = [r["student_no"] for r in normalized_rows if r["student_no"]]
+        emails = [r["email"] for r in normalized_rows if r["email"]]
+
+        existing_users = []
+        max_len = max(len(student_nos), len(emails))
+
+        for i in range(0, max_len, lookup_chunk_size):
+            ids_chunk = student_nos[i:i + lookup_chunk_size]
+            emails_chunk = emails[i:i + lookup_chunk_size]
+
+            q = db.query(models.User)
+
+            if ids_chunk and emails_chunk:
+                rows = q.filter(
+                    (models.User.student_no.in_(ids_chunk)) |
+                    (models.User.email.in_(emails_chunk))
+                ).all()
+            elif ids_chunk:
+                rows = q.filter(models.User.student_no.in_(ids_chunk)).all()
+            elif emails_chunk:
+                rows = q.filter(models.User.email.in_(emails_chunk)).all()
+            else:
+                rows = []
+
+            existing_users.extend(rows)
+
+        existing_by_student_no = {}
+        existing_by_email = {}
+
+        for user in existing_users:
+            if user.student_no:
+                existing_by_student_no[str(user.student_no).strip()] = user
+            if user.email:
+                existing_by_email[str(user.email).strip().lower()] = user
+
+        # ---------------------------------------------------------
+        # PASS 3: hash + process in commit chunks
+        # ---------------------------------------------------------
+        from concurrent.futures import as_completed
+
+        def hash_password(row):
+            return pwd_context.hash(row["temp_password"])
+
+        processed_valid_rows = processed_seed
+
+        for row_chunk in chunked(normalized_rows, commit_chunk_size):
+            pending_results = []
+            pending_creates = []
+            pending_counters = {
+                "created": 0,
+                "replaced": 0,
+                "ignored": 0
+            }
+
+            try:
+                if row_chunk:
+                    hashed_chunk = [None] * len(row_chunk)
+                    with ThreadPoolExecutor(max_workers=hash_workers) as executor:
+                        futures = {
+                            executor.submit(hash_password, row): idx
+                            for idx, row in enumerate(row_chunk)
+                        }
+
+                        for future in as_completed(futures):
+                            idx = futures[future]
+                            hashed_chunk[idx] = future.result()
+
+                    for row, hashed in zip(row_chunk, hashed_chunk):
+                        row["hashed_password"] = hashed
+
+                update_bulk_job(
+                    job_id,
+                    message=f"Processing users {processed_valid_rows + 1}-{min(processed_valid_rows + len(row_chunk), total_students)} of {total_students}..."
+                )
+
+                for row in row_chunk:
+                    s_id = row["student_no"]
+                    email_addr = row["email"]
+                    email_key = email_addr.strip().lower() if email_addr else ""
+
+                    existing_user = existing_by_student_no.get(s_id) or existing_by_email.get(email_key)
+
+                    if existing_user:
+                        if existing_user.is_admin:
+                            pending_counters["ignored"] += 1
+                            pending_results.append({
+                                "email": email_addr,
+                                "student_no": s_id,
+                                "full_name": row["full_name"],
+                                "course": row["course"],
+                                "department": row["department"],
+                                "level": row["level"],
+                                "batch_id": row["batch_id"],
+                                "temp_password": "",
+                                "status": "Ignored - Conflicts with existing admin"
+                            })
+
+                        elif duplicate_action == "ignore":
+                            pending_counters["ignored"] += 1
+                            pending_results.append({
+                                "email": existing_user.email,
+                                "student_no": existing_user.student_no,
+                                "full_name": existing_user.full_name or row["full_name"],
+                                "course": existing_user.course or row["course"],
+                                "department": existing_user.department or row["department"],
+                                "level": existing_user.level or row["level"],
+                                "batch_id": existing_user.batch_id or row["batch_id"],
+                                "temp_password": "",
+                                "status": "Ignored - Already registered"
+                            })
+
+                        else:
+                            existing_user.first_name = row["first_name"]
+                            existing_user.middle_name = row["middle_name"]
+                            existing_user.last_name = row["last_name"]
+                            existing_user.full_name = row["full_name"]
+                            existing_user.student_no = row["student_no"]
+                            existing_user.email = row["email"]
+                            existing_user.course = row["course"]
+                            existing_user.department = row["department"]
+                            existing_user.level = row["level"]
+                            existing_user.batch_id = row["batch_id"]
+                            existing_user.hashed_password = row["hashed_password"]
+                            existing_user.must_change_password = True
+                            existing_user.is_archived = False
+                            existing_user.is_admin = False
+                            existing_user.permissions = row["permissions"]
+
+                            existing_by_student_no[s_id] = existing_user
+                            if email_key:
+                                existing_by_email[email_key] = existing_user
+
+                            pending_counters["replaced"] += 1
+                            pending_results.append({
+                                "email": row["email"],
+                                "student_no": row["student_no"],
+                                "full_name": row["full_name"],
+                                "course": row["course"],
+                                "department": row["department"],
+                                "level": row["level"],
+                                "batch_id": row["batch_id"],
+                                "temp_password": row["temp_password"],
+                                "status": "Replaced existing user"
+                            })
+
+                    else:
+                        user_obj = models.User(
+                            first_name=row["first_name"],
+                            middle_name=row["middle_name"],
+                            last_name=row["last_name"],
+                            full_name=row["full_name"],
+                            student_no=row["student_no"],
+                            email=row["email"],
+                            course=row["course"],
+                            department=row["department"],
+                            level=row["level"],
+                            batch_id=row["batch_id"],
+                            hashed_password=row["hashed_password"],
+                            is_admin=False,
+                            must_change_password=True,
+                            permissions=row["permissions"]
+                        )
+                        pending_creates.append(user_obj)
+
+                        pending_counters["created"] += 1
+                        pending_results.append({
+                            "email": row["email"],
+                            "student_no": row["student_no"],
+                            "full_name": row["full_name"],
+                            "course": row["course"],
+                            "department": row["department"],
+                            "level": row["level"],
+                            "batch_id": row["batch_id"],
+                            "temp_password": row["temp_password"],
+                            "status": "Created"
+                        })
+
+                if pending_creates:
+                    db.add_all(pending_creates)
+
+                db.commit()
+
+                results.extend(pending_results)
+                created_count += pending_counters["created"]
+                replaced_count += pending_counters["replaced"]
+                ignored_count += pending_counters["ignored"]
+                processed_valid_rows += len(pending_results)
+                push_bulk_progress(
+                    processed_valid_rows,
+                    f"Registered {processed_valid_rows}/{total_students} users..."
+                )
+
+            except IntegrityError:
+                # Fallback: isolate bad rows one by one
+                db.rollback()
+
+                for row in row_chunk:
+                    s_id = row["student_no"]
+                    email_addr = row["email"]
+                    email_key = email_addr.strip().lower() if email_addr else ""
+                    existing_user = existing_by_student_no.get(s_id) or existing_by_email.get(email_key)
+
+                    try:
+                        if existing_user:
+                            if existing_user.is_admin:
+                                ignored_count += 1
+                                results.append({
+                                    "email": email_addr,
+                                    "student_no": s_id,
+                                    "full_name": row["full_name"],
+                                    "course": row["course"],
+                                    "department": row["department"],
+                                    "level": row["level"],
+                                    "batch_id": row["batch_id"],
+                                    "temp_password": "",
+                                    "status": "Ignored - Conflicts with existing admin"
+                                })
+                                processed_valid_rows += 1
+                                push_bulk_progress(
+                                    processed_valid_rows,
+                                    f"Registered {processed_valid_rows}/{total_students} users..."
+                                )
+
+                            elif duplicate_action == "ignore":
+                                ignored_count += 1
+                                results.append({
+                                    "email": existing_user.email,
+                                    "student_no": existing_user.student_no,
+                                    "full_name": existing_user.full_name or row["full_name"],
+                                    "course": existing_user.course or row["course"],
+                                    "department": existing_user.department or row["department"],
+                                    "level": existing_user.level or row["level"],
+                                    "batch_id": existing_user.batch_id or row["batch_id"],
+                                    "temp_password": "",
+                                    "status": "Ignored - Already registered"
+                                })
+                                processed_valid_rows += 1
+                                push_bulk_progress(
+                                    processed_valid_rows,
+                                    f"Registered {processed_valid_rows}/{total_students} users..."
+                                )
+
+                            else:
+                                existing_user.first_name = row["first_name"]
+                                existing_user.middle_name = row["middle_name"]
+                                existing_user.last_name = row["last_name"]
+                                existing_user.full_name = row["full_name"]
+                                existing_user.student_no = row["student_no"]
+                                existing_user.email = row["email"]
+                                existing_user.course = row["course"]
+                                existing_user.department = row["department"]
+                                existing_user.level = row["level"]
+                                existing_user.batch_id = row["batch_id"]
+                                existing_user.hashed_password = row["hashed_password"]
+                                existing_user.must_change_password = True
+                                existing_user.is_archived = False
+                                existing_user.is_admin = False
+                                existing_user.permissions = row["permissions"]
+
+                                db.commit()
+
+                                existing_by_student_no[s_id] = existing_user
+                                if email_key:
+                                    existing_by_email[email_key] = existing_user
+
+                                replaced_count += 1
+                                results.append({
+                                    "email": row["email"],
+                                    "student_no": row["student_no"],
+                                    "full_name": row["full_name"],
+                                    "course": row["course"],
+                                    "department": row["department"],
+                                    "level": row["level"],
+                                    "batch_id": row["batch_id"],
+                                    "temp_password": row["temp_password"],
+                                    "status": "Replaced existing user"
+                                })
+                                processed_valid_rows += 1
+                                push_bulk_progress(
+                                    processed_valid_rows,
+                                    f"Registered {processed_valid_rows}/{total_students} users..."
+                                )
+
+                        else:
+                            user_obj = models.User(
+                                first_name=row["first_name"],
+                                middle_name=row["middle_name"],
+                                last_name=row["last_name"],
+                                full_name=row["full_name"],
+                                student_no=row["student_no"],
+                                email=row["email"],
+                                course=row["course"],
+                                department=row["department"],
+                                level=row["level"],
+                                batch_id=row["batch_id"],
+                                hashed_password=row["hashed_password"],
+                                is_admin=False,
+                                must_change_password=True,
+                                permissions=row["permissions"]
+                            )
+                            db.add(user_obj)
+                            db.commit()
+
+                            created_count += 1
+                            results.append({
+                                "email": row["email"],
+                                "student_no": row["student_no"],
+                                "full_name": row["full_name"],
+                                "course": row["course"],
+                                "department": row["department"],
+                                "level": row["level"],
+                                "batch_id": row["batch_id"],
+                                "temp_password": row["temp_password"],
+                                "status": "Created"
+                            })
+                            processed_valid_rows += 1
+                            push_bulk_progress(
+                                processed_valid_rows,
+                                f"Registered {processed_valid_rows}/{total_students} users..."
+                            )
+
+                    except IntegrityError:
+                        db.rollback()
+                        ignored_count += 1
+                        results.append({
+                            "email": row["email"],
+                            "student_no": row["student_no"] or "N/A",
+                            "full_name": row["full_name"] or "Invalid Row",
+                            "course": row["course"],
+                            "department": row["department"],
+                            "level": row["level"],
+                            "batch_id": row["batch_id"],
+                            "temp_password": "",
+                            "status": "Ignored - Duplicate email or student number conflict"
+                        })
+                        processed_valid_rows += 1
+                        push_bulk_progress(
+                            processed_valid_rows,
+                            f"Registered {processed_valid_rows}/{total_students} users..."
+                        )
+
+                    except Exception as row_error:
+                        db.rollback()
+                        ignored_count += 1
+                        results.append({
+                            "email": row["email"],
+                            "student_no": row["student_no"] or "N/A",
+                            "full_name": row["full_name"] or "Invalid Row",
+                            "course": row["course"],
+                            "department": row["department"],
+                            "level": row["level"],
+                            "batch_id": row["batch_id"],
+                            "temp_password": "",
+                            "status": f"Failed - {str(row_error)[:120]}"
+                        })
+                        processed_valid_rows += 1
+                        push_bulk_progress(
+                            processed_valid_rows,
+                            f"Registered {processed_valid_rows}/{total_students} users..."
+                        )
 
         finished_at = datetime.utcnow()
         update_bulk_job(
@@ -575,6 +930,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             "user_management_students",
             None
         )
+
     except Exception as e:
         db.rollback()
         print(f"CRITICAL REGISTRATION ERROR: {e}")
@@ -620,7 +976,57 @@ async def toggle_archive(
     db.refresh(user)  # optional but good practice
 
     status = "archived" if archive else "restored"
+    create_admin_notification(
+        db,
+        f"{current_admin.full_name or current_admin.email} {status} user {user.full_name or user.email}.",
+        "user_management_students" if not user.is_admin else "user_management_admin",
+        user.id
+    )
     return {"message": f"User {user.full_name} has been {status}."}
+
+
+@router.post("/bulk-toggle-archive")
+async def bulk_toggle_archive(
+    data: StudentActivationRequest,
+    archive: bool,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("User-Management-Archive"))
+):
+    user_ids = list(dict.fromkeys(data.user_ids))
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="No users selected.")
+
+    users: list[models.User] = []
+    chunk_size = 1000
+    for start in range(0, len(user_ids), chunk_size):
+        user_id_chunk = user_ids[start:start + chunk_size]
+        users.extend(
+            db.query(models.User).filter(models.User.id.in_(user_id_chunk)).all()
+        )
+
+    if not users:
+        raise HTTPException(status_code=404, detail="No eligible users found.")
+
+    updated_count = 0
+    for user in users:
+        permissions = parse_permissions(user.permissions)
+        user.is_archived = archive
+        if archive:
+            user.permissions = json.dumps([])
+        else:
+            permissions = [permission for permission in permissions if permission != DELETE_QUEUE_PERMISSION]
+            user.permissions = json.dumps(permissions)
+        user.archived_at = datetime.now() if archive else None
+        updated_count += 1
+
+    db.commit()
+
+    status = "archived" if archive else "restored"
+    return {
+        "message": f"{updated_count} user account(s) {status} successfully.",
+        "count": updated_count,
+        "requested_count": len(user_ids)
+    }
 
 @router.post("/move-to-delete/{user_id}")
 async def move_user_to_delete(
@@ -641,8 +1047,55 @@ async def move_user_to_delete(
         permissions.append(DELETE_QUEUE_PERMISSION)
         user.permissions = json.dumps(permissions)
         db.commit()
+        create_admin_notification(
+            db,
+            f"{current_admin.full_name or current_admin.email} moved user {user.full_name or user.email} to the delete queue.",
+            "user_management_students" if not user.is_admin else "user_management_admin",
+            user.id
+        )
 
     return {"message": f"User {user.full_name} moved to Delete tab."}
+
+
+@router.post("/bulk-move-to-delete")
+async def bulk_move_users_to_delete(
+    data: StudentActivationRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("User-Management-Delete"))
+):
+    user_ids = list(dict.fromkeys(data.user_ids))
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="No users selected.")
+
+    users: list[models.User] = []
+    chunk_size = 1000
+    for start in range(0, len(user_ids), chunk_size):
+        user_id_chunk = user_ids[start:start + chunk_size]
+        users.extend(
+            db.query(models.User).filter(
+                models.User.id.in_(user_id_chunk),
+                models.User.is_archived == True
+            ).all()
+        )
+
+    if not users:
+        raise HTTPException(status_code=404, detail="No eligible archived users found.")
+
+    moved_count = 0
+    for user in users:
+        permissions = parse_permissions(user.permissions)
+        if DELETE_QUEUE_PERMISSION not in permissions:
+            permissions.append(DELETE_QUEUE_PERMISSION)
+            user.permissions = json.dumps(permissions)
+            moved_count += 1
+
+    db.commit()
+
+    return {
+        "message": f"{moved_count} user account(s) moved to Delete successfully.",
+        "count": moved_count,
+        "requested_count": len(user_ids)
+    }
 
 # ROUTE 2: Permanent Delete (Hard Delete)
 @router.delete("/permanent-delete/{user_id}")
@@ -653,8 +1106,16 @@ async def permanent_delete(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
+        deleted_user_name = user.full_name or user.email or f"User #{user_id}"
+        deleted_user_is_admin = bool(user.is_admin)
         delete_user_and_related_records(db, user)
         db.commit()
+        create_admin_notification(
+            db,
+            f"{deleted_user_name} was permanently deleted from User Management.",
+            "user_management_admin" if deleted_user_is_admin else "user_management_students",
+            user_id
+        )
         
         return {"message": "User and all related records (messages, claims, items) deleted."}
 
@@ -662,6 +1123,45 @@ async def permanent_delete(user_id: int, db: Session = Depends(get_db)):
         db.rollback()
         print(f"Delete Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Database Integrity Error: User has active records.")
+
+
+@router.delete("/bulk-permanent-delete")
+async def bulk_permanent_delete(
+    data: StudentActivationRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("User-Management-Delete"))
+):
+    user_ids = list(dict.fromkeys(data.user_ids))
+    if not user_ids:
+        raise HTTPException(status_code=400, detail="No users selected.")
+
+    users: list[models.User] = []
+    chunk_size = 500
+    for start in range(0, len(user_ids), chunk_size):
+        user_id_chunk = user_ids[start:start + chunk_size]
+        users.extend(
+            db.query(models.User).filter(models.User.id.in_(user_id_chunk)).all()
+        )
+
+    if not users:
+        raise HTTPException(status_code=404, detail="No eligible users found for deletion.")
+
+    deleted_count = 0
+    try:
+        for user in users:
+            delete_user_and_related_records(db, user)
+            deleted_count += 1
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Bulk Delete Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database Integrity Error: Some users still have active records.")
+
+    return {
+        "message": f"{deleted_count} user account(s) deleted permanently.",
+        "count": deleted_count,
+        "requested_count": len(user_ids)
+    }
 
 def delete_user_and_related_records(db: Session, user: models.User):
     user_id = user.id
@@ -1040,6 +1540,13 @@ async def update_profile(
     if section: user.section = section
 
     db.commit()
+    create_admin_notification(
+        db,
+        f"{user.full_name or user.email} updated the admin profile information.",
+        "user_management_admin",
+        user.id,
+        "/admin/Profile"
+    )
     return {"message": "Profile updated successfully"}
 
 @router.get("/Settings")
@@ -1162,6 +1669,13 @@ async def create_department(
     db.add(new_department)
     db.commit()
     db.refresh(new_department)
+    create_admin_notification(
+        db,
+        f"Department '{new_department.name}' was added in Content Management.",
+        "new_report",
+        new_department.id,
+        "/admin/Content-management"
+    )
     return {"status": "success", "department": new_department}
 
 
@@ -1175,8 +1689,16 @@ async def delete_department(
     if not department:
         raise HTTPException(status_code=404, detail="Department not found.")
 
+    department_name = department.name
     db.delete(department)
     db.commit()
+    create_admin_notification(
+        db,
+        f"Department '{department_name}' was deleted from Content Management.",
+        "new_report",
+        department_id,
+        "/admin/Content-management"
+    )
     return {"status": "success"}
 
 
@@ -1198,6 +1720,13 @@ async def create_category(
     db.add(new_category)
     db.commit()
     db.refresh(new_category)
+    create_admin_notification(
+        db,
+        f"Category '{new_category.name}' was added in Content Management.",
+        "new_report",
+        new_category.id,
+        "/admin/Content-management"
+    )
     return {"status": "success", "category": new_category}
 
 
@@ -1211,8 +1740,16 @@ async def delete_category(
     if not category:
         raise HTTPException(status_code=404, detail="Category not found.")
 
+    category_name = category.name
     db.delete(category)
     db.commit()
+    create_admin_notification(
+        db,
+        f"Category '{category_name}' was deleted from Content Management.",
+        "new_report",
+        category_id,
+        "/admin/Content-management"
+    )
     return {"status": "success"}
 
 
@@ -1390,6 +1927,13 @@ async def activate_students(
             activated_count += 1
 
     db.commit()
+    if activated_count > 0:
+        create_admin_notification(
+            db,
+            f"{activated_count} student account(s) were activated for portal access.",
+            "user_management_students",
+            students[0].id if students else None
+        )
 
     return {
         "message": f"{activated_count} user account(s) activated successfully.",
@@ -1432,6 +1976,13 @@ async def deactivate_students(
             deactivated_count += 1
 
     db.commit()
+    if deactivated_count > 0:
+        create_admin_notification(
+            db,
+            f"{deactivated_count} student account(s) were deactivated for portal access.",
+            "user_management_students",
+            students[0].id if students else None
+        )
 
     return {
         "message": f"{deactivated_count} user account(s) deactivated successfully.",
@@ -1501,6 +2052,12 @@ async def archive_students_by_batch(
         student.is_archived = True
 
     db.commit()
+    create_admin_notification(
+        db,
+        f"{len(students)} student account(s) from batch {batch_id} were archived.",
+        "user_management_students",
+        students[0].id if students else None
+    )
 
     return {
         "message": f"{len(students)} student account(s) from batch {batch_id} archived successfully.",
@@ -1531,6 +2088,12 @@ async def restore_students_by_batch(
         student.is_archived = False
 
     db.commit()
+    create_admin_notification(
+        db,
+        f"{len(students)} student account(s) from batch {batch_id} were restored.",
+        "user_management_students",
+        students[0].id if students else None
+    )
 
     return {
         "message": f"{len(students)} student account(s) from batch {batch_id} restored successfully.",
@@ -1559,9 +2122,16 @@ async def delete_students_by_batch(
 
     try:
         count = len(students)
+        sample_student_id = students[0].id if students else None
         for student in students:
             delete_user_and_related_records(db, student)
         db.commit()
+        create_admin_notification(
+            db,
+            f"{count} archived student account(s) from batch {batch_id} were permanently deleted.",
+            "user_management_students",
+            sample_student_id
+        )
         return {
             "message": f"{count} archived student account(s) from batch {batch_id} deleted successfully.",
             "count": count,
@@ -1675,6 +2245,13 @@ async def approve_item(item_id: int, db: Session = Depends(get_db)):
     # 3. Remove from pending
     db.delete(pending)
     db.commit()
+    create_admin_notification(
+        db,
+        f"Pending item #{item_id} was approved and moved to active inventory.",
+        "new_report",
+        new_item.id,
+        "/admin/Found_Items_Report"
+    )
 
     return {"status": "success", "message": "Item approved and moved to inventory"}
 
@@ -1692,6 +2269,13 @@ def archive_pending(
 
     pending.archived = True # Just hide it
     db.commit()
+    create_admin_notification(
+        db,
+        f"Pending item #{pending_id} was archived from the approval queue.",
+        "new_report",
+        pending_id,
+        "/admin/Found_Items_Report"
+    )
     return {"message": "Item archived"}
 
 
@@ -1730,6 +2314,13 @@ def dispose_pending_item(
         db.add(reference_item)
         db.delete(pending)
         db.commit()
+        create_admin_notification(
+            db,
+            f"Pending item #{pending_id} was disposed and moved to the hidden reference dataset.",
+            "new_report",
+            pending_id,
+            "/admin/Found_Items_Report"
+        )
         return {"status": "success", "message": "Pending item disposed"}
     except Exception:
         db.rollback()
@@ -1767,6 +2358,13 @@ def recover_pending(
     if pending:
         pending.archived = False
         db.commit()
+        create_admin_notification(
+            db,
+            f"Pending item #{pending_id} was restored to the approval queue.",
+            "new_report",
+            pending_id,
+            "/admin/Found_Items_Report"
+        )
         return {"status": "success", "message": "Pending item restored to approval queue", "record_type": "pending"}
 
     # Fallback: if the UI thought this was pending but the archived record already lives
@@ -1775,10 +2373,40 @@ def recover_pending(
     if item:
         item.archived = False
         db.commit()
+        create_admin_notification(
+            db,
+            f"Archived found item #{pending_id} was restored to active inventory.",
+            "new_report",
+            pending_id,
+            "/admin/Found_Items_Report"
+        )
         return {"status": "success", "message": "Archived found item restored to active inventory", "record_type": "found"}
 
     raise HTTPException(status_code=404, detail="Pending item not found")
 
+@router.post("/recover-lost/{item_id}") # Change the path here
+def recover_lost_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    item.archived = False # This is the "magic" line that restores it
+    db.commit()
+    create_admin_notification(
+        db,
+        f"Lost report #{item_id} was restored to the active list.",
+        "new_report",
+        item_id,
+        "/admin/Lost_Items_Report"
+    )
+    return {"status": "success", "message": "Lost report restored to active list"}
 
 @router.post("/recover-found/{item_id}")
 def recover_found_item(
@@ -1795,6 +2423,13 @@ def recover_found_item(
 
     item.archived = False
     db.commit()
+    create_admin_notification(
+        db,
+        f"Found item #{item_id} was restored to active inventory.",
+        "new_report",
+        item_id,
+        "/admin/Found_Items_Report"
+    )
     return {"status": "success", "message": "Item restored to active inventory"}
 
 @router.post("/reset-student-password")
@@ -1819,6 +2454,12 @@ async def reset_student_password(
     student.must_change_password = True 
     
     db.commit()
+    create_admin_notification(
+        db,
+        f"Password was reset for student {student.full_name or student.email}.",
+        "user_management_students",
+        student.id
+    )
     
     return {
         "status": "success",
@@ -1855,6 +2496,7 @@ async def finalize_lost_upload(
     date: str = Form(None),
     time_found: str = Form(None),
     image_embedding: str = Form(None), 
+    possible_matches: str = Form(None),
     ai_score: float = Form(0.0),       
     matched_item_id: int = Form(None), 
     db: Session = Depends(get_db),
@@ -1866,6 +2508,16 @@ async def finalize_lost_upload(
         resolved_category = resolve_category_name(db, category_id=category_id, category_name=category)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    for upload, label in (
+        (file, "Main image"),
+        (extra_image_1, "Optional image 2"),
+        (extra_image_2, "Optional image 3"),
+    ):
+        try:
+            validate_upload_file_size(upload, label=label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     normalized_image_embedding = await build_combined_upload_embedding(file, extra_image_1, extra_image_2)
     saved_path = save_file(file, resolved_category)
@@ -1882,6 +2534,8 @@ async def finalize_lost_upload(
     is_auto_match = ai_score >= 0.55 and matched_item_id is not None
 
     # 5. Create the Database Record 
+    saved_possible_matches = normalize_saved_possible_matches(possible_matches)
+
     new_item = models.Item(
         status="lost",
         category_id=category_id,
@@ -1894,6 +2548,7 @@ async def finalize_lost_upload(
         location=location,
         image_path=saved_path, 
         image_embedding=normalized_image_embedding, 
+        possible_matches=saved_possible_matches,
         date=parsed_date,
         time_found=time_found,
         is_matched=is_auto_match, 
@@ -1973,6 +2628,16 @@ async def finalize_found_upload(
         resolved_category = resolve_category_name(db, category_id=category_id, category_name=category)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    for upload, label in (
+        (file, "Main image"),
+        (extra_image_1, "Optional image 2"),
+        (extra_image_2, "Optional image 3"),
+    ):
+        try:
+            validate_upload_file_size(upload, label=label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     normalized_image_embedding = await build_combined_upload_embedding(file, extra_image_1, extra_image_2)
     saved_path = save_file(file, resolved_category)
@@ -2131,13 +2796,24 @@ def get_notifications(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
-    # Fetch latest 10 unread notifications, newest first
     notifications = db.query(models.Notification)\
+        .filter(~models.Notification.type.in_(["student_match", "student_update"]))\
         .order_by(models.Notification.created_at.desc())\
         .limit(10)\
         .all()
     
     return notifications
+
+@router.get("/notifications/unread-count")
+def get_notification_unread_count(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    unread_count = db.query(models.Notification).filter(
+        ~models.Notification.type.in_(["student_match", "student_update"]),
+        models.Notification.is_read == False
+    ).count()
+    return {"unread_count": unread_count}
 
 @router.post("/notifications/{notif_id}/read")
 def mark_read(
@@ -2167,6 +2843,13 @@ async def update_settings(
     user.font_size = max(12, min(24, int(data.font_size)))
 
     db.commit()
+    create_admin_notification(
+        db,
+        f"{user.full_name or user.email} updated admin settings.",
+        "user_management_admin",
+        user.id,
+        "/admin/Settings"
+    )
     return {"status": "success", "message": "Settings applied across system"}
 
 
@@ -2221,6 +2904,15 @@ async def create_announcement(
         message = "Announcement published"
 
     db.commit()
+    announcement_id = current_post.id if current_post else new_post.id
+    announcement_title = current_post.title if current_post else new_post.title
+    create_admin_notification(
+        db,
+        f"Announcement '{announcement_title}' was updated in Content Management.",
+        "new_report",
+        announcement_id,
+        "/admin/Content-management"
+    )
     
     return {"message": message, "path": db_path}
 @router.post("/report-confiscated")

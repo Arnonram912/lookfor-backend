@@ -4,7 +4,7 @@
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
     <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=14"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='Lost_item_report.css') }}?v=15"> 
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -132,7 +132,7 @@
         <section class="content-body"> 
              <div class="profile-page-card">
                 <div class="action-bar">
-                    <h2 class="section-title">Lost Items <span>Inventory</span></h2>
+                    <h2 class="section-title">Lost Items</h2>
                     <button class="upload-btn" onclick="openModal('reportModal')"> 
                         <span class="plus">+ Upload Lost Item </span>
                     </button> 
@@ -172,6 +172,10 @@
 
                     <p><strong>Description:</strong></p>
                     <p id="modalDescription" class="description-text"></p>
+                    <div class="possible-matches-panel" style="margin-top: 16px;">
+                        <p><strong>Possible Matches:</strong></p>
+                        <div id="modalPossibleMatches" class="description-text">Loading possible matches...</div>
+                    </div>
                     
                     </div>
                 </div>
@@ -251,7 +255,7 @@
                     </div>
 
                      <div class="modal-footer" style="display: flex; justify-content: center;">
-                    <button class="btn-found lost-submit-btn" onclick="submitReport()">+submit</button>
+                    <button class="btn-found lost-submit-btn" onclick="submitReport()">Submit</button>
                     </div>
                 </div>
             </div>
@@ -286,6 +290,21 @@
                     </div>
                 </div>
             </div>
+            <div id="matchResultsModal" class="modal-overlay" style="z-index: 1002;">
+                <div class="modal-content" style="max-width: 760px; width: min(92vw, 760px); padding: 28px;">
+                    <span class="close-btn" onclick="closeMatchResultsModal()">&times;</span>
+                    <h2 id="matchResultsTitle" style="margin-bottom: 8px;">Analysis complete</h2>
+                    <p id="matchResultsSummary" style="color: #5b6574; margin-bottom: 18px;">Possible matches found.</p>
+                    <div id="matchResultsTopMatch" style="display:none; margin-bottom: 18px; padding: 16px; border-radius: 14px; background: linear-gradient(135deg, #f3f8ff, #e9f1ff); border: 1px solid #cfe0ff;"></div>
+                    <div>
+                        <h3 style="margin-bottom: 12px; color: #114b7a;">Possible Matches</h3>
+                        <div id="matchResultsList" style="display: grid; gap: 12px; max-height: 380px; overflow-y: auto; padding-right: 4px;"></div>
+                    </div>
+                    <div class="modal-footer" style="display:flex; justify-content:flex-end; margin-top: 20px;">
+                        <button class="btn-found lost-submit-btn" type="button" onclick="closeMatchResultsModal()" style="margin:0;">Continue</button>
+                    </div>
+                </div>
+            </div>
         </div>
 </main>
 
@@ -312,6 +331,93 @@ function openModal(id) {
 function closeModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.style.display = 'none';
+}
+
+let matchResultsModalResolver = null;
+let currentSelectedMatchId = null;
+
+function escapeModalHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value ?? '';
+    return div.innerHTML;
+}
+
+function getMatchImageUrl(match) {
+    const cleanPath = String(match?.image_path || '').replace(/\\/g, '/').trim();
+    if (!cleanPath) {
+        return 'https://via.placeholder.com/200?text=No+Image';
+    }
+    return cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+}
+
+function renderMatchThumbnail(match, altText = 'Possible match image') {
+    return `<img src="${escapeModalHtml(getMatchImageUrl(match))}" alt="${escapeModalHtml(altText)}" style="width:68px; height:68px; object-fit:cover; border-radius:12px; border:1px solid #d9e4f2; background:#f4f7fb; flex-shrink:0;" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">`;
+}
+
+function closeMatchResultsModal() {
+    closeModal('matchResultsModal');
+    if (matchResultsModalResolver) {
+        const resolve = matchResultsModalResolver;
+        matchResultsModalResolver = null;
+        const selectedMatch = currentSelectedMatchId
+            ? (window.currentMatchResults || []).find(match => String(match.id) === String(currentSelectedMatchId)) || null
+            : null;
+        resolve(selectedMatch);
+    }
+}
+
+function showMatchResultsModal({ title, summary, topMatch, matches }) {
+    const titleEl = document.getElementById('matchResultsTitle');
+    const summaryEl = document.getElementById('matchResultsSummary');
+    const topMatchEl = document.getElementById('matchResultsTopMatch');
+    const listEl = document.getElementById('matchResultsList');
+
+    window.currentMatchResults = matches || [];
+    currentSelectedMatchId = window.currentMatchResults[0]?.id ?? null;
+
+    titleEl.textContent = title || 'Analysis complete';
+    summaryEl.textContent = summary || '';
+
+    if (topMatch) {
+        topMatchEl.style.display = 'block';
+        topMatchEl.innerHTML = `
+            <div style="font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #114b7a; font-weight: 700; margin-bottom: 10px;">Top Match</div>
+            <div style="display:flex; gap:14px; align-items:flex-start;">
+                ${renderMatchThumbnail(topMatch, topMatch.category || 'Top match image')}
+                <div style="flex:1;">
+                    <div style="font-size: 20px; font-weight: 700; color: #0e2742;">${escapeModalHtml(topMatch.category || 'Matched Item')}</div>
+                    <div style="margin-top: 8px; color: #41556b;">ID: ${escapeModalHtml(String(topMatch.id || 'N/A'))}</div>
+                    <div style="margin-top: 4px; color: #41556b;">Location: ${escapeModalHtml(topMatch.location || 'Unknown')}</div>
+                    <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Score: ${Number(topMatch.score || 0).toFixed(2)}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        topMatchEl.style.display = 'none';
+        topMatchEl.innerHTML = '';
+    }
+
+    listEl.innerHTML = window.currentMatchResults.map((match, index) => `
+        <label style="padding: 14px 16px; border: 1px solid #d9e4f2; border-radius: 12px; background: #fff; display:block; cursor:pointer;">
+            <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                    <input type="radio" name="matchResultsChoice" value="${escapeModalHtml(String(match.id || ''))}" ${index === 0 ? 'checked' : ''} onchange="currentSelectedMatchId=this.value" style="margin-top:4px;">
+                    ${renderMatchThumbnail(match, match.category || 'Possible match image')}
+                    <div style="flex:1;">
+                        <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.category || 'Item')}</div>
+                        <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
+                        <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
+                    </div>
+                </div>
+                <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${Number(match.score || 0).toFixed(2)}</div>
+            </div>
+        </label>
+    `).join('');
+
+    openModal('matchResultsModal');
+    return new Promise(resolve => {
+        matchResultsModalResolver = resolve;
+    });
 }
 
 function decodeTokenPayload(token) {
@@ -434,9 +540,25 @@ async function loadLostItems() {
 
 
 // --- 1. SUBMISSION LOGIC (REFINED) ---
+function fireSwalOnTop(options) {
+    const originalDidOpen = options?.didOpen;
+    return Swal.fire({
+        ...options,
+        didOpen: (popup) => {
+            const container = Swal.getContainer();
+            if (container) {
+                container.style.zIndex = '30000';
+            }
+            if (typeof originalDidOpen === 'function') {
+                originalDidOpen(popup);
+            }
+        }
+    });
+}
+
 function showLostUploadAlert(icon, title, text) {
     if (window.Swal) {
-        return Swal.fire({
+        return fireSwalOnTop({
             icon,
             title,
             text,
@@ -453,7 +575,7 @@ async function confirmDiscardLostReport() {
         return confirm("Are you sure you want to discard this entire report?");
     }
 
-    const result = await Swal.fire({
+    const result = await fireSwalOnTop({
         icon: 'warning',
         title: 'Discard report?',
         text: 'All unsaved changes in this lost report will be removed.',
@@ -541,22 +663,50 @@ async function executeSubmit() {
         
         if (!compareRes.ok) throw new Error("AI Comparison failed.");
         const aiResult = await compareRes.json();
+        const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
         const hasConfirmedMatch = aiResult?.action === "show_match" &&
             aiResult?.matched_item?.id &&
             (aiResult.highest_score || 0) >= 0.55;
+        let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : (matchedItems[0] || null);
 
-        if (hasConfirmedMatch) {
-            const matchedLocation = aiResult.matched_item.location || "Unknown location";
-            await showLostUploadAlert(
-                'info',
-                'Analysis complete',
-                `Possible strong match found. Matched item ID: ${aiResult.matched_item.id}. Category: ${aiResult.matched_item.category || catName}. Location: ${matchedLocation}. Score: ${Number(aiResult.highest_score || 0).toFixed(2)}. This will be reviewed before it becomes a real match.`
-            );
+        if (matchedItems.length > 0) {
+            let matchMessage = "";
+
+            if (hasConfirmedMatch) {
+                const matchedLocation = aiResult.matched_item.location || "Unknown location";
+                matchMessage += `Possible strong match found.\n\n`;
+                matchMessage += `Top Match:\n`;
+                matchMessage += `ID: ${aiResult.matched_item.id}\n`;
+                matchMessage += `Category: ${aiResult.matched_item.category || catName}\n`;
+                matchMessage += `Location: ${matchedLocation}\n`;
+                matchMessage += `Score: ${Number(aiResult.highest_score || 0).toFixed(2)}\n\n`;
+            } else {
+                matchMessage += `No highly confident match found, but here are the possible matches:\n\n`;
+            }
+
+            matchMessage += `Possible Matches:\n`;
+            matchedItems.slice(0, 5).forEach((item, index) => {
+                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${Number(item.score || 0).toFixed(2)}\n`;
+            });
+
+            selectedMatch = await showMatchResultsModal({
+                title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
+                summary: hasConfirmedMatch
+                    ? 'The AI found a strong match and also listed the other possible matches below.'
+                    : 'The AI found possible matches for review.',
+                topMatch: hasConfirmedMatch ? {
+                    id: aiResult.matched_item.id,
+                    category: aiResult.matched_item.category || catName,
+                    location: aiResult.matched_item.location || 'Unknown',
+                    score: aiResult.highest_score || 0
+                } : null,
+                matches: matchedItems
+            }) || selectedMatch;
         } else {
             await showLostUploadAlert(
                 'info',
                 'Analysis complete',
-                `No confident match found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+                `No possible matches found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
             );
         }
         
@@ -574,11 +724,12 @@ async function executeSubmit() {
         saveData.append("brand", document.getElementById('itemBrand').value);
         saveData.append("date", document.getElementById('reportDate').value);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
+        saveData.append("possible_matches", JSON.stringify(matchedItems));
         appendOptionalImages(saveData);
         
         // Handle the matched item ID if the AI found one
-        if (hasConfirmedMatch) {
-            saveData.append("matched_item_id", aiResult.matched_item.id);
+        if (selectedMatch?.id) {
+            saveData.append("matched_item_id", selectedMatch.id);
         }
 
         const saveRes = await fetch('/student/items/lost/report', {
@@ -698,22 +849,50 @@ async function executeSubmit() {
 
         if (!compareRes.ok) throw new Error("AI Comparison failed.");
         const aiResult = await compareRes.json();
+        const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
         const hasConfirmedMatch = aiResult?.action === "show_match" &&
             aiResult?.matched_item?.id &&
             (aiResult.highest_score || 0) >= 0.55;
+        let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : (matchedItems[0] || null);
 
-        if (hasConfirmedMatch) {
-            const matchedLocation = aiResult.matched_item.location || "Unknown location";
-            await showLostUploadAlert(
-                'success',
-                'Analysis complete',
-                `Possible strong match found. Matched item ID: ${aiResult.matched_item.id}. Category: ${aiResult.matched_item.category || catName}. Location: ${matchedLocation}. Score: ${Number(aiResult.highest_score || 0).toFixed(2)}. This will be reviewed before it becomes a real match.`
-            );
+        if (matchedItems.length > 0) {
+            let matchMessage = "";
+
+            if (hasConfirmedMatch) {
+                const matchedLocation = aiResult.matched_item.location || "Unknown location";
+                matchMessage += `Possible strong match found.\n\n`;
+                matchMessage += `Top Match:\n`;
+                matchMessage += `ID: ${aiResult.matched_item.id}\n`;
+                matchMessage += `Category: ${aiResult.matched_item.category || catName}\n`;
+                matchMessage += `Location: ${matchedLocation}\n`;
+                matchMessage += `Score: ${Number(aiResult.highest_score || 0).toFixed(2)}\n\n`;
+            } else {
+                matchMessage += `No highly confident match found, but here are the possible matches:\n\n`;
+            }
+
+            matchMessage += `Possible Matches:\n`;
+            matchedItems.slice(0, 5).forEach((item, index) => {
+                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${Number(item.score || 0).toFixed(2)}\n`;
+            });
+
+            selectedMatch = await showMatchResultsModal({
+                title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
+                summary: hasConfirmedMatch
+                    ? 'The AI found a strong match and also listed the other possible matches below.'
+                    : 'The AI found possible matches for review.',
+                topMatch: hasConfirmedMatch ? {
+                    id: aiResult.matched_item.id,
+                    category: aiResult.matched_item.category || catName,
+                    location: aiResult.matched_item.location || 'Unknown',
+                    score: aiResult.highest_score || 0
+                } : null,
+                matches: matchedItems
+            }) || selectedMatch;
         } else {
             await showLostUploadAlert(
                 'info',
                 'Analysis complete',
-                `No confident match found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+                `No possible matches found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
             );
         }
 
@@ -728,10 +907,11 @@ async function executeSubmit() {
         saveData.append("brand", document.getElementById('itemBrand').value);
         saveData.append("date", reportDate);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding || []));
+        saveData.append("possible_matches", JSON.stringify(matchedItems));
         appendOptionalImages(saveData);
 
-        if (hasConfirmedMatch) {
-            saveData.append("matched_item_id", aiResult.matched_item.id);
+        if (selectedMatch?.id) {
+            saveData.append("matched_item_id", selectedMatch.id);
         }
 
         const saveRes = await fetch('/student/items/lost/report', {
@@ -864,7 +1044,47 @@ function appendOptionalImages(formData) {
 }
 
         // --- VIEW DETAILS ---
-       function viewItemDetails(item) {
+async function loadPossibleMatchesForDetail(itemId, categoryFallback = '') {
+    const container = document.getElementById("modalPossibleMatches");
+    if (!container) return;
+
+    container.textContent = "Loading possible matches...";
+
+    try {
+        const response = await fetch(`/api/items/${itemId}/possible-matches`, {
+            headers: { 'Authorization': `Bearer ${getStudentToken()}` }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || "Failed to load possible matches.");
+        }
+
+        const result = await response.json();
+        const matchedItems = Array.isArray(result?.matched_items) ? result.matched_items : [];
+
+        if (!matchedItems.length) {
+            container.textContent = "No possible matches found for this item yet.";
+            return;
+        }
+
+        container.innerHTML = matchedItems.map((match, index) => `
+            <div style="display:flex; gap:14px; align-items:flex-start; border:1px solid #d9e4f2; border-radius:12px; padding:12px 14px; margin-bottom:10px; background:#fff;">
+                ${renderMatchThumbnail(match, match.category || 'Possible match image')}
+                <div style="flex:1;">
+                    <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.category || categoryFallback || 'Item')}</div>
+                    <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
+                    <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
+                    <div style="margin-top:4px; color:#556678;">Score: ${Number(match.score || 0).toFixed(2)}</div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        container.textContent = error.message || "Failed to load possible matches.";
+    }
+}
+
+function viewItemDetails(item) {
     const cleanPath = (item.image_path || "").replace(/\\/g, '/');
     document.getElementById("modalImg").src = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
     
@@ -898,7 +1118,8 @@ function appendOptionalImages(formData) {
 
     // Description
     document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
-    
+    loadPossibleMatchesForDetail(item.id, item.category);
+
     openModal('itemDetailModal');
 }
 
@@ -908,14 +1129,26 @@ function appendOptionalImages(formData) {
             fetchCategories(); // Fills the category dropdown
         });
 
+        const MAX_REPORT_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+        function validateReportImageSize(file, inputId) {
+            if (!file || file.size <= MAX_REPORT_IMAGE_SIZE_BYTES) return true;
+            document.getElementById(inputId).value = '';
+            showLostUploadAlert('warning', 'Image too large', 'Please upload an image that is 5 MB or smaller.');
+            return false;
+        }
+
         // Connect the file input to the preview div
         document.getElementById('itemImage').addEventListener('change', function(event) {
+            if (!validateReportImageSize(event.target.files[0], 'itemImage')) return;
             updatePreviewSlide(0, event.target.files[0], 'Main Image', 'itemImageTrigger', '+ Upload Main Image');
         });
         document.getElementById('itemImageExtra1').addEventListener('change', function() {
+            if (!validateReportImageSize(this.files[0], 'itemImageExtra1')) return;
             updatePreviewSlide(1, this.files[0], 'Optional Image 2', 'itemImageExtra1Trigger', '+ Add Optional Image 2');
         });
         document.getElementById('itemImageExtra2').addEventListener('change', function() {
+            if (!validateReportImageSize(this.files[0], 'itemImageExtra2')) return;
             updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
         });
 
@@ -988,7 +1221,7 @@ function appendOptionalImages(formData) {
         };
     </script>
 <script src="/static/session-keepalive.js"></script>
-<script src="/static/student-notifications.js"></script>
+<script src="/static/student-notifications.js?v=3"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>
 </body>

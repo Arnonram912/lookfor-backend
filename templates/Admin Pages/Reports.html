@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Admin Panel | LookFor STI</title>
     <link rel="stylesheet" href="/static/admin2.o.css?v=10">
-    <link rel="stylesheet" href="/static/report.css?v=2">
+    <link rel="stylesheet" href="/static/report.css?v=3">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -15,7 +15,7 @@
             <li data-permission="Messages"><a href="#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/msg.png" class="side-icon"> Messages</a></li>
             <li data-permission="User-Management"><a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/userw.png" class="side-icon"> User Management</a></li>
             <li data-permission="Lost-Reports"><a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/boxw.png" class="side-icon"> Lost Item</a></li>
-            <li><a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/foundw.png" class="side-icon"> Surrender Item</a></li>
+            <li><a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/foundw.png" class="side-icon"> Surrendered Item</a></li>
             <li><a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/handw.png" class="side-icon"> Claim Management</a></li>
             <li><a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/handw.png" class="side-icon"> Confiscated Items</a></li>
             <li class="active"><a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/folderw.png" class="side-icon"> Reports</a></li>
@@ -89,17 +89,16 @@
 
                 <div class="generate-section">
                     <select id="reportTypeSelect">
-                        <option value="all">Select Report Type</option>
+                        <option value="all">All Reports</option>
                         <option value="lost">Lost Items</option>
                         <option value="found">Found Items</option>
                         <option value="claim">Claim</option>
                         <option value="confiscated">Confiscated Items</option>
                         <option value="disposal">Disposed Items</option>
-                        <option value="all">All Reports</option>
                     </select>
 
                     <select id="dateRange" onchange="toggleCustomRange()">
-                        <option value="">Select Date Range</option>
+                        <option value="">All Dates</option>
                         <option value="today">Today</option>
                         <option value="7days">Last 1 Week</option>
                         <option value="30days">Last 1 Month</option>
@@ -114,10 +113,10 @@
                         <input type="date" id="customEnd">
                     </div>
 
-                    <select id="categoryFilter"><option value="">Select Category</option></select>
-                    <select id="locationFilter"><option value="">Select Location</option></select>
+                    <select id="categoryFilter"><option value="">All Categories</option></select>
+                    <select id="locationFilter"><option value="">All Locations</option></select>
                     <input type="text" id="searchInput" placeholder="Search item or reporter" style="padding:10px 12px; min-width:220px;">
-                    <button onclick="loadReportData()">Generate Report</button>
+                    <button onclick="generateReportPdf()">Generate Report</button>
                 </div>
 
                
@@ -221,9 +220,35 @@ let pendingClaimFocusId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('claimReportImageInput').addEventListener('change', previewClaimReportImage);
+    bindReportFilters();
     initializeReportFiltersFromUrl();
     loadReportData();
 });
+
+function bindReportFilters() {
+    const filterIds = ['reportTypeSelect', 'dateRange', 'customStart', 'customEnd', 'categoryFilter', 'locationFilter'];
+    filterIds.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', () => {
+                if (id === 'dateRange') {
+                    toggleCustomRange();
+                }
+                loadReportData();
+            });
+        }
+    });
+
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                loadReportData();
+            }
+        });
+    }
+}
 
 function initializeReportFiltersFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -232,6 +257,8 @@ function initializeReportFiltersFromUrl() {
 
     if (reportType && document.getElementById('reportTypeSelect')) {
         document.getElementById('reportTypeSelect').value = reportType;
+    } else if (document.getElementById('reportTypeSelect')) {
+        document.getElementById('reportTypeSelect').value = 'all';
     }
 
     pendingClaimFocusId = Number.isNaN(claimId) ? null : claimId;
@@ -295,8 +322,8 @@ function updateChartPlaceholders(summary) {
 }
 
 function populateFilterOptions(filters) {
-    refreshSelectOptions('categoryFilter', 'Select Category', filters.categories || []);
-    refreshSelectOptions('locationFilter', 'Select Location', filters.locations || []);
+    refreshSelectOptions('categoryFilter', 'All Categories', filters.categories || []);
+    refreshSelectOptions('locationFilter', 'All Locations', filters.locations || []);
 }
 
 function refreshSelectOptions(selectId, placeholder, values) {
@@ -325,6 +352,154 @@ function renderReportTable(rows) {
 function toggleCustomRange() {
     const range = document.getElementById('dateRange').value;
     document.getElementById('customRangeInputs').style.display = range === 'custom' ? 'block' : 'none';
+}
+
+function getSelectedReportRows() {
+    const selectedIndexes = Array.from(document.querySelectorAll('.rowCheckbox:checked'))
+        .map(cb => Number(cb.dataset.index))
+        .filter(index => !Number.isNaN(index));
+
+    if (!selectedIndexes.length) {
+        return reportRowsCache.slice();
+    }
+
+    return selectedIndexes
+        .map(index => reportRowsCache[index])
+        .filter(Boolean);
+}
+
+function getActiveReportFilterSummary() {
+    const reportType = document.getElementById('reportTypeSelect')?.selectedOptions?.[0]?.textContent || 'All Reports';
+    const dateRange = document.getElementById('dateRange')?.selectedOptions?.[0]?.textContent || 'All Dates';
+    const category = document.getElementById('categoryFilter')?.selectedOptions?.[0]?.textContent || 'All Categories';
+    const location = document.getElementById('locationFilter')?.selectedOptions?.[0]?.textContent || 'All Locations';
+    const search = (document.getElementById('searchInput')?.value || '').trim() || 'All';
+    const customStart = document.getElementById('customStart')?.value || 'Any';
+    const customEnd = document.getElementById('customEnd')?.value || 'Any';
+    const isCustom = document.getElementById('dateRange')?.value === 'custom';
+
+    return {
+        reportType,
+        dateRange: isCustom ? `${customStart} to ${customEnd}` : dateRange,
+        category,
+        location,
+        search,
+    };
+}
+
+function buildPrintableReportHtml(rows) {
+    const filters = getActiveReportFilterSummary();
+    const generatedAt = new Date().toLocaleString();
+    const summaryRows = rows.map((row, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(row.row_id || '-')}</td>
+            <td>${escapeHtml(row.item || '-')}</td>
+            <td>${escapeHtml(row.category || '-')}</td>
+            <td>${escapeHtml(row.location || '-')}</td>
+            <td>${escapeHtml(row.status || '-')}</td>
+            <td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td>
+            <td>${escapeHtml(row.reported_by || '-')}</td>
+        </tr>
+    `).join('');
+
+    const detailBlocks = rows.map((row, index) => {
+        const detailHtml = Object.entries(row.details || {}).map(([label, value]) => `
+            <tr>
+                <th>${escapeHtml(label)}</th>
+                <td>${escapeHtml(value || 'Not specified')}</td>
+            </tr>
+        `).join('');
+
+        return `
+            <section class="detail-block">
+                <h3>${index + 1}. ${escapeHtml(row.item || 'Report Item')} <span>${escapeHtml(row.row_id || '-')}</span></h3>
+                <table class="detail-table">
+                    ${detailHtml}
+                </table>
+            </section>
+        `;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>LookFor Report Export</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 28px; color: #122033; }
+        h1 { margin: 0 0 8px; color: #003366; }
+        h2 { margin: 24px 0 10px; color: #003366; }
+        .meta { margin-bottom: 18px; color: #475569; }
+        .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; padding: 14px; border: 1px solid #d7e2ee; border-radius: 12px; background: #f8fbff; }
+        .filters p { margin: 0; font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #c8d4e3; padding: 8px 10px; text-align: left; font-size: 13px; vertical-align: top; }
+        th { background: #eef5fb; color: #17324f; }
+        .detail-block { margin-top: 20px; page-break-inside: avoid; }
+        .detail-block h3 { margin: 0 0 10px; color: #17324f; font-size: 16px; }
+        .detail-block h3 span { color: #64748b; font-size: 13px; font-weight: normal; }
+        .detail-table th { width: 220px; }
+        @media print {
+            body { margin: 16px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>LookFor Report Export</h1>
+    <div class="meta">Generated: ${escapeHtml(generatedAt)}<br>Total records: ${rows.length}</div>
+    <div class="filters">
+        <p><strong>Report Type:</strong> ${escapeHtml(filters.reportType)}</p>
+        <p><strong>Date Range:</strong> ${escapeHtml(filters.dateRange)}</p>
+        <p><strong>Category:</strong> ${escapeHtml(filters.category)}</p>
+        <p><strong>Location:</strong> ${escapeHtml(filters.location)}</p>
+        <p><strong>Search:</strong> ${escapeHtml(filters.search)}</p>
+    </div>
+
+    <h2>Selected Records</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>ID</th>
+                <th>Item</th>
+                <th>Category</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Reported By</th>
+            </tr>
+        </thead>
+        <tbody>${summaryRows}</tbody>
+    </table>
+
+    <h2>Record Details</h2>
+    ${detailBlocks}
+</body>
+</html>`;
+}
+
+function generateReportPdf() {
+    const rowsToExport = getSelectedReportRows();
+    if (!rowsToExport.length) {
+        alert('No report records are available to export.');
+        return;
+    }
+
+    const printableHtml = buildPrintableReportHtml(rowsToExport);
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) {
+        alert('Pop-up blocked. Please allow pop-ups to export the report.');
+        return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(printableHtml);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+        printWindow.print();
+    }, 250);
 }
 
 function openReportModal() { loadReportData(); }
@@ -584,6 +759,6 @@ function logout() {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=2"></script>
+<script src="/static/admin-notifications.js?v=3"></script>
 </body>
 </html>

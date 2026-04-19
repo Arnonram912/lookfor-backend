@@ -357,18 +357,69 @@ body.dark-theme #bulkEmails {
 .batch-filter-container {
     display: none;
     align-items: center;
-    gap: 10px;
+    gap: 8px 10px;
     flex-wrap: wrap;
     justify-content: flex-start;
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 42px;
+}
+
+.table-filter-row > * {
+    align-self: center;
+}
+
+.batch-filter-container > * {
+    align-self: center;
+}
+
+.semester-filter-container {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 42px;
+    flex: 1 1 100%;
+    width: 100%;
+    order: 2;
+}
+
+.semester-filter-options {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 42px;
+}
+
+.semester-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 14px;
+    border: 1px solid #cfd8e3;
+    border-radius: 999px;
+    background: #fff;
+    color: #0f3d66;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.semester-filter-chip input {
+    width: 16px;
+    height: 16px;
+    accent-color: #003366;
 }
 
 .select-all-control {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
+    min-height: 42px;
+    padding: 0 14px;
     border: 1px solid #cfd8e3;
     border-radius: 999px;
     background: #fff;
@@ -401,9 +452,24 @@ body.dark-theme #bulkEmails {
 .search-container-wide {
     flex: 0 0 360px;
     display: flex;
+    align-items: center;
     justify-content: flex-start;
     min-width: 300px;
     max-width: 360px;
+    min-height: 42px;
+}
+
+#batchFilterInput.Srch {
+    flex: 0 0 220px;
+    width: 220px;
+    max-width: 220px;
+}
+
+#userCountBadge {
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    white-space: nowrap;
 }
 
 .action-bar-below {
@@ -431,11 +497,13 @@ body.dark-theme #bulkEmails {
 .Srch {
     width: 100%;
     max-width: 400px; /* Limits how wide it gets */
-    padding: 10px 15px;
+    min-height: 42px;
+    padding: 9px 15px;
     border-radius: 25px; /* Rounded look */
     border: 1px solid #003366; /* STI Blue border */
     outline: none;
     transition: 0.3s;
+    box-sizing: border-box;
 }
 
 .Srch:focus {

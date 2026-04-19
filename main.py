@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, EmailStr
 import models  # This is already there
 from database import engine, get_db
-from utils import UPLOAD_FOLDER, save_file, resolve_category_name
+from utils import UPLOAD_FOLDER, save_file, resolve_category_name, validate_upload_file_size
 from sqlalchemy import and_, or_, func
 from sqlalchemy import text
 from clip_test import (
@@ -140,6 +140,17 @@ def ensure_user_settings_columns():
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+
+def ensure_item_possible_matches_column():
+    statement = """
+    IF COL_LENGTH('items', 'possible_matches') IS NULL
+    BEGIN
+        ALTER TABLE items ADD possible_matches NVARCHAR(MAX) NULL
+    END
+    """
+    with engine.begin() as connection:
+        connection.execute(text(statement))
 
 
 def ensure_notification_columns():
@@ -325,11 +336,12 @@ def auto_archive_pending(db: Session):
 @app.on_event("startup")
 def create_default_admin():
     ensure_user_settings_columns()
+    ensure_item_possible_matches_column()
     ensure_notification_columns()
     db = next(get_db())
     try:
         admin_email = "admin@novaliches.sti.edu.ph"
-        admin_full_name = "ROOT ADMIN"
+        admin_full_name = "LookForAdministrator"
         admin = db.query(models.User).filter(models.User.email == admin_email).first()
         if not admin:
             hashed_pw = pwd_context.hash("STI_Admin_2026")
@@ -778,7 +790,11 @@ async def quick_compare(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    
+    try:
+        validate_upload_file_size(file, label="Main image")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 
     
     # Process image
@@ -824,141 +840,131 @@ async def quick_compare(
         }
     }
 
-# ============================================
-# API: Compare Text Details
-# ============================================
-@app.post("/api/compare-text-details")
-async def compare_text_details(
-    category: str = Form(...),
-    location: str = Form(...),
-    description: str = Form(None),
-    brand: str = Form(None), 
-    color: str = Form(None),
-    status: str = Form(...), 
-    image: UploadFile = File(...),
-    extra_image_1: UploadFile = File(None),
-    extra_image_2: UploadFile = File(None),
-    db: Session = Depends(get_db)
-):
-    def normalize_match_value(value):
-        return " ".join(str(value or "").strip().lower().split())
+def normalize_match_value(value):
+    return " ".join(str(value or "").strip().lower().split())
 
-    def build_item_dataset_text(item):
-        """Build a richer text profile for each stored item to improve CLIP retrieval."""
-        name_part = ""
-        if item.description:
-            if item.description.startswith("[") and "]" in item.description:
-                name_part = item.description[1:item.description.index("]")]
-            else:
-                name_part = item.description.split(".")[0][:80]
 
-        parts = [
-            f"category {item.category}" if item.category else "",
-            f"name {name_part}" if name_part else "",
-            f"brand {item.brand}" if item.brand else "",
-            f"color {item.color}" if item.color else "",
-            f"location {item.location}" if item.location else "",
-            f"department {item.department}" if item.department else "",
-            f"description {item.description}" if item.description else "",
-        ]
-        return ". ".join(part for part in parts if part)
+def build_item_dataset_text(item):
+    name_part = ""
+    if item.description:
+        if item.description.startswith("[") and "]" in item.description:
+            name_part = item.description[1:item.description.index("]")]
+        else:
+            name_part = item.description.split(".")[0][:80]
 
-    def get_reference_bonus(candidate_item, query_vec, references):
-        candidate_brand = normalize_match_value(getattr(candidate_item, "brand", None))
-        candidate_color = normalize_match_value(getattr(candidate_item, "color", None))
+    parts = [
+        f"category {item.category}" if item.category else "",
+        f"name {name_part}" if name_part else "",
+        f"brand {item.brand}" if item.brand else "",
+        f"color {item.color}" if item.color else "",
+        f"location {item.location}" if item.location else "",
+        f"department {item.department}" if item.department else "",
+        f"description {item.description}" if item.description else "",
+    ]
+    return ". ".join(part for part in parts if part)
 
-        filtered_references = []
-        for reference in references:
-            reference_brand = normalize_match_value(getattr(reference, "brand", None))
-            reference_color = normalize_match_value(getattr(reference, "color", None))
 
-            brand_matches = not candidate_brand or not reference_brand or candidate_brand == reference_brand
-            color_matches = not candidate_color or not reference_color or candidate_color == reference_color
+def get_reference_bonus(candidate_item, query_vec, references):
+    candidate_brand = normalize_match_value(getattr(candidate_item, "brand", None))
+    candidate_color = normalize_match_value(getattr(candidate_item, "color", None))
 
-            if brand_matches and color_matches:
-                filtered_references.append(reference)
+    filtered_references = []
+    for reference in references:
+        reference_brand = normalize_match_value(getattr(reference, "brand", None))
+        reference_color = normalize_match_value(getattr(reference, "color", None))
 
-        if not filtered_references:
-            filtered_references = references
+        brand_matches = not candidate_brand or not reference_brand or candidate_brand == reference_brand
+        color_matches = not candidate_color or not reference_color or candidate_color == reference_color
 
-        similarity_scores = []
-        for reference in filtered_references:
-            if not reference.image_embedding:
-                continue
-            try:
-                reference_vec = np.array(json.loads(reference.image_embedding)).flatten()
-                similarity_scores.append(float(np.dot(query_vec, reference_vec)))
-            except Exception:
-                continue
+        if brand_matches and color_matches:
+            filtered_references.append(reference)
 
-        if not similarity_scores:
-            return 0.0
+    if not filtered_references:
+        filtered_references = references
 
-        top_scores = sorted(similarity_scores, reverse=True)[:3]
-        return max(0.0, sum(top_scores) / len(top_scores)) * 0.08
-
-    # 1. ENHANCED TEXT QUERY
-    # We build a sentence that "guides" the AI to look for specific traits
-    parts = [f"A {color}" if color else "An item", f"{brand}" if brand else "", f"{category}"]
-    # Cleaning up spaces and building the final prompt
-    description_prompt = " ".join(filter(None, parts))
-    description_text = (description or "").strip()
-    text_query = f"{description_prompt} at {location}. {description_text}".strip()
-
-    # 2. AI PROCESSING
-    query_images = []
-    for upload in (image, extra_image_1, extra_image_2):
-        if not upload or not upload.filename:
-            continue
-        image_bytes = await upload.read()
-        await upload.seek(0)
-        if not image_bytes:
+    similarity_scores = []
+    for reference in filtered_references:
+        if not reference.image_embedding:
             continue
         try:
-            query_images.append(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid uploaded image: {upload.filename}") from exc
+            reference_vec = np.array(json.loads(reference.image_embedding)).flatten()
+            similarity_scores.append(float(np.dot(query_vec, reference_vec)))
+        except Exception:
+            continue
 
-    if not query_images:
-        raise HTTPException(status_code=400, detail="At least one image is required.")
+    if not similarity_scores:
+        return 0.0
 
-    image_vec = get_multi_image_embedding(query_images)
-    query_text_vec = get_text_embedding(text_query)
+    top_scores = sorted(similarity_scores, reverse=True)[:3]
+    return max(0.0, sum(top_scores) / len(top_scores)) * 0.08
 
-    # Combine features: images are weighted slightly higher than text.
-    search_vec = (image_vec * 0.6) + (query_text_vec * 0.4)
-    search_norm = np.linalg.norm(search_vec)
-    if search_norm != 0:
-        search_vec = search_vec / search_norm
 
-    # 3. PRE-FILTERING (Hard match on Category)
-    target_status = "found" if status == "lost" else "lost"
-    
+def compute_text_detail_matches(
+    db: Session,
+    *,
+    category: str,
+    location: str,
+    description: str | None,
+    brand: str | None,
+    color: str | None,
+    status: str,
+    search_vec: np.ndarray,
+    query_text_vec: np.ndarray,
+    exclude_item_id: int | None = None,
+):
+    normalized_status = " ".join(str(status or "").strip().lower().split())
+    normalized_category = (category or "").strip()
+    if normalized_status != "lost":
+        return {
+            "highest_score": 0.0,
+            "generated_embedding": search_vec.tolist(),
+            "matched_item": None,
+            "matched_items": [],
+            "action": "no_match"
+        }
+
+    target_status = "found"
+
+    if not normalized_category:
+        return {
+            "highest_score": 0.0,
+            "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else list(search_vec),
+            "matched_item": None,
+            "matched_items": [],
+            "action": "no_match"
+        }
+
     items = db.query(models.Item).outerjoin(models.Category).filter(
         models.Item.status.ilike(target_status),
         or_(
-            models.Item.category == category,
-            models.Category.name == category
+            models.Item.category == normalized_category,
+            models.Category.name == normalized_category
         ),
         models.Item.is_matched == False,
         models.Item.archived == False
     ).all()
 
+    if exclude_item_id is not None:
+        items = [item for item in items if item.id != exclude_item_id]
+
     reference_items = db.query(models.ReferenceItem).filter(
         models.ReferenceItem.status.ilike(target_status),
-        func.lower(models.ReferenceItem.category) == category.lower(),
+        func.lower(models.ReferenceItem.category) == normalized_category.lower(),
         models.ReferenceItem.image_embedding.isnot(None)
     ).all()
 
-    highest_score = 0.0
-    best_item = None
+    strict_match_threshold = 0.68
+    possible_match_threshold = 0.45   # adjust if needed
+
+    all_matches = []
 
     if items:
         for item in items:
             try:
-                if not item.image_embedding: continue
-                stored_vec = np.array(json.loads(item.image_embedding)).flatten()
+                if not item.image_embedding:
+                    continue
 
+                stored_vec = np.array(json.loads(item.image_embedding)).flatten()
                 image_score = float(np.dot(search_vec, stored_vec))
 
                 item_dataset_text = build_item_dataset_text(item)
@@ -969,7 +975,6 @@ async def compare_text_details(
 
                 score = (image_score * 0.7) + (text_score * 0.3)
 
-                # Structured metadata bonuses to improve precision when CLIP similarities are close.
                 normalized_brand = normalize_match_value(brand)
                 item_brand = normalize_match_value(item.brand)
                 if normalized_brand and item_brand and normalized_brand == item_brand:
@@ -993,28 +998,185 @@ async def compare_text_details(
 
                 score += get_reference_bonus(item, search_vec, reference_items)
 
-                if score > highest_score:
-                    highest_score = score
-                    best_item = item
+                if score >= possible_match_threshold:
+                    all_matches.append({
+                        "id": item.id,
+                        "score": round(score, 4),
+                        "category": item.category_relationship.name if getattr(item, "category_relationship", None) else item.category,
+                        "location": item.location,
+                        "image_path": item.image_path,
+                        "brand": item.brand,
+                        "color": item.color,
+                        "description": item.description
+                    })
+
             except Exception as e:
                 print(f"Error: {e}")
                 continue
 
-    strict_match_threshold = 0.68
+    # Sort highest to lowest
+    all_matches.sort(key=lambda x: x["score"], reverse=True)
+
+    best_match = all_matches[0] if all_matches else None
+    highest_score = best_match["score"] if best_match else 0.0
 
     return {
         "highest_score": round(highest_score, 4),
-        # ADD THIS LINE BELOW:
-        "generated_embedding": search_vec.tolist(), 
-        "matched_item": {
-            "id": best_item.id,
-            # Use .category_group.name if you're using relationships now
-            "category": best_item.category_relationship.name if getattr(best_item, "category_relationship", None) else best_item.category,
-            "location": best_item.location,
-            "image_path": best_item.image_path,
-        } if best_item else None,
-        "action": "show_match" if highest_score >= strict_match_threshold else "no_match"
+        "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else list(search_vec),
+        "matched_item": best_match if best_match and highest_score >= strict_match_threshold else None,
+        "matched_items": all_matches,
+        "action": "show_match" if all_matches else "no_match"
     }
+
+
+# ============================================
+# API: Compare Text Details
+# ============================================
+@app.post("/api/compare-text-details")
+async def compare_text_details(
+    category: str = Form(...),
+    location: str = Form(...),
+    description: str = Form(None),
+    brand: str = Form(None),
+    color: str = Form(None),
+    status: str = Form(...),
+    image: UploadFile = File(...),
+    extra_image_1: UploadFile = File(None),
+    extra_image_2: UploadFile = File(None),
+    db: Session = Depends(get_db)
+):
+    for upload, label in (
+        (image, "Main image"),
+        (extra_image_1, "Optional image 2"),
+        (extra_image_2, "Optional image 3"),
+    ):
+        try:
+            validate_upload_file_size(upload, label=label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    parts = [f"A {color}" if color else "An item", f"{brand}" if brand else "", f"{category}"]
+    description_prompt = " ".join(filter(None, parts))
+    description_text = (description or "").strip()
+    text_query = f"{description_prompt} at {location}. {description_text}".strip()
+
+    query_images = []
+    for upload in (image, extra_image_1, extra_image_2):
+        if not upload or not upload.filename:
+            continue
+        image_bytes = await upload.read()
+        await upload.seek(0)
+        if not image_bytes:
+            continue
+        try:
+            query_images.append(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid uploaded image: {upload.filename}") from exc
+
+    if not query_images:
+        raise HTTPException(status_code=400, detail="At least one image is required.")
+
+    image_vec = get_multi_image_embedding(query_images)
+    query_text_vec = get_text_embedding(text_query)
+
+    search_vec = (image_vec * 0.6) + (query_text_vec * 0.4)
+    search_norm = np.linalg.norm(search_vec)
+    if search_norm != 0:
+        search_vec = search_vec / search_norm
+
+    return compute_text_detail_matches(
+        db,
+        category=category,
+        location=location,
+        description=description,
+        brand=brand,
+        color=color,
+        status=status,
+        search_vec=search_vec,
+        query_text_vec=query_text_vec,
+    )
+
+
+@app.get("/api/items/{item_id}/possible-matches")
+def get_saved_item_possible_matches(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    if item.status != "lost":
+        return {
+            "highest_score": 0.0,
+            "generated_embedding": [],
+            "matched_item": None,
+            "matched_items": [],
+            "action": "no_match"
+        }
+
+    if not current_user.is_admin and item.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You do not have access to this item")
+
+    if item.possible_matches:
+        try:
+            saved_matches = json.loads(item.possible_matches)
+            saved_matches = saved_matches if isinstance(saved_matches, list) else []
+        except Exception:
+            saved_matches = []
+
+        if saved_matches:
+            saved_matches = saved_matches[:3]
+            best_match = saved_matches[0]
+            highest_score = float(best_match.get("score", 0) or 0)
+            return {
+                "highest_score": round(highest_score, 4),
+                "generated_embedding": [],
+                "matched_item": best_match if highest_score >= 0.68 else None,
+                "matched_items": saved_matches,
+                "action": "show_match"
+            }
+
+    text_query_parts = [
+        f"A {item.color}" if item.color else "An item",
+        f"{item.brand}" if item.brand else "",
+        f"{item.category}" if item.category else "",
+    ]
+    description_prompt = " ".join(filter(None, text_query_parts))
+    description_text = (item.description or "").strip()
+    text_query = f"{description_prompt} at {item.location or 'Unknown'}. {description_text}".strip()
+    query_text_vec = get_text_embedding(text_query)
+
+    image_vec = None
+    if item.image_embedding:
+        try:
+            image_vec = np.array(json.loads(item.image_embedding)).flatten()
+        except Exception:
+            image_vec = None
+
+    if image_vec is not None and image_vec.size:
+        search_vec = (image_vec * 0.6) + (query_text_vec * 0.4)
+    else:
+        search_vec = query_text_vec
+
+    search_norm = np.linalg.norm(search_vec)
+    if search_norm != 0:
+        search_vec = search_vec / search_norm
+
+    return compute_text_detail_matches(
+        db,
+        category=item.category,
+        location=item.location or "Unknown",
+        description=item.description,
+        brand=item.brand,
+        color=item.color,
+        status=item.status,
+        search_vec=search_vec,
+        query_text_vec=query_text_vec,
+        exclude_item_id=item.id,
+    )
+
 
 @app.get("/api/users/list")
 def get_conversation_partners(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -1080,6 +1242,11 @@ async def save_found_item(
     db: Session = Depends(get_db)
 ):
     # 1. SAVE THE IMAGE FILE
+    try:
+        validate_upload_file_size(image, label="Main image")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     try:
         resolved_category = resolve_category_name(db, category_name=category)
     except ValueError as exc:
@@ -1153,6 +1320,11 @@ async def lost_report_upload(
     # Added to identify which student is reporting
     current_user: models.User = Depends(get_current_user) 
 ):
+    try:
+        validate_upload_file_size(image, label="Main image")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     # 1. Process and Save File
     image_content = await image.read()
     await image.seek(0) 

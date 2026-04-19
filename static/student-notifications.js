@@ -1,5 +1,7 @@
 (function () {
+    const STUDENT_NOTIFICATION_DROPDOWN_LIMIT = 10;
     let notifications = [];
+    let unreadCount = 0;
 
     function decodeTokenPayload(token) {
         try {
@@ -29,6 +31,58 @@
         return div.innerHTML;
     }
 
+    function updateNotificationUI() {
+        const list = document.getElementById("notificationList");
+        const countBadge = document.getElementById("notificationCount");
+        const emptyState = document.getElementById("emptyNotif");
+
+        if (!list || !countBadge || !emptyState) return;
+
+        if (!notifications.length) {
+            list.innerHTML = "";
+            emptyState.style.display = "block";
+            countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
+            countBadge.innerText = String(unreadCount);
+            return;
+        }
+
+        emptyState.style.display = "none";
+        list.innerHTML = notifications.slice(0, STUDENT_NOTIFICATION_DROPDOWN_LIMIT).map(notif => `
+            <li class="notification-item ${notif.is_read ? 'read' : 'unread'}"
+                onclick="markStudentNotificationRead(${notif.id})"
+                style="cursor:pointer;">
+                <strong>${notif.type === 'student_match' ? 'Possible Match' : notif.type === 'chat' ? 'Message' : 'Update'}:</strong>
+                ${escapeHtml(notif.message)}
+            </li>
+        `).join("");
+
+        countBadge.innerText = String(unreadCount);
+        countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
+    }
+
+    async function loadUnreadCount() {
+        const token = getStudentToken();
+        if (!token) return 0;
+
+        try {
+            const response = await fetch("/student/notifications/unread-count", {
+                headers: getStudentAuthHeader()
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || "Failed to load unread count.");
+            }
+
+            unreadCount = Number(data.unread_count || 0);
+            updateNotificationUI();
+            return unreadCount;
+        } catch (error) {
+            console.error("Student unread count load failed:", error);
+            return unreadCount;
+        }
+    }
+
     async function loadNotifications() {
         const list = document.getElementById("notificationList");
         const countBadge = document.getElementById("notificationCount");
@@ -38,9 +92,12 @@
         if (!list || !countBadge || !emptyState || !token) return;
 
         try {
-            const response = await fetch("/student/notifications", {
-                headers: getStudentAuthHeader()
-            });
+            const [response, unread] = await Promise.all([
+                fetch("/student/notifications", {
+                    headers: getStudentAuthHeader()
+                }),
+                loadUnreadCount()
+            ]);
             const data = await response.json();
 
             if (!response.ok) {
@@ -48,28 +105,8 @@
             }
 
             notifications = Array.isArray(data) ? data : [];
-
-            if (!notifications.length) {
-                list.innerHTML = "";
-                emptyState.style.display = "block";
-                countBadge.style.display = "none";
-                countBadge.innerText = "0";
-                return;
-            }
-
-            emptyState.style.display = "none";
-            list.innerHTML = notifications.map(notif => `
-                <li class="notification-item ${notif.is_read ? 'read' : 'unread'}"
-                    onclick="markStudentNotificationRead(${notif.id})"
-                    style="cursor:pointer;">
-                    <strong>${notif.type === 'student_match' ? 'Possible Match' : notif.type === 'chat' ? 'Message' : 'Update'}:</strong>
-                    ${escapeHtml(notif.message)}
-                </li>
-            `).join("");
-
-            const unreadCount = notifications.filter(notif => !notif.is_read).length;
-            countBadge.innerText = unreadCount;
-            countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
+            unreadCount = Number(unread || 0);
+            updateNotificationUI();
         } catch (error) {
             console.error("Student notification load failed:", error);
         }
@@ -77,6 +114,11 @@
 
     async function markStudentNotificationRead(notifId) {
         const notif = notifications.find((entry) => entry.id === notifId);
+        if (notif && !notif.is_read) {
+            notif.is_read = true;
+            unreadCount = Math.max(0, unreadCount - 1);
+            updateNotificationUI();
+        }
 
         try {
             await fetch(`/student/notifications/${notifId}/read`, {
@@ -106,6 +148,7 @@
     }
 
     window.loadNotifications = loadNotifications;
+    window.loadStudentNotificationUnreadCount = loadUnreadCount;
     window.markStudentNotificationRead = markStudentNotificationRead;
 
     document.addEventListener("DOMContentLoaded", () => {

@@ -1,6 +1,8 @@
 (function () {
     const ADMIN_NOTIFICATION_POLL_MS = 30000;
+    const ADMIN_NOTIFICATION_DROPDOWN_LIMIT = 10;
     let notifications = [];
+    let unreadCount = 0;
     let pollHandle = null;
 
     function getAdminToken() {
@@ -42,15 +44,15 @@
         if (!notifications.length) {
             if (emptyMsg) emptyMsg.style.display = "block";
             if (countBadge) {
-                countBadge.innerText = "0";
-                countBadge.style.display = "none";
+                countBadge.innerText = String(unreadCount);
+                countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
             }
             return;
         }
 
         if (emptyMsg) emptyMsg.style.display = "none";
 
-        notifications.forEach((notif) => {
+        notifications.slice(0, ADMIN_NOTIFICATION_DROPDOWN_LIMIT).forEach((notif) => {
             const li = document.createElement("li");
             li.className = `notification-item ${notif.is_read ? "read" : "unread"}`;
             li.setAttribute("onclick", `handleNotifClick(${notif.id})`);
@@ -62,10 +64,32 @@
             list.appendChild(li);
         });
 
-        const unreadCount = notifications.filter((notif) => !notif.is_read).length;
         if (countBadge) {
             countBadge.innerText = String(unreadCount);
             countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
+        }
+    }
+
+    async function loadUnreadCount() {
+        const token = getAdminToken();
+        if (!token) return 0;
+
+        try {
+            const response = await fetch("/admin/notifications/unread-count", {
+                headers: getAdminAuthHeader()
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to fetch admin unread count.");
+            }
+
+            const data = await response.json();
+            unreadCount = Number(data.unread_count || 0);
+            updateNotificationUI();
+            return unreadCount;
+        } catch (error) {
+            console.error("Admin unread count sync failed:", error);
+            return unreadCount;
         }
     }
 
@@ -74,9 +98,12 @@
         if (!token) return [];
 
         try {
-            const response = await fetch("/admin/notifications", {
-                headers: getAdminAuthHeader()
-            });
+            const [response, unread] = await Promise.all([
+                fetch("/admin/notifications", {
+                    headers: getAdminAuthHeader()
+                }),
+                loadUnreadCount()
+            ]);
 
             if (!response.ok) {
                 throw new Error("Failed to fetch admin notifications.");
@@ -84,6 +111,7 @@
 
             const data = await response.json();
             notifications = Array.isArray(data) ? data : [];
+            unreadCount = Number(unread || 0);
             updateNotificationUI();
             return notifications;
         } catch (error) {
@@ -153,6 +181,7 @@
         if (!notif) return;
 
         notif.is_read = true;
+        unreadCount = Math.max(0, unreadCount - 1);
         updateNotificationUI();
 
         try {
@@ -198,8 +227,15 @@
     }
 
     window.loadNotifications = loadNotifications;
+    window.loadAdminNotificationUnreadCount = loadUnreadCount;
     window.updateNotificationUI = updateNotificationUI;
     window.handleNotifClick = handleNotifClick;
     window.toggleNotifications = toggleNotifications;
     window.initAdminNotifications = initAdminNotifications;
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initAdminNotifications);
+    } else {
+        initAdminNotifications();
+    }
 })();

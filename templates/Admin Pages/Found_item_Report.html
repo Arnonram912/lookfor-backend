@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=12"> 
+    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=15"> 
 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -59,7 +59,7 @@
             <li  class="active">
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrender Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
                 </a>
             </li>
 
@@ -162,7 +162,7 @@
         <section class="content-body">
             <div class="profile-page-card">
                 <div class="action-bar">
-                    <h2 class="section-title">Surrendered Items <span>Inventory</span></h2>
+                    <h2 class="section-title">Surrendered Items <span></span></h2>
                     <div class="inventory-actions">
                         <select id="foundStatusFilter" class="inventory-filter" onchange="renderFoundItems()">
                             <option value="all">All Items</option>
@@ -178,7 +178,7 @@
                             Archived Items
                         </button>
                         <button class="upload-btn surrender-upload-btn" onclick="openModal('reportModal')"> 
-                            <span class="plus">+ Report Found Item</span>
+                            <span class="plus">+ Upload Found Item</span>
                         </button>
                     </div>
                 </div>
@@ -605,8 +605,24 @@ function showAccessDeniedPopup(permName) {
         loadLostItems();
     }
 
-    function showFoundReportAlert(icon, title, text) {
+    function fireSwalOnTop(options) {
+        const originalDidOpen = options?.didOpen;
         return Swal.fire({
+            ...options,
+            didOpen: (popup) => {
+                const container = Swal.getContainer();
+                if (container) {
+                    container.style.zIndex = '30000';
+                }
+                if (typeof originalDidOpen === 'function') {
+                    originalDidOpen(popup);
+                }
+            }
+        });
+    }
+
+    function showFoundReportAlert(icon, title, text) {
+        return fireSwalOnTop({
             icon,
             title,
             text,
@@ -615,7 +631,7 @@ function showAccessDeniedPopup(permName) {
     }
 
     async function confirmFoundReportAction(title, text, confirmButtonText = 'Confirm') {
-        const result = await Swal.fire({
+        const result = await fireSwalOnTop({
             icon: 'warning',
             title,
             text,
@@ -989,14 +1005,26 @@ async function submitDirectClaim() {
             loadLostItems();
         });
 
+        const MAX_REPORT_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+        function validateReportImageSize(file, inputId) {
+            if (!file || file.size <= MAX_REPORT_IMAGE_SIZE_BYTES) return true;
+            document.getElementById(inputId).value = '';
+            showFoundReportAlert('warning', 'Image too large', 'Please upload an image that is 5 MB or smaller.');
+            return false;
+        }
+
         // Connect the file input to the preview div
         document.getElementById('itemImage').addEventListener('change', function(event) {
+            if (!validateReportImageSize(event.target.files[0], 'itemImage')) return;
             updatePreviewSlide(0, event.target.files[0], 'Main Image', 'itemImageTrigger', '+ Upload Main Image');
         });
         document.getElementById('itemImageExtra1').addEventListener('change', function() {
+            if (!validateReportImageSize(this.files[0], 'itemImageExtra1')) return;
             updatePreviewSlide(1, this.files[0], 'Optional Image 2', 'itemImageExtra1Trigger', '+ Add Optional Image 2');
         });
         document.getElementById('itemImageExtra2').addEventListener('change', function() {
+            if (!validateReportImageSize(this.files[0], 'itemImageExtra2')) return;
             updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
         });
 
@@ -1011,7 +1039,7 @@ async function submitDirectClaim() {
 
         // Specifically for the report modal to clear inputs when closed
         async function handleCloseReport() {
-            if (await confirmFoundReportAction("Close report?", "Unsaved changes will be lost.", "Yes, close it")) {
+            if (await confirmFoundReportAction("Discard report?", "All unsaved changes in this lost report will be removed.", "Yes, close it")) {
                 closeModal('reportModal');
                 clearForm(); 
             }
@@ -1305,19 +1333,20 @@ async function executeSubmit() {
     confirmBtn.innerText = "🤖 AI is Analyzing...";
     confirmBtn.disabled = true;
 
-    // 1. Get Elements
     const imageFile = document.getElementById('itemImage').files[0];
     const catSelect = document.getElementById('itemCategory');
     const deptSelect = document.getElementById('itemDepartment');
 
-    // 2. Get BOTH the ID (value) and the Name (text)
-    const catId = catSelect.value; 
+    const catId = catSelect.value;
     const catName = catSelect.options[catSelect.selectedIndex]?.text;
     const deptName = deptSelect.options[deptSelect.selectedIndex]?.text;
 
-    // 3. Validation
     if (!catId || !catName || !deptName || deptName.includes("Select") || catName.includes("Loading")) {
-        await showFoundReportAlert('warning', 'Missing required selections', 'Please select both a valid Category and a Department/Office.');
+        await showFoundReportAlert(
+            'warning',
+            'Missing required selections',
+            'Please select both a valid Category and a Department/Office.'
+        );
         confirmBtn.disabled = false;
         confirmBtn.innerText = "Confirm & Surrender";
         return;
@@ -1327,32 +1356,29 @@ async function executeSubmit() {
         // STEP 1: AI Match Analysis
         const compareData = new FormData();
         compareData.append("image", imageFile);
-        compareData.append("category", catName); // AI uses the name (e.g., "Electronics")
+        compareData.append("category", catName);
         compareData.append("location", document.getElementById('reportLocation').value);
         compareData.append("description", document.getElementById('itemDesc').value);
         compareData.append("brand", document.getElementById('itemBrand').value || "");
         compareData.append("color", document.getElementById('itemColor').value || "");
-        compareData.append("status", "found"); 
+        compareData.append("status", "found");
         appendOptionalImages(compareData);
 
-        const compareRes = await fetch('/api/compare-text-details', { 
-            method: 'POST', 
-            body: compareData 
+        const compareRes = await fetch('/api/compare-text-details', {
+            method: 'POST',
+            body: compareData
         });
 
         if (!compareRes.ok) throw new Error("AI Analysis failed.");
-        const aiResult = await compareRes.json();
-        const hasConfirmedMatch = aiResult?.action === "show_match" &&
-            aiResult?.matched_item?.id &&
-            (aiResult.highest_score || 0) >= 0.55;
 
-        if (hasConfirmedMatch) {
-            const matchedLocation = aiResult.matched_item.location || "Unknown location";
-            await showFoundReportAlert('success', 'Analysis complete', `Match found. Matched item ID: ${aiResult.matched_item.id}. Category: ${aiResult.matched_item.category || catName}. Location: ${matchedLocation}. Score: ${Number(aiResult.highest_score || 0).toFixed(2)}.`);
-        } else {
-            await showFoundReportAlert('info', 'Analysis complete', `No confident match found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`);
-        }
-        
+        const aiResult = await compareRes.json();
+
+        await showFoundReportAlert(
+            'info',
+            'Analysis complete',
+            'Automatic matching only runs on lost item reports. This found item was analyzed and prepared for saving.'
+        );
+
         // STEP 2: Final Save to Database
         const saveData = new FormData();
         saveData.append("file", imageFile);
@@ -1363,16 +1389,12 @@ async function executeSubmit() {
         saveData.append("location", document.getElementById('reportLocation').value);
         saveData.append("date", document.getElementById('reportDate').value);
         saveData.append("time_found", document.getElementById('reportTime').value);
-        // --- DATA CONNECTIONS ---
-        saveData.append("category_id", catId);    // Links to the Category Table ID
-        saveData.append("category", catName);       // Saves the string "Electronics"
-        saveData.append("department", deptName);   // Saves the string "ICT Office"
+
+        saveData.append("category_id", catId);
+        saveData.append("category", catName);
+        saveData.append("department", deptName);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
         appendOptionalImages(saveData);
-        if (hasConfirmedMatch) {
-            saveData.append("matched_item_id", aiResult.matched_item.id);
-            saveData.append("ai_score", aiResult.highest_score || 0);
-        }
 
         const saveRes = await fetch('/admin/items/founds', {
             method: 'POST',
@@ -1381,7 +1403,11 @@ async function executeSubmit() {
         });
 
         if (saveRes.ok) {
-            await showFoundReportAlert('success', 'Report submitted', `Surrendered item registered in ${deptName}.`);
+            await showFoundReportAlert(
+                'success',
+                'Report submitted',
+                `Surrendered item registered in ${deptName}.`
+            );
             location.reload();
         } else {
             const errorData = await saveRes.json();
@@ -1503,7 +1529,7 @@ async function disposeItem(itemId) {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=2"></script>
+<script src="/static/admin-notifications.js?v=3"></script>
 </body>
 </html>
 

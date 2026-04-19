@@ -16,7 +16,7 @@ from PIL import Image
 import torch
 import numpy as np
 import json
-from utils import save_file, resolve_category_name
+from utils import save_file, resolve_category_name, validate_upload_file_size
 from clip_test import get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
 
@@ -79,6 +79,63 @@ def create_student_notification(
     return notif
 
 
+def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | None:
+    if not raw_possible_matches:
+        return None
+
+    try:
+        parsed_matches = json.loads(raw_possible_matches)
+    except Exception:
+        return None
+
+    if not isinstance(parsed_matches, list):
+        return None
+
+    cleaned_matches = []
+    for match in parsed_matches[:3]:
+        if not isinstance(match, dict):
+            continue
+        cleaned_matches.append({
+            "id": match.get("id"),
+            "score": match.get("score"),
+            "category": match.get("category"),
+            "location": match.get("location"),
+            "image_path": match.get("image_path"),
+            "brand": match.get("brand"),
+            "color": match.get("color"),
+            "description": match.get("description"),
+        })
+
+    return json.dumps(cleaned_matches) if cleaned_matches else None
+
+
+def ensure_student_claim_for_pair(
+    db: Session,
+    lost_item: models.Item,
+    found_item: models.Item,
+    claimant_id: int,
+    similarity_score: str = ""
+) -> models.Claim:
+    existing_claim = db.query(models.Claim).filter(
+        models.Claim.lost_item_id == lost_item.id,
+        models.Claim.found_item_id == found_item.id,
+        models.Claim.status.in_(["pending", "approved"])
+    ).first()
+    if existing_claim:
+        return existing_claim
+
+    new_claim = models.Claim(
+        lost_item_id=lost_item.id,
+        found_item_id=found_item.id,
+        claimant_id=claimant_id,
+        status="pending",
+        similarity_score=similarity_score
+    )
+    db.add(new_claim)
+    db.flush()
+    return new_claim
+
+
 @router.get("/notifications")
 async def get_student_notifications(
     db: Session = Depends(get_db),
@@ -89,9 +146,25 @@ async def get_student_notifications(
             and_(models.Notification.type == "chat", models.Notification.related_id == current_user.id),
             and_(models.Notification.type.in_(["student_match", "student_update"]), models.Notification.related_id == current_user.id)
         )
-    ).order_by(models.Notification.created_at.desc()).limit(20).all()
+    ).order_by(models.Notification.created_at.desc()).limit(10).all()
 
     return notifications
+
+
+@router.get("/notifications/unread-count")
+async def get_student_notification_unread_count(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user)
+):
+    unread_count = db.query(models.Notification).filter(
+        or_(
+            and_(models.Notification.type == "chat", models.Notification.related_id == current_user.id),
+            and_(models.Notification.type.in_(["student_match", "student_update"]), models.Notification.related_id == current_user.id)
+        ),
+        models.Notification.is_read == False
+    ).count()
+
+    return {"unread_count": unread_count}
 
 
 @router.post("/notifications/{notif_id}/read")
@@ -137,6 +210,16 @@ async def report_found_item(
     allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
     if image.content_type not in allowed_types:
         raise HTTPException(400, detail="Invalid image type")
+
+    for upload, label in (
+        (image, "Main image"),
+        (extra_image_1, "Optional image 2"),
+        (extra_image_2, "Optional image 3"),
+    ):
+        try:
+            validate_upload_file_size(upload, label=label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         resolved_category = resolve_category_name(db, category_id=category_id, category_name=category)
@@ -276,6 +359,14 @@ async def update_student_profile(
     user.section = section
 
     db.commit()
+    create_student_notification(
+        db,
+        user.id,
+        "Your student profile was updated successfully.",
+        "student_update",
+        "/student/profile"
+    )
+    db.commit()
     return {"message": "Student profile updated successfully"}
 
 @router.get("/dashboard")
@@ -371,6 +462,14 @@ async def update_student_settings(
     user.theme_mode = (data.theme or "light")[:20]
     user.font_size = max(12, min(24, int(data.font_size)))
     db.commit()
+    create_student_notification(
+        db,
+        user.id,
+        "Your student settings were updated successfully.",
+        "student_update",
+        "/student/settings"
+    )
+    db.commit()
 
     return {"status": "success", "message": "Student settings updated successfully"}
 
@@ -445,6 +544,7 @@ async def submit_user_lost_report(
     extra_image_1: UploadFile = File(None),
     extra_image_2: UploadFile = File(None),
     image_embedding: str = Form(None), # Embedding from frontend AI call
+    possible_matches: str = Form(None),
     matched_item_id: int = Form(None), # Found ID if user confirmed a match
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
@@ -452,6 +552,17 @@ async def submit_user_lost_report(
     # 1. Handle the image upload using your save_file helper
     saved_path = None
     query_images = []
+
+    for upload, label in (
+        (image, "Main image"),
+        (extra_image_1, "Optional image 2"),
+        (extra_image_2, "Optional image 3"),
+    ):
+        try:
+            validate_upload_file_size(upload, label=label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if image and image.filename:
         image_bytes = await image.read()
         await image.seek(0)
@@ -493,6 +604,10 @@ async def submit_user_lost_report(
             parsed_date = None
 
     # 3. Create the Item Record
+    saved_possible_matches = normalize_saved_possible_matches(possible_matches)
+
+    is_auto_match = matched_item_id is not None
+
     new_report = models.Item(
         status="lost",
         category_id=category_id,
@@ -503,9 +618,10 @@ async def submit_user_lost_report(
         location=location,
         image_path=saved_path,
         image_embedding=computed_embedding,
+        possible_matches=saved_possible_matches,
         user_id=current_user.id,
         date=parsed_date,
-        is_matched=False,
+        is_matched=is_auto_match,
         department=None, # Explicitly no department for student reports
         is_surrendered=False, # Students keep their lost item (it's lost!)
         created_at=datetime.utcnow()
@@ -523,14 +639,18 @@ async def submit_user_lost_report(
                     detail="Your account does not have a student number yet. Please update your profile or contact an admin before claiming an item."
                 )
 
-            new_claim = models.Claim(
-                lost_item_id=new_report.id,
-                found_item_id=matched_item_id,
-                claimant_id=current_user.id,
-                status="pending",
-                similarity_score=""
+            found_item = db.query(models.Item).filter(models.Item.id == matched_item_id).first()
+            if not found_item or found_item.status != "found" or found_item.archived:
+                raise HTTPException(status_code=404, detail="Selected possible match is no longer available.")
+
+            new_report.is_matched = True
+            found_item.is_matched = True
+            new_claim = ensure_student_claim_for_pair(
+                db,
+                lost_item=new_report,
+                found_item=found_item,
+                claimant_id=current_user.id
             )
-            db.add(new_claim)
 
             # Notification for Admin (Match)
             notif = models.Notification(
@@ -558,7 +678,7 @@ async def submit_user_lost_report(
         return {
             "status": "success", 
             "item_id": new_report.id,
-            "is_matched": False,
+            "is_matched": bool(new_report.is_matched),
             "has_possible_match": bool(matched_item_id)
         }
 

@@ -39,6 +39,7 @@ class Item(Base):
     description = Column(Text)
     image_path = Column(String(500))
     image_embedding = Column(Text)
+    possible_matches = Column(Text, nullable=True)
     is_matched = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_surrendered = Column(Boolean, default=False)
@@ -99,7 +100,7 @@ class User(Base):
     section = Column(String(100), nullable=True) 
     level = Column(String(50), nullable=True)       # NEW: For 'Level' (e.g., G11, G12)
     batch_id = Column(String(100), nullable=True, index=True) # Index makes deleting FAST
-    profile_pic = Column(String(500), nullable=True, default="static/photos/default-avatar.png")
+    profile_pic = Column(String(500), nullable=True, default="static/photos/default-student-avatar.jpg")
     email = Column(String(255), unique=True, index=True)
     hashed_password = Column(String(255))
     is_admin = Column(Boolean, default=False)

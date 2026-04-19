@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Student Panel | LookFor STI</title>
     <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11">
-    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=14">
+    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=15">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -125,7 +125,7 @@
             <section class="content-body">
                 <div class="profile-page-card">
                     <div class="action-bar">
-                            <h2 class="section-title">Found Items <span>Inventory</span></h2>
+                            <h2 class="section-title">Found Items <span></span></h2>
                             <button class="upload-btn" onclick="openModal('reportModal')">
                                 <span class="plus">+ Upload Found Item</span>
                             </button>
@@ -240,7 +240,7 @@
                 </div>
  
                  <div class="modal-footer" style="display: flex; justify-content: center;">
-                    <button class="btn-found surrender-submit-btn" onclick="submitReport()">+Submit</button>
+                    <button class="btn-found surrender-submit-btn" onclick="submitReport()">Submit</button>
                 </div>
             </div>
         </div>
@@ -505,9 +505,6 @@ window.onclick = function(event) {
 
                 if (!compareRes.ok) throw new Error("AI comparison failed.");
                 const aiResult = await compareRes.json();
-                const hasConfirmedMatch = aiResult?.action === "show_match" &&
-                    aiResult?.matched_item?.id &&
-                    (aiResult.highest_score || 0) >= 0.55;
 
                 const formData = new FormData();
                 formData.append("item_name", document.getElementById('itemName').value);
@@ -522,11 +519,6 @@ window.onclick = function(event) {
                 formData.append("image", imageFile);
                 formData.append("image_embedding", JSON.stringify(aiResult.generated_embedding || []));
                 appendOptionalImages(formData);
-
-                if (hasConfirmedMatch) {
-                    formData.append("matched_item_id", aiResult.matched_item.id);
-                    formData.append("ai_score", aiResult.highest_score || 0);
-                }
 
                 const response = await fetch('/student/found', {
                     method: 'POST',
@@ -548,9 +540,7 @@ window.onclick = function(event) {
                     },
                     icon: "success",
                     title: "Report submitted",
-                    text: hasConfirmedMatch
-                        ? "Your surrendered item report has been submitted and a strong possible owner match was detected for review."
-                        : "Your surrendered item report has been submitted.",
+                    text: "Your surrendered item report has been submitted.",
                     confirmButtonText: "OK"
                 });
                 location.reload();
@@ -772,13 +762,33 @@ window.onclick = function(event) {
             });
         }
 
+        const MAX_REPORT_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+
+        function validateReportImageSize(file, inputId) {
+            if (!file || file.size <= MAX_REPORT_IMAGE_SIZE_BYTES) return true;
+            document.getElementById(inputId).value = '';
+            Swal.fire({
+                target: document.body,
+                customClass: {
+                    container: 'swal2-on-top'
+                },
+                icon: 'warning',
+                title: 'Image too large',
+                text: 'Please upload an image that is 5 MB or smaller.'
+            });
+            return false;
+        }
+
         document.getElementById('itemImage').addEventListener('change', function(event) {
+            if (!validateReportImageSize(event.target.files[0], 'itemImage')) return;
             updatePreviewSlide(0, event.target.files[0], 'Main Image', 'itemImageTrigger', '+ Upload Main Image');
         });
         document.getElementById('itemImageExtra1').addEventListener('change', function() {
+            if (!validateReportImageSize(this.files[0], 'itemImageExtra1')) return;
             updatePreviewSlide(1, this.files[0], 'Optional Image 2', 'itemImageExtra1Trigger', '+ Add Optional Image 2');
         });
         document.getElementById('itemImageExtra2').addEventListener('change', function() {
+            if (!validateReportImageSize(this.files[0], 'itemImageExtra2')) return;
             updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
         });
 
@@ -795,7 +805,7 @@ window.onclick = function(event) {
     </script>
 
     <script src="/static/session-keepalive.js"></script>
-    <script src="/static/student-notifications.js"></script>
+    <script src="/static/student-notifications.js?v=3"></script>
     <script src="/static/force-password-change.js"></script>
     <script src="/static/student-sidebar-access.js"></script>
 </body>

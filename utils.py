@@ -8,6 +8,7 @@ import models
 # CHANGE THIS: Point it inside the static directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join("static", "uploads") 
+MAX_REPORT_IMAGE_BYTES = 5 * 1024 * 1024
 
 # Create folder if it doesn't exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -61,6 +62,24 @@ def save_file(file, category: str | None = None):
     # IMPORTANT: Return the path starting with 'static/' 
     # so the database stores a URL the browser can understand.
     return file_path.replace("\\", "/")
+
+
+def validate_upload_file_size(file, max_bytes: int = MAX_REPORT_IMAGE_BYTES, label: str = "Image"):
+    if not file or not getattr(file, "filename", None):
+        return
+
+    stream = getattr(file, "file", None)
+    if stream is None:
+        return
+
+    current_position = stream.tell()
+    stream.seek(0, os.SEEK_END)
+    file_size = stream.tell()
+    stream.seek(current_position)
+
+    if file_size > max_bytes:
+        max_mb = max_bytes / (1024 * 1024)
+        raise ValueError(f"{label} must be 5 MB or smaller.")
 
 
 def notify_admin(db: Session, message: str, notif_type: str = "MATCH_ALERT", related_id: int = None):

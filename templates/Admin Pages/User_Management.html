@@ -168,10 +168,13 @@
             <div id="bulkJobTitle" style="font-weight:700; font-size:16px;">Background registration is idle</div>
             <div id="bulkJobMessage" style="font-size:13px; opacity:0.9; margin-top:4px;">Start a user upload to process it in the background.</div>
         </div>
-        <button id="bulkJobDismissBtn" class="btn-secondary" style="display:none; padding:8px 14px;" onclick="dismissBulkJobCard()">Dismiss</button>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <div id="bulkJobPercent" style="display:none; min-width:64px; text-align:center; padding:8px 12px; border-radius:999px; background:rgba(255,255,255,0.14); font-weight:700; font-size:13px;">0%</div>
+            <button id="bulkJobDismissBtn" class="btn-secondary" style="display:none; padding:8px 14px;" onclick="dismissBulkJobCard()">Dismiss</button>
+        </div>
     </div>
-    <div style="margin-top:12px; width:100%; height:10px; border-radius:999px; background:rgba(255,255,255,0.18); overflow:hidden;">
-        <div id="bulkJobProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #f7b500, #ffd95a); transition: width 0.3s ease;"></div>
+    <div style="margin-top:12px; width:100%; height:10px; border-radius:999px; background:rgba(255,255,255,0.18); overflow:hidden; box-shadow:inset 0 1px 2px rgba(0,0,0,0.15);">
+        <div id="bulkJobProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #f7b500, #ffd95a); transition: width 0.35s ease; box-shadow:0 0 14px rgba(255,217,90,0.35);"></div>
     </div>
     <div id="bulkJobMeta" style="margin-top:10px; font-size:13px; opacity:0.95;">No active background job.</div>
     <div id="bulkJobActions" style="display:none; margin-top:14px; gap:10px; flex-wrap:wrap;">
@@ -201,14 +204,12 @@
                     onkeyup="searchUsers()">
             </div>
             <div id="batchFilterContainer" class="batch-filter-container">
-                <div id="userTypeToggle" class="tab-group user-tabs" style="display:none;">
-                    <button id="btnShowAllUsers" class="tab-btn active" type="button" onclick="setUserTypeFilter('all')">All</button>
-                    <button id="btnShowStudentsOnly" class="tab-btn" type="button" onclick="setUserTypeFilter('student')">Students</button>
-                    <button id="btnShowFacultyOnly" class="tab-btn" type="button" onclick="setUserTypeFilter('faculty')">Faculty</button>
-                </div>
                 <select id="batchFilterInput" class="Srch" onchange="searchUsers()" style="max-width: 220px; display:none;">
                     <option value="">All filters</option>
                 </select>
+                <div id="semesterFilterContainer" class="semester-filter-container" style="display:none;">
+                    <div id="semesterFilterOptions" class="semester-filter-options"></div>
+                </div>
                 <label id="selectAllControl" class="select-all-control" style="display:none;">
                     <input type="checkbox" id="selectAllRows" onchange="toggleSelectAllVisible(this.checked)">
                     <span>Select all visible</span>
@@ -226,6 +227,9 @@
         </button>
         <button id="openResetStudentPasswordBtn" class="upload-btn" onclick="openModal('resetStudentPasswordModal')">
             + Reset User Password
+        </button>
+        <button id="btnExportSemesterPdf" class="upload-btn" style="display:none;" onclick="exportSemesterUsersPdf()">
+            Export Semester PDF
         </button>
         <button id="btnArchiveSelected" class="tab-btn archive-style batch-action-btn" style="color: #ff4d4d; border-color: #ff4d4d; display: none;" onclick="archiveSelectedUsers()">
             <i class="fas fa-box-archive"></i> Move to Archive 
@@ -254,7 +258,7 @@
 
 <div id="studentContainer" class="table-box">
     <table class="user-table">
-        <thead><tr><th>Select</th><th>User ID</th><th>Full Name</th><th>Course/Section</th><th>Last Login</th><th>Status</th><th>Actions</th><th>Batch ID</th></tr></thead>
+        <thead><tr><th>Select</th><th>User ID</th><th>Full Name</th><th>Course/Section</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="studentTableBody"></tbody>
     </table>
 </div>
@@ -262,7 +266,7 @@
 <div id="archiveContainer" class="table-box archive-theme" style="display:none;">
     <h3 id="archiveTitle"><i class="fas fa-box-archive"></i> Archived Users</h3>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th><th>Batch ID</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="archiveTableBody"></tbody>
     </table>
 </div>
@@ -270,7 +274,7 @@
 <div id="deleteContainer" class="table-box archive-theme" style="display:none;">
     <h3 id="deleteTitle"><i class="fas fa-trash"></i> Trash</h3>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th><th>Batch ID</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="deleteTableBody"></tbody>
     </table>
 </div>
@@ -307,7 +311,6 @@
             <select id="batchTerm" class="admin-input" onchange="updateBatchPreview()">
                 <option value="1st Semester">1st Semester</option>
                 <option value="2nd Semester">2nd Semester</option>
-                <option value="Summer">Summer</option>
             </select>
         </div>
         <div class="form-group" style="margin-bottom: 18px;">
@@ -807,6 +810,7 @@ let bulkJobPoller = null;
 let bulkJobAutoOpenResult = false;
 let lastKnownBulkJobStatus = null;
 let lastCompletedBulkJob = null;
+let bulkLoadingOverlayTimer = null;
 
 function hasAccessPermission(permission) {
     return currentAdminPermissions.includes(permission);
@@ -846,6 +850,50 @@ function dismissBulkJobCard() {
     }
 }
 
+function setBulkLoadingOverlay(isVisible, options = {}) {
+    const overlay = document.getElementById('loadingOverlay');
+    const heading = overlay?.querySelector('h2');
+    const message = overlay?.querySelector('p');
+    const progressBar = document.getElementById('progressBar');
+    if (!overlay) return;
+
+    if (isVisible) {
+        if (bulkLoadingOverlayTimer) {
+            clearInterval(bulkLoadingOverlayTimer);
+            bulkLoadingOverlayTimer = null;
+        }
+
+        overlay.style.display = 'flex';
+        if (heading) heading.innerText = options.title || 'Starting bulk registration';
+        if (message) {
+            message.innerText = options.message || 'Please wait while we prepare the background registration job.';
+        }
+        if (progressBar) {
+            let progressValue = Number.parseInt(options.progress || '18', 10);
+            if (Number.isNaN(progressValue)) progressValue = 18;
+            progressBar.style.width = `${progressValue}%`;
+
+            bulkLoadingOverlayTimer = setInterval(() => {
+                progressValue += Math.random() < 0.5 ? 7 : 11;
+                if (progressValue >= 86) {
+                    progressValue = 18;
+                }
+                progressBar.style.width = `${progressValue}%`;
+            }, 380);
+        }
+        return;
+    }
+
+    if (bulkLoadingOverlayTimer) {
+        clearInterval(bulkLoadingOverlayTimer);
+        bulkLoadingOverlayTimer = null;
+    }
+    overlay.style.display = 'none';
+    if (heading) heading.innerText = '';
+    if (message) message.innerText = 'Please wait, generating secure accounts and STI emails.';
+    if (progressBar) progressBar.style.width = '0%';
+}
+
 function renderBulkJobCard(job, options = {}) {
     const { autoOpenResult = false } = options;
     const card = document.getElementById('bulkJobStatusCard');
@@ -853,23 +901,38 @@ function renderBulkJobCard(job, options = {}) {
     const message = document.getElementById('bulkJobMessage');
     const meta = document.getElementById('bulkJobMeta');
     const progressBar = document.getElementById('bulkJobProgressBar');
+    const percentBadge = document.getElementById('bulkJobPercent');
     const dismissBtn = document.getElementById('bulkJobDismissBtn');
     const actions = document.getElementById('bulkJobActions');
     const downloadBtn = document.getElementById('bulkJobDownloadBtn');
 
-    if (!card || !title || !message || !meta || !progressBar || !dismissBtn || !actions || !downloadBtn || !job) return;
+    if (!card || !title || !message || !meta || !progressBar || !percentBadge || !dismissBtn || !actions || !downloadBtn || !job) return;
 
     card.style.display = 'block';
-    progressBar.style.width = `${job.progress || 0}%`;
+    setBulkLoadingOverlay(false);
     lastKnownBulkJobStatus = job.status || null;
     actions.style.display = 'none';
     downloadBtn.style.display = 'none';
 
     const summary = job.summary || {};
-    const processed = job.processed || 0;
+    const countedProcessed =
+        Number(summary.created || 0) +
+        Number(summary.replaced || 0) +
+        Number(summary.ignored || 0);
+    const processed = Math.max(Number(job.processed || 0), countedProcessed);
     const total = job.total || 0;
+    const numericProgress = Number(job.progress || 0);
+    const derivedProgress = total > 0 ? Math.round((processed / total) * 100) : numericProgress;
+    const visibleProgress = Math.max(0, Math.min(100, derivedProgress || numericProgress || 0));
+    const fillWidth = visibleProgress > 0 && visibleProgress < 4 ? 4 : visibleProgress;
+    percentBadge.style.display = 'inline-flex';
+    percentBadge.style.alignItems = 'center';
+    percentBadge.style.justifyContent = 'center';
+    percentBadge.innerText = `${visibleProgress}%`;
 
     if (job.status === 'completed') {
+        progressBar.style.width = '100%';
+        percentBadge.innerText = '100%';
         lastCompletedBulkJob = job;
         title.innerText = 'Background registration completed';
         message.innerText = 'The upload finished and the report is ready.';
@@ -896,6 +959,7 @@ function renderBulkJobCard(job, options = {}) {
     }
 
     if (job.status === 'failed') {
+        progressBar.style.width = `${fillWidth}%`;
         title.innerText = 'Background registration failed';
         message.innerText = job.error || job.message || 'The upload failed before completion.';
         meta.innerText = `Processed ${processed}/${total} students before the job stopped.`;
@@ -907,6 +971,7 @@ function renderBulkJobCard(job, options = {}) {
         }
         return;
     }
+    progressBar.style.width = `${fillWidth}%`;
 
     title.innerText = job.status === 'queued' ? 'Background registration queued' : 'Background registration in progress';
     message.innerText = job.message || 'The user upload is running in the background. You can keep using the system.';
@@ -1251,6 +1316,74 @@ async function confirmUserManagementAction(title, text, confirmButtonText = 'Con
     return result.isConfirmed;
 }
 
+function setBatchActionButtonLoading(buttonId, isLoading, loadingHtml = '', defaultHtml = '') {
+    const button = document.getElementById(buttonId);
+    if (!button) return '';
+
+    const originalHtml = defaultHtml || button.dataset.originalHtml || button.innerHTML;
+    if (!button.dataset.originalHtml) {
+        button.dataset.originalHtml = originalHtml;
+    }
+
+    if (isLoading) {
+        button.disabled = true;
+        button.style.opacity = '0.7';
+        button.style.cursor = 'wait';
+        button.innerHTML = loadingHtml;
+    } else {
+        button.disabled = false;
+        button.style.opacity = '';
+        button.style.cursor = '';
+        button.innerHTML = originalHtml;
+    }
+
+    return originalHtml;
+}
+
+async function runUserBatchRequests(selectedUsers, requestFactory, maxConcurrent = 4) {
+    const users = Array.isArray(selectedUsers) ? [...selectedUsers] : [];
+    if (users.length === 0) return [];
+
+    const workerCount = Math.max(1, Math.min(maxConcurrent, users.length));
+    const errors = [];
+    const results = [];
+    let cursor = 0;
+
+    async function worker() {
+        while (cursor < users.length) {
+            const index = cursor++;
+            const user = users[index];
+            try {
+                results[index] = await requestFactory(user);
+            } catch (error) {
+                errors.push(error);
+            }
+        }
+    }
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+    if (errors.length === 0) {
+        return results;
+    }
+
+    // Fallback to sequential retry so a temporary connection hiccup does not fail the whole batch.
+    const retryErrors = [];
+    for (const user of users) {
+        try {
+            await requestFactory(user);
+        } catch (error) {
+            retryErrors.push(error);
+        }
+    }
+
+    if (retryErrors.length) {
+        throw retryErrors[0];
+    }
+
+    return results;
+}
+
 
 // Function to move user to Archive OR Restore them
 async function toggleArchive(userId, shouldArchive, currentRole, silent = false) {
@@ -1339,9 +1472,9 @@ let allUsers = []; // Global variable to store the fetched data
 
 let currentAdminId = null; // Store your ID globally
 let currentView = 'admin';
-let currentUserTypeFilter = 'all';
 let currentBatchFilter = '';
 let selectedUserIds = new Set();
+let selectedSemesterFilters = new Set();
 
 function isFacultyUser(user) {
     if (!user || user.is_admin) return false;
@@ -1351,17 +1484,6 @@ function isFacultyUser(user) {
     return !!department && department !== 'N/A' && !course && !section;
 }
 
-function applyUserTypeFilter(users) {
-    if (currentView !== 'student') return users;
-    if (currentUserTypeFilter === 'faculty') {
-        return users.filter(isFacultyUser);
-    }
-    if (currentUserTypeFilter === 'student') {
-        return users.filter(user => !isFacultyUser(user));
-    }
-    return users;
-}
-
 function applyBatchFilter(users) {
     const filterValue = String(currentBatchFilter || '').trim();
     if (!filterValue) return users;
@@ -1369,23 +1491,71 @@ function applyBatchFilter(users) {
     const [filterType, ...rawValueParts] = filterValue.split(':');
     const selectedValue = rawValueParts.join(':').trim();
 
-    if (!filterType || !selectedValue) return users;
+    if (!filterType) return users;
 
     return users.filter(user => {
         const batchId = String(user.batch_id || '').trim();
         const course = String(user.course || '').trim();
-        const userId = String(user.student_no || '').trim();
-        const facultyUser = isFacultyUser(user);
-
-        if (filterType === 'role') {
-            if (selectedValue === 'faculty') return facultyUser;
-            if (selectedValue === 'student') return !facultyUser;
-        }
 
         if (filterType === 'batch') return batchId === selectedValue;
         if (filterType === 'course') return course === selectedValue;
+
+        if (filterType === 'type') {
+            if (selectedValue === 'student') return !user.is_admin && !isFacultyUser(user);
+            if (selectedValue === 'faculty') return !user.is_admin && isFacultyUser(user);
+        }
+
         return true;
     });
+}
+
+function getSemesterLabelFromBatchId(batchId) {
+    const value = String(batchId || '').trim();
+    const match = value.match(/BATCH-(\d{4})\s+(1st Semester|2nd Semester)/i);
+    if (!match) return '';
+    return `${match[2]} ${match[1]}`;
+}
+
+function applySemesterFilter(users) {
+    if (!selectedSemesterFilters.size) return users;
+    return users.filter(user => selectedSemesterFilters.has(getSemesterLabelFromBatchId(user.batch_id)));
+}
+
+function getCurrentSemesterEntry() {
+    const now = new Date();
+    const month = now.getMonth();
+    return {
+        term: month >= 6 ? '1st Semester' : '2nd Semester',
+        // Batch labels use the starting year of the academic cycle.
+        year: month >= 6 ? now.getFullYear() : now.getFullYear() - 1
+    };
+}
+
+function getPreviousSemesterEntry(entry) {
+    if (entry.term === '2nd Semester') {
+        return { term: '1st Semester', year: entry.year };
+    }
+    return { term: '2nd Semester', year: entry.year - 1 };
+}
+
+function getNextSemesterEntry(entry) {
+    if (entry.term === '1st Semester') {
+        return { term: '2nd Semester', year: entry.year };
+    }
+    return { term: '1st Semester', year: entry.year + 1 };
+}
+
+function buildSemesterSequence() {
+    const current = getCurrentSemesterEntry();
+    const previousOne = getPreviousSemesterEntry(current);
+    const previousTwo = getPreviousSemesterEntry(previousOne);
+    const nextOne = getNextSemesterEntry(current);
+    const nextTwo = getNextSemesterEntry(nextOne);
+
+    return [previousTwo, previousOne, current, nextOne, nextTwo].map(option => ({
+        ...option,
+        label: `${option.term} ${option.year}`
+    }));
 }
 
 function populateBatchFilterOptions() {
@@ -1415,30 +1585,35 @@ function populateBatchFilterOptions() {
 
     const appendGroup = (label, items, prefix, labelFormatter = value => value) => {
         if (!items.length) return;
+
         const group = document.createElement('optgroup');
         group.label = label;
+
         items.forEach(item => {
             const option = document.createElement('option');
             option.value = `${prefix}:${item}`;
             option.textContent = labelFormatter(item);
             group.appendChild(option);
         });
+
         batchFilterInput.appendChild(group);
     };
 
-    appendOption('', 'All filters');
-    appendGroup('User Type', ['faculty', 'student'], 'role', value =>
-        value === 'faculty' ? 'Faculty' : 'Students'
-    );
+    // MAIN FILTERS
+    appendOption('', 'All Users');
+    appendOption('type:student', 'Students Only');
+    appendOption('type:faculty', 'Faculty Only');
+
+    // OTHER GROUPS
     appendGroup('Batches', batchValues, 'batch');
     appendGroup('Courses', courseValues, 'course');
 
     const allOptionValues = [
         '',
+        'type:student',
+        'type:faculty',
         ...batchValues.map(value => `batch:${value}`),
-        ...courseValues.map(value => `course:${value}`),
-        'role:faculty',
-        'role:student'
+        ...courseValues.map(value => `course:${value}`)
     ];
 
     if (currentBatchFilter && allOptionValues.includes(currentBatchFilter)) {
@@ -1448,36 +1623,69 @@ function populateBatchFilterOptions() {
         batchFilterInput.value = '';
     }
 }
-
-function updateUserTypeToggle() {
-    const userTypeToggle = document.getElementById('userTypeToggle');
-    if (userTypeToggle) {
-        userTypeToggle.style.display = currentView === 'student' ? 'inline-flex' : 'none';
-    }
-
-    const buttons = {
-        all: document.getElementById('btnShowAllUsers'),
-        student: document.getElementById('btnShowStudentsOnly'),
-        faculty: document.getElementById('btnShowFacultyOnly')
-    };
-
-    Object.entries(buttons).forEach(([key, button]) => {
-        if (button) {
-            button.classList.toggle('active', currentUserTypeFilter === key);
-        }
-    });
+function renderSemesterFilterOptions() {
+    const container = document.getElementById('semesterFilterOptions');
+    if (!container) return;
+    container.innerHTML = buildSemesterSequence().map(option => `
+        <label class="semester-filter-chip">
+            <input type="checkbox" value="${option.label}" ${selectedSemesterFilters.has(option.label) ? 'checked' : ''} onchange="toggleSemesterFilter('${option.label}', this.checked)">
+            <span>${option.label}</span>
+        </label>
+    `).join('');
 }
 
-function setUserTypeFilter(filterType) {
-    currentUserTypeFilter = filterType;
-    selectedUserIds.clear();
-    const selectAllRows = document.getElementById('selectAllRows');
-    if (selectAllRows) selectAllRows.checked = false;
-    updateUserTypeToggle();
-    if (document.getElementById('userSearch')?.value || currentBatchFilter) {
-        searchUsers();
-    } else {
-        filterTable('student');
+function updateSemesterFilterVisibility() {
+    const container = document.getElementById('semesterFilterContainer');
+    if (!container) return;
+    container.style.display = currentView === 'student' || currentView === 'archive' || currentView === 'delete' ? 'flex' : 'none';
+}
+
+function toggleSemesterFilter(label, isChecked) {
+    if (isChecked) selectedSemesterFilters.add(label);
+    else selectedSemesterFilters.delete(label);
+    syncTopActionButtons();
+    searchUsers();
+}
+
+function getFilteredUsersForRole(role) {
+    let filtered = allUsers.filter(user => {
+        const isAdmin = !!user.is_admin;
+        const isArchived = !!user.is_archived;
+
+        if (role === 'admin') return isAdmin && !isArchived;
+        if (role === 'student') return !isAdmin && !isArchived;
+        if (role === 'archive') return isArchived && !user.is_pending_delete;
+        if (role === 'delete') return isArchived && !!user.is_pending_delete;
+        return false;
+    });
+
+    const query = String(document.getElementById('userSearch')?.value || '').toLowerCase().trim();
+    if (query) {
+        filtered = filtered.filter(user =>
+            (user.full_name && user.full_name.toLowerCase().includes(query)) ||
+            (user.email && user.email.toLowerCase().includes(query)) ||
+            (user.student_no && user.student_no.toLowerCase().includes(query)) ||
+            (user.batch_id && user.batch_id.toLowerCase().includes(query)) ||
+            (user.course && user.course.toLowerCase().includes(query)) ||
+            (user.section && user.section.toLowerCase().includes(query)) ||
+            (user.department && user.department.toLowerCase().includes(query)) ||
+            String(user.id || '').includes(query)
+        );
+    }
+
+    filtered = applyBatchFilter(filtered);
+    if (role === 'student' || role === 'archive' || role === 'delete') {
+        filtered = applySemesterFilter(filtered);
+    }
+    return filtered;
+}
+
+function syncTopActionButtons() {
+    const exportBtn = document.getElementById('btnExportSemesterPdf');
+    if (exportBtn) {
+        exportBtn.style.display = selectedSemesterFilters.size > 0 && (currentView === 'student' || currentView === 'archive' || currentView === 'delete')
+            ? 'inline-flex'
+            : 'none';
     }
 }
 
@@ -1499,6 +1707,7 @@ async function loadUsers(currentRole = getInitialUserManagementTab()) {
         
         allUsers = await response.json();
         populateBatchFilterOptions();
+        renderSemesterFilterOptions();
         
         // This will use 'admin' on first load, 
         // but will use 'student' or 'archive_student' if passed by a button.
@@ -1508,43 +1717,47 @@ async function loadUsers(currentRole = getInitialUserManagementTab()) {
     }
 }
 
-function filterTable(role) {
-    currentView = role;
-    if (role !== 'student') {
-        currentUserTypeFilter = 'all';
+function filterTable(role = 'admin') {
+    const config = {
+        admin:   { container: 'adminContainer',   body: 'adminTableBody' },
+        student: { container: 'studentContainer', body: 'studentTableBody' },
+        archive: { container: 'archiveContainer', body: 'archiveTableBody' },
+        delete:  { container: 'deleteContainer',  body: 'deleteTableBody' }
+    };
+
+    if (!config[role]) {
+        role = 'admin';
     }
+
+    currentView = role;
     selectedUserIds.clear();
 
     const tabButtons = ['btnShowAdmin', 'btnShowStudent', 'btnShowArchive', 'btnShowDelete'];
     tabButtons.forEach(id => document.getElementById(id)?.classList.remove('active'));
+
     const activeButtonMap = {
         admin: 'btnShowAdmin',
         student: 'btnShowStudent',
         archive: 'btnShowArchive',
         delete: 'btnShowDelete'
     };
+
     document.getElementById(activeButtonMap[role])?.classList.add('active');
 
-    // 1. Hide ALL table containers first
     const containers = ['adminContainer', 'studentContainer', 'archiveContainer', 'deleteContainer'];
-    containers.forEach(id => document.getElementById(id).style.display = 'none');
-
-    // 2. Map the role to the correct Container and Table Body
-    const config = {
-        'admin':           { container: 'adminContainer',          body: 'adminTableBody' },
-        'student':         { container: 'studentContainer',        body: 'studentTableBody' },
-        'archive':         { container: 'archiveContainer',        body: 'archiveTableBody' },
-        'delete':          { container: 'deleteContainer',         body: 'deleteTableBody' }
-    };
+    containers.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
 
     const activeConfig = config[role];
-    if (activeConfig) {
-        document.getElementById(activeConfig.container).style.display = 'block';
+    const activeContainer = document.getElementById(activeConfig.container);
+    if (activeContainer) {
+        activeContainer.style.display = 'block';
     }
 
     const batchFilterContainer = document.getElementById('batchFilterContainer');
     const batchFilterInput = document.getElementById('batchFilterInput');
-    const userTypeToggle = document.getElementById('userTypeToggle');
     const selectAllControl = document.getElementById('selectAllControl');
     const selectAllRows = document.getElementById('selectAllRows');
     const userCountBadge = document.getElementById('userCountBadge');
@@ -1554,10 +1767,11 @@ function filterTable(role) {
     const deleteSelectedBtn = document.getElementById('btnDeleteSelected');
     const shouldShowArchiveFilters = role === 'archive' || role === 'delete';
 
-    batchFilterContainer.style.display = (role === 'admin' || role === 'student' || shouldShowArchiveFilters) ? 'flex' : 'none';
-    if (userTypeToggle) {
-        userTypeToggle.style.display = role === 'student' ? 'inline-flex' : 'none';
+    if (batchFilterContainer) {
+        batchFilterContainer.style.display =
+            (role === 'admin' || role === 'student' || shouldShowArchiveFilters) ? 'flex' : 'none';
     }
+
     if (batchFilterInput) {
         batchFilterInput.style.display = role === 'student' ? 'inline-flex' : 'none';
         if (role !== 'student') {
@@ -1565,45 +1779,44 @@ function filterTable(role) {
             currentBatchFilter = '';
         }
     }
+
     if (selectAllControl) {
-        selectAllControl.style.display = role === 'admin' || role === 'student' || role === 'archive' || role === 'delete' ? 'inline-flex' : 'none';
+        selectAllControl.style.display =
+            (role === 'admin' || role === 'student' || role === 'archive' || role === 'delete')
+                ? 'inline-flex'
+                : 'none';
     }
+
     if (selectAllRows) {
         selectAllRows.checked = false;
     }
+
     if (userCountBadge) {
-        userCountBadge.style.display = (role === 'admin' || role === 'student' || role === 'archive' || role === 'delete') ? 'inline-flex' : 'none';
+        userCountBadge.style.display =
+            (role === 'admin' || role === 'student' || role === 'archive' || role === 'delete')
+                ? 'inline-flex'
+                : 'none';
     }
+
     if (archiveSelectedBtn) archiveSelectedBtn.style.display = 'none';
     if (activateSelectedBtn) activateSelectedBtn.style.display = 'none';
     if (recoverSelectedBtn) recoverSelectedBtn.style.display = 'none';
     if (deleteSelectedBtn) deleteSelectedBtn.style.display = 'none';
 
-    // 3. Filter the 'allUsers' array based on your Logic
-    let filtered = allUsers.filter(user => {
-        const isAdmin = !!user.is_admin;
-        const isArchived = !!user.is_archived;
+    updateSemesterFilterVisibility();
+    syncTopActionButtons();
 
-        if (role === 'admin')           return isAdmin && !isArchived;
-        if (role === 'student')         return !isAdmin && !isArchived;
-        if (role === 'archive')         return isArchived && !user.is_pending_delete;
-        if (role === 'delete')          return isArchived && !!user.is_pending_delete;
-        return false;
-    });
-
-    filtered = applyUserTypeFilter(filtered);
-    filtered = applyBatchFilter(filtered);
-    updateUserTypeToggle();
+    const filtered = getFilteredUsersForRole(role);
 
     if (userCountBadge) {
-        userCountBadge.innerText = role === 'admin'
-            ? `Total Admins: ${filtered.length}`
-            : role === 'student'
-                ? `Total ${currentUserTypeFilter === 'faculty' ? 'Faculty' : currentUserTypeFilter === 'student' ? 'Students' : 'Users'}: ${filtered.length}`
-                : `Total Records: ${filtered.length}`;
+        userCountBadge.innerText =
+            role === 'admin'
+                ? `Total Admins: ${filtered.length}`
+                : role === 'student'
+                    ? `Total Users: ${filtered.length}`
+                    : `Total Records: ${filtered.length}`;
     }
 
-    // 4. Send to the specific table body
     renderTable(filtered, role, activeConfig.body);
 }
 function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody') {
@@ -1626,13 +1839,11 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
 
         // 2. SEGREGATED COLUMN: Show Course/Section for users, Dept for Admins
         let infoColumn = "";
-        let batchColumn = "";
         if (currentRole === 'student') {
             const userInfo = (user.course || user.section)
                 ? `${user.course || ''} ${user.section || ''}`.trim()
                 : (user.department || "N/A");
             infoColumn = `<td>${userInfo}</td>`;
-            batchColumn = `<td>${user.batch_id || 'N/A'}</td>`;
         } else if (currentRole === 'archive' || currentRole === 'delete') {
             const roleInfo = user.is_admin
                 ? (user.department || 'N/A')
@@ -1640,11 +1851,9 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                     ? `${user.course || ''} ${user.section || ''}`.trim()
                     : 'STUDENT');
             infoColumn = `<td>${user.is_admin ? 'Admin' : 'User'}${roleInfo ? ` - ${roleInfo}` : ''}</td>`;
-            batchColumn = `<td>${user.is_admin ? 'N/A' : (user.batch_id || 'N/A')}</td>`;
         } else {
             // Admin perspective
             infoColumn = `<td>${user.department || 'N/A'}</td>`;
-            batchColumn = '';
         }
 
         // 3. Action Buttons Logic
@@ -1712,7 +1921,6 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                 <td>
                     ${actionButtons}
                 </td>
-                ${batchColumn}
             </tr>
         `;
         tableBody.insertAdjacentHTML('beforeend', row);
@@ -1818,12 +2026,35 @@ async function archiveSelectedUsers() {
     }
     const selectedLabel = currentView === 'admin' ? 'admin account(s)' : 'user account(s)';
     if (!(await confirmUserManagementAction('Archive selected users?', `Archive ${selected.length} selected ${selectedLabel}?`, 'Archive selected'))) return;
-    for (const user of selected) {
-        await toggleArchive(user.id, true, currentView, true);
+
+    const archiveBtn = document.getElementById('btnArchiveSelected');
+    const originalArchiveBtnHtml = setBatchActionButtonLoading(
+        'btnArchiveSelected',
+        true,
+        `<i class="fas fa-spinner fa-spin"></i> Archiving ${selected.length} ${currentView === 'admin' ? 'Admins' : 'Users'}...`
+    );
+
+    try {
+        await runUserBatchRequests(selected, async (user) => {
+            const response = await fetch(`/admin/toggle-archive/${user.id}?archive=true`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.detail || `Failed to archive ${user.full_name || 'user'}.`);
+            }
+            return result;
+        });
+
+        selectedUserIds.clear();
+        await loadUsers(currentView);
+        await showUserManagementAlert('success', 'Users archived', `${selected.length} selected ${selectedLabel} archived.`);
+    } catch (error) {
+        await showUserManagementAlert('error', 'Archive failed', error.message || 'Failed to archive selected users.');
+    } finally {
+        setBatchActionButtonLoading('btnArchiveSelected', false, '', originalArchiveBtnHtml);
     }
-    selectedUserIds.clear();
-    await loadUsers(currentView);
-    await showUserManagementAlert('success', 'Users archived', `${selected.length} selected ${selectedLabel} archived.`);
 }
 
 async function activateSelectedUsers() {
@@ -2092,12 +2323,34 @@ async function recoverSelectedUsers() {
         return;
     }
     if (!(await confirmUserManagementAction('Recover selected users?', `Recover ${selected.length} selected account(s)?`, 'Recover selected'))) return;
-    for (const user of selected) {
-        await toggleArchive(user.id, false, currentView, true);
+
+    const originalRecoverBtnHtml = setBatchActionButtonLoading(
+        'btnRecoverSelected',
+        true,
+        `<i class="fas fa-spinner fa-spin"></i> Recovering ${selected.length} Users...`
+    );
+
+    try {
+        await runUserBatchRequests(selected, async (user) => {
+            const response = await fetch(`/admin/toggle-archive/${user.id}?archive=false`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.detail || `Failed to recover ${user.full_name || 'user'}.`);
+            }
+            return result;
+        });
+
+        selectedUserIds.clear();
+        await loadUsers(currentView);
+        await showUserManagementAlert('success', 'Users recovered', `${selected.length} selected account(s) recovered.`);
+    } catch (error) {
+        await showUserManagementAlert('error', 'Recover failed', error.message || 'Failed to recover selected users.');
+    } finally {
+        setBatchActionButtonLoading('btnRecoverSelected', false, '', originalRecoverBtnHtml);
     }
-    selectedUserIds.clear();
-    await loadUsers(currentView);
-    await showUserManagementAlert('success', 'Users recovered', `${selected.length} selected account(s) recovered.`);
 }
 
 async function deleteSelectedUsers() {
@@ -2113,22 +2366,66 @@ async function deleteSelectedUsers() {
 
     if (currentView === 'archive') {
         if (!(await confirmUserManagementAction('Move users to Trash?', `Move ${selected.length} selected account(s) to the Trash tab?`, 'Move to Trash'))) return;
-        for (const user of selected) {
-            await moveToDelete(user.id, currentView, true);
+
+        const originalDeleteBtnHtml = setBatchActionButtonLoading(
+            'btnDeleteSelected',
+            true,
+            `<i class="fas fa-spinner fa-spin"></i> Moving ${selected.length} Users...`
+        );
+
+        try {
+            await runUserBatchRequests(selected, async (user) => {
+                const response = await fetch(`/admin/move-to-delete/${user.id}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(result.detail || `Failed to move ${user.full_name || 'user'} to Trash.`);
+                }
+                return result;
+            });
+
+            selectedUserIds.clear();
+            await loadUsers(currentView);
+            await showUserManagementAlert('success', 'Users moved', `${selected.length} selected account(s) moved to Trash.`);
+        } catch (error) {
+            await showUserManagementAlert('error', 'Move failed', error.message || 'Failed to move selected users to Trash.');
+        } finally {
+            setBatchActionButtonLoading('btnDeleteSelected', false, '', originalDeleteBtnHtml);
         }
-        selectedUserIds.clear();
-        await loadUsers(currentView);
-        await showUserManagementAlert('success', 'Users moved', `${selected.length} selected account(s) moved to Trash.`);
         return;
     }
 
     if (!(await confirmUserManagementAction('Delete selected users permanently?', `Permanently delete ${selected.length} selected account(s)? This cannot be undone.`, 'Delete selected'))) return;
-    for (const user of selected) {
-        await permanentDelete(user.id, currentView, true);
+
+    const originalDeleteBtnHtml = setBatchActionButtonLoading(
+        'btnDeleteSelected',
+        true,
+        `<i class="fas fa-spinner fa-spin"></i> Deleting ${selected.length} Users...`
+    );
+
+    try {
+        await runUserBatchRequests(selected, async (user) => {
+            const response = await fetch(`/admin/permanent-delete/${user.id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.detail || `Failed to delete ${user.full_name || 'user'}.`);
+            }
+            return result;
+        });
+
+        selectedUserIds.clear();
+        await loadUsers(currentView);
+        await showUserManagementAlert('success', 'Users deleted', `${selected.length} selected account(s) deleted.`);
+    } catch (error) {
+        await showUserManagementAlert('error', 'Delete failed', error.message || 'Failed to delete selected users.');
+    } finally {
+        setBatchActionButtonLoading('btnDeleteSelected', false, '', originalDeleteBtnHtml);
     }
-    selectedUserIds.clear();
-    await loadUsers(currentView);
-    await showUserManagementAlert('success', 'Users deleted', `${selected.length} selected account(s) deleted.`);
 }
 
 async function moveToDelete(userId, currentRole, silent = false) {
@@ -2196,15 +2493,18 @@ async function moveToDelete(userId, currentRole, silent = false) {
 
         return matchesRole && matchesArchive && matchesScope && matchesQuery;
     });
-    const visibleUsers = applyBatchFilter(applyUserTypeFilter(filtered));
+    let visibleUsers = applyBatchFilter(filtered);
+    if (activeTab === 'student' || activeTab === 'archive' || activeTab === 'delete') {
+        visibleUsers = applySemesterFilter(visibleUsers);
+    }
 
     const userCountBadge = document.getElementById('userCountBadge');
     if (userCountBadge) {
         userCountBadge.innerText = activeTab === 'admin'
             ? `Total Admins: ${visibleUsers.length}`
             : activeTab === 'student'
-                ? `Total ${currentUserTypeFilter === 'faculty' ? 'Faculty' : currentUserTypeFilter === 'student' ? 'Students' : 'Users'}: ${visibleUsers.length}`
-                : `Total Records: ${filtered.length}`;
+                ? `Total Users: ${visibleUsers.length}`
+                : `Total Records: ${visibleUsers.length}`;
     }
 
     // Re-render the table with the search results
@@ -2244,7 +2544,7 @@ async function moveToDelete(userId, currentRole, silent = false) {
         } else {
             showAccessDeniedPopup(permission);
         }
-    } catch (error) {
+    } catch (error) { 
         console.error("Access check failed:", error);
         showAccessDeniedPopup(permission);
     }
@@ -2362,6 +2662,7 @@ function openModal(id) {
         const modal = document.getElementById(id);
         if (modal) modal.style.display = "flex";
         if (id === 'bulkRegisterModal') {
+            syncSemesterSequenceOptions();
             updateBatchPreview();
         } else if (id === 'createAdminModal') {
             syncCreateAdminGrantLocks();
@@ -2374,11 +2675,7 @@ function openModal(id) {
         modal.style.display = 'none';
     }
 
-    // --- RESET THE PROGRESS BAR ---
-    const progressBar = document.getElementById('progressBar');
-    if (progressBar) {
-        progressBar.style.width = '0%';
-    }
+    setBulkLoadingOverlay(false);
 
     // --- CLEAR EXCEL DATA AFTER CLOSING ---
     if (modalId === 'bulkRegisterModal') {
@@ -2389,7 +2686,7 @@ function openModal(id) {
         document.getElementById('bulkImportType').value = 'student';
         document.getElementById('bulkEntryMode').value = 'upload';
         document.getElementById('batchYear').value = new Date().getFullYear();
-        document.getElementById('batchTerm').value = '1st Semester';
+        syncSemesterSequenceOptions();
         ['manualUserId', 'manualLastName', 'manualFirstName', 'manualMiddleName', 'manualProgram', 'manualLevel', 'manualDisplayName', 'manualDepartment']
             .forEach(id => {
                 const field = document.getElementById(id);
@@ -2418,7 +2715,7 @@ function openModal(id) {
 
 function getSelectedBatchId() {
     const year = String(document.getElementById('batchYear')?.value || '').trim();
-    const term = String(document.getElementById('batchTerm')?.value || '').trim();
+    const term = normalizeSemesterTerm(document.getElementById('batchTerm')?.value);
     return year && term ? `BATCH-${year} ${term}` : '';
 }
 
@@ -2426,6 +2723,29 @@ function updateBatchPreview() {
     const preview = document.getElementById('batchPreview');
     if (!preview) return;
     preview.innerText = getSelectedBatchId() || 'Please select a valid batch year and term';
+    syncSemesterSequenceOptions();
+}
+
+function syncSemesterSequenceOptions() {
+    const batchYearInput = document.getElementById('batchYear');
+    const batchTermSelect = document.getElementById('batchTerm');
+    if (!batchYearInput || !batchTermSelect) return;
+
+    const currentValue = normalizeSemesterTerm(batchTermSelect.value);
+    const termOptions = ['1st Semester', '2nd Semester'];
+    batchTermSelect.innerHTML = termOptions
+        .map(term => `<option value="${term}">${term}</option>`)
+        .join('');
+
+    const defaultTerm = new Date().getMonth() >= 6 ? '1st Semester' : '2nd Semester';
+    batchTermSelect.value = termOptions.includes(currentValue) ? currentValue : defaultTerm;
+}
+
+function normalizeSemesterTerm(value) {
+    const rawValue = String(value || '').trim();
+    const match = rawValue.match(/(1st Semester|2nd Semester)/i);
+    if (!match) return '';
+    return match[1][0].toUpperCase() + match[1].slice(1);
 }
 
 function showResetPasswordResult(email, tempPassword) {
@@ -2522,6 +2842,11 @@ async function submitBulk() {
 
     btn.innerText = `Starting ${usersToRegister.length} Users...`;
     btn.disabled = true;
+    setBulkLoadingOverlay(true, {
+        title: 'Starting bulk registration',
+        message: `Preparing ${usersToRegister.length} user account${usersToRegister.length === 1 ? '' : 's'} for background processing...`,
+        progress: '22%'
+    });
 
     try {
         const response = await fetch('/admin/bulk-register-students', {
@@ -2555,8 +2880,10 @@ async function submitBulk() {
         startBulkJobPolling(data.job_id, { autoOpenResult: true });
     } catch (err) { 
         console.error(err);
+        setBulkLoadingOverlay(false);
         await showUserManagementAlert('error', 'Bulk registration failed', err.message || 'Server connection failed.'); 
     } finally { 
+        setBulkLoadingOverlay(false);
         btn.innerText = "Generate Accounts"; 
         btn.disabled = false;
     }
@@ -2779,10 +3106,10 @@ loadDepartments();
     }
 
 function handleExcel(input) {
-    const file = input.files[0];
+    const file = getSpreadsheetFileFromSelection(input.files);
     if (!file) return;
 
-    document.getElementById('fileNameDisplay').innerText = file.name;
+    document.getElementById('fileNameDisplay').innerText = file.webkitRelativePath || file.name;
 
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -2894,6 +3221,66 @@ function handleExcel(input) {
         showUserManagementAlert('success', 'Users detected', `Found ${users.length} ${accountLabel}.`);
     };
     reader.readAsArrayBuffer(file);
+}
+
+function getSpreadsheetFileFromSelection(fileList) {
+    const files = Array.from(fileList || []);
+    return files.find(file => /\.(xlsx|xls|csv)$/i.test(file.name || '')) || null;
+}
+
+function exportSemesterUsersPdf() {
+    const rowsToExport = getFilteredUsersForRole(currentView);
+    if (!rowsToExport.length) {
+        showUserManagementAlert('info', 'Nothing to export', 'No users found for the selected semester filter.');
+        return;
+    }
+
+    const printableRows = rowsToExport.map((user, index) => `
+        <tr>
+            <td>${index + 1}</td>
+            <td>${user.student_no || user.id || '-'}</td>
+            <td>${escapeHtml(user.full_name || '-')}</td>
+            <td>${escapeHtml(user.course || user.department || '-')}</td>
+            <td>${escapeHtml(user.batch_id || '-')}</td>
+            <td>${escapeHtml(user.email || '-')}</td>
+        </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank', 'width=1100,height=800');
+    if (!printWindow) {
+        showUserManagementAlert('warning', 'Popup blocked', 'Please allow popups to export the semester PDF.');
+        return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Semester User Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 24px; color: #122033; }
+h1 { margin-bottom: 8px; color: #003366; }
+p { margin: 6px 0; color: #475569; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+th, td { border: 1px solid #c8d4e3; padding: 8px 10px; text-align: left; font-size: 13px; }
+th { background: #eef5fb; color: #17324f; }
+</style>
+</head>
+<body>
+<h1>Semester User Report</h1>
+<p><strong>View:</strong> ${escapeHtml(currentView)}</p>
+<p><strong>Semesters:</strong> ${escapeHtml(Array.from(selectedSemesterFilters).join(', ') || 'All')}</p>
+<p><strong>Total Users:</strong> ${rowsToExport.length}</p>
+<table>
+<thead><tr><th>#</th><th>User ID</th><th>Full Name</th><th>Course / Department</th><th>Batch ID</th><th>Email</th></tr></thead>
+<tbody>${printableRows}</tbody>
+</table>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 250);
 }
 
 function getManualBulkEntries(importType) {
@@ -3209,7 +3596,7 @@ window.addEventListener('pageshow', () => {
 
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
-<script src="/static/admin-notifications.js?v=2"></script>
+<script src="/static/admin-notifications.js?v=3"></script>
 <script src="/static/force-password-change.js"></script>
 </body>
 </html>

@@ -58,7 +58,7 @@
             <li >
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrender Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
                 </a>
             </li>
 
@@ -399,7 +399,7 @@ async function loadClaims() {
 function openDecisionModal(claimId, action) {
     const claim = claimsCache.find(entry => entry.id === claimId);
     if (!claim) {
-        Swal.fire({
+        fireSwalOnTop({
             icon: 'error',
             title: 'Claim unavailable',
             text: 'Claim details could not be loaded.',
@@ -455,7 +455,7 @@ function openDecisionModal(claimId, action) {
 
 async function saveDecisionReport() {
     if (!activeDecisionClaim || !activeDecisionAction) {
-        await Swal.fire({
+        await fireSwalOnTop({
             icon: 'warning',
             title: 'No claim selected',
             text: 'No claim is selected.',
@@ -489,7 +489,7 @@ async function saveDecisionReport() {
                 activeDecisionClaim.report = result.report;
                 activeDecisionClaim.status = result.report.status?.toLowerCase?.() || activeDecisionAction;
             }
-            await Swal.fire({
+            await fireSwalOnTop({
                 icon: 'success',
                 title: activeDecisionAction === 'approve' ? 'Claim approved' : 'Claim rejected',
                 text: activeDecisionAction === 'approve' ? 'Claim approved and report saved.' : 'Claim rejected and report saved.',
@@ -499,7 +499,7 @@ async function saveDecisionReport() {
             await loadClaims();
         } else {
             const error = await response.json();
-            await Swal.fire({
+            await fireSwalOnTop({
                 icon: 'error',
                 title: 'Save failed',
                 text: error.detail || 'Failed to save decision report.',
@@ -508,7 +508,7 @@ async function saveDecisionReport() {
         }
     } catch (error) {
         console.error("Error saving decision report:", error);
-        await Swal.fire({
+        await fireSwalOnTop({
             icon: 'error',
             title: 'Save failed',
             text: 'Failed to save decision report.',
@@ -539,6 +539,22 @@ function previewDecisionReportImage(event) {
 
 function closeDecisionModal() {
     document.getElementById('decisionModal').style.display = 'none';
+}
+
+function fireSwalOnTop(options) {
+    const originalDidOpen = options?.didOpen;
+    return Swal.fire({
+        ...options,
+        didOpen: (popup) => {
+            const container = Swal.getContainer();
+            if (container) {
+                container.style.zIndex = '30000';
+            }
+            if (typeof originalDidOpen === 'function') {
+                originalDidOpen(popup);
+            }
+        }
+    });
 }
 
 function formatDisplayDate(value) {
@@ -611,7 +627,7 @@ function renderSavedReport(report) {
 function printDecisionReport() {
     const content = document.getElementById('decisionReportContent').innerText.trim();
     if (!window.__claimPrintableHtml && !content) {
-        Swal.fire({
+        fireSwalOnTop({
             icon: 'info',
             title: 'Nothing to print',
             text: 'Open a claim report first before printing.',
@@ -643,6 +659,6 @@ function logout() {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=2"></script>
+<script src="/static/admin-notifications.js?v=3"></script>
 </body>
 </html>

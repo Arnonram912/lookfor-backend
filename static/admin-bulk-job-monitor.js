@@ -44,7 +44,7 @@
                 <div id="adminBulkJobBannerProgress" style="width:0%; height:100%; background:linear-gradient(90deg,#f7b500,#ffd95a); transition:width .25s ease;"></div>
             </div>
             <div id="adminBulkJobBannerMeta" style="margin-top:10px; font-size:12px; opacity:.92;">Preparing background registration...</div>
-            <div style="margin-top:12px; display:flex; justify-content:flex-end;">
+            <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
                 <button id="adminBulkJobBannerOpen" type="button" style="display:none; border:none; border-radius:999px; padding:8px 14px; background:#ffd95a; color:#0f2f57; font-weight:700; cursor:pointer;">Open User Management</button>
             </div>
         `;
@@ -70,54 +70,68 @@
     }
 
     function renderBanner(job) {
-        if (window.location.pathname === "/admin/User-Management") {
-            hideBanner();
-            return;
-        }
+    const banner = ensureBanner();
+    const title = document.getElementById("adminBulkJobBannerTitle");
+    const message = document.getElementById("adminBulkJobBannerMessage");
+    const meta = document.getElementById("adminBulkJobBannerMeta");
+    const progress = document.getElementById("adminBulkJobBannerProgress");
+    const openBtn = document.getElementById("adminBulkJobBannerOpen");
 
-        const banner = ensureBanner();
-        const title = document.getElementById("adminBulkJobBannerTitle");
-        const message = document.getElementById("adminBulkJobBannerMessage");
-        const meta = document.getElementById("adminBulkJobBannerMeta");
-        const progress = document.getElementById("adminBulkJobBannerProgress");
-        const openBtn = document.getElementById("adminBulkJobBannerOpen");
+    if (!banner || !title || !message || !meta || !progress || !openBtn) return;
 
-        if (!banner || !title || !message || !meta || !progress || !openBtn) return;
+    const summary = job.summary || {};
+    const processed = Number(job.processed || 0);
+    const total = Number(job.total || 0);
+    const rawProgress = Number(job.progress || 0);
 
-        banner.style.display = "block";
-        progress.style.width = `${job.progress || 0}%`;
+    const visibleProgress =
+        (job.status === "queued" || job.status === "running") && rawProgress > 0
+            ? Math.max(rawProgress, 3)
+            : rawProgress;
 
-        const summary = job.summary || {};
-        const processed = job.processed || 0;
-        const total = job.total || 0;
+    banner.style.display = "block";
+    progress.style.width = `${visibleProgress}%`;
 
-        if (job.status === "completed") {
-            title.innerText = "Student upload completed";
-            message.innerText = "The background registration finished successfully.";
-            meta.innerText = `Processed ${processed}/${total}. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
-            openBtn.style.display = "inline-flex";
-            stopPolling();
-            return;
-        }
-
-        if (job.status === "failed") {
-            title.innerText = "Student upload failed";
-            message.innerText = job.error || job.message || "The background registration stopped before finishing.";
-            meta.innerText = `Processed ${processed}/${total} students before it stopped.`;
-            openBtn.style.display = "inline-flex";
-            stopPolling();
-            return;
-        }
-
-        title.innerText = job.status === "queued" ? "Student upload queued" : "Student upload in progress";
-        message.innerText = job.message || "Processing students in the background while you keep using the system.";
+    if (job.status === "completed") {
+        title.innerText = "Student upload completed";
+        message.innerText = "The background registration finished successfully.";
         meta.innerText = `Processed ${processed}/${total}. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
-        openBtn.style.display = "none";
+        openBtn.style.display = "inline-flex";
+        stopPolling();
+
+        if (window.location.pathname === "/admin/User-Management" && typeof loadUsers === "function") {
+            loadUsers("student");
+        }
+        return;
     }
+
+    if (job.status === "failed") {
+        title.innerText = "Student upload failed";
+        message.innerText = job.error || job.message || "The background registration stopped before finishing.";
+        meta.innerText = `Processed ${processed}/${total} students before it stopped.`;
+        openBtn.style.display = "inline-flex";
+        stopPolling();
+        return;
+    }
+
+    title.innerText = job.status === "queued"
+        ? "Student upload queued"
+        : "Student upload in progress";
+
+    if (processed < 10) {
+        message.innerText = "Preparing users and securing passwords. Please wait...";
+    } else {
+        message.innerText = job.message || "Processing students in the background while you keep using the system.";
+    }
+
+    meta.innerText = `Processed ${processed}/${total}. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
+    openBtn.style.display = window.location.pathname === "/admin/User-Management" ? "none" : "inline-flex";
+}
 
     async function pollJobStatus() {
         const token = localStorage.getItem("admin_token");
         const jobId = getJobId();
+
         if (!token || !jobId) {
             hideBanner();
             stopPolling();
@@ -130,11 +144,21 @@
             });
 
             const job = await response.json();
+
             if (!response.ok) {
+                if (response.status === 404) {
+                    console.warn("Old bulk job no longer exists. Clearing...");
+                    clearJobId();
+                    hideBanner();
+                    stopPolling();
+                    return;
+                }
+
                 throw new Error(job.detail || "Failed to fetch bulk registration status.");
             }
 
             renderBanner(job);
+
         } catch (error) {
             console.error("Cross-page bulk registration polling failed:", error);
             clearJobId();
@@ -151,11 +175,28 @@
     }
 
     function startPolling() {
-        if (!getJobId() || !localStorage.getItem("admin_token")) return;
-        if (poller) clearInterval(poller);
-        pollJobStatus();
-        poller = setInterval(pollJobStatus, POLL_INTERVAL_MS);
-    }
+    if (!getJobId() || !localStorage.getItem("admin_token")) return;
+
+    if (poller) clearInterval(poller);
+
+    // Show banner immediately before first backend response
+    const banner = ensureBanner();
+    const title = document.getElementById("adminBulkJobBannerTitle");
+    const message = document.getElementById("adminBulkJobBannerMessage");
+    const meta = document.getElementById("adminBulkJobBannerMeta");
+    const progress = document.getElementById("adminBulkJobBannerProgress");
+    const openBtn = document.getElementById("adminBulkJobBannerOpen");
+
+    if (banner) banner.style.display = "block";
+    if (title) title.innerText = "Student upload starting...";
+    if (message) message.innerText = "Preparing background registration...";
+    if (meta) meta.innerText = "Connecting to upload service...";
+    if (progress) progress.style.width = "1%";
+    if (openBtn) openBtn.style.display = "none";
+
+    pollJobStatus();
+    poller = setInterval(pollJobStatus, POLL_INTERVAL_MS);
+}
 
     startPolling();
     window.addEventListener("pageshow", startPolling);

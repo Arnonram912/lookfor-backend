@@ -278,7 +278,7 @@
             <li >
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrender Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
                 </a>
             </li>
 
@@ -603,7 +603,7 @@ async function checkAccess(targetUrl, permission) {
 }
 
 function showConfiscatedAlert(icon, title, text) {
-    return Swal.fire({
+    return fireSwalOnTop({
         icon,
         title,
         text,
@@ -612,7 +612,7 @@ function showConfiscatedAlert(icon, title, text) {
 }
 
 async function confirmConfiscatedAction(title, text, confirmButtonText = 'Confirm') {
-    const result = await Swal.fire({
+    const result = await fireSwalOnTop({
         icon: 'warning',
         title,
         text,
@@ -624,6 +624,22 @@ async function confirmConfiscatedAction(title, text, confirmButtonText = 'Confir
     });
 
     return result.isConfirmed;
+}
+
+function fireSwalOnTop(options) {
+    const originalDidOpen = options?.didOpen;
+    return Swal.fire({
+        ...options,
+        didOpen: (popup) => {
+            const container = Swal.getContainer();
+            if (container) {
+                container.style.zIndex = '30000';
+            }
+            if (typeof originalDidOpen === 'function') {
+                originalDidOpen(popup);
+            }
+        }
+    });
 }
 
 function showAccessDeniedPopup(permName) {
@@ -955,6 +971,6 @@ function logout() {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=2"></script>
+<script src="/static/admin-notifications.js?v=3"></script>
 </body>
 </html>

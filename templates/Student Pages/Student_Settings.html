@@ -117,8 +117,8 @@
             <div id="profileDropdown" class="profile-dropdown">
                 <h3>Account</h3>
                 <ul class="profiledrop">
-                    <li class="profiledrop">My Profile</li>
-                    <li>Settings</li>
+                    <li class="profiledrop" onclick="window.location.href='/student/profile'">My Profile</li>
+                    <li onclick="window.location.href='/student/settings'">Settings</li>
                     <li onclick="logout()" class="logout-item">Logout</li>
                 </ul>
             </div>
@@ -291,6 +291,6 @@ loadSettings();
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>
-<script src="/static/student-notifications.js"></script>
+<script src="/static/student-notifications.js?v=3"></script>
 </body>
 </html>
