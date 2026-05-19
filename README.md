@@ -48,19 +48,41 @@ MFA_CODE_EXPIRE_MINUTES=10
 
 ## Database Setup
 
-The current project is configured in [database.py](/c:/Users/Acer/Downloads/lookfor-backend/database.py) to use:
+The project reads its SQL Server settings from `.env`.
+
+Local default values are:
 
 - SQL Server
 - server: `LAPTOP-2QGNEQVD\SQLEXPRESS`
 - database: `LookForDB`
 - Windows trusted connection
 
-If your friend is using a different SQL Server instance or database name, they need to edit `database.py` and change:
+For a different SQL Server instance, update these values in `.env`:
 
-- `server`
-- `database`
+```env
+DB_DRIVER=ODBC Driver 17 for SQL Server
+DB_SERVER=LAPTOP-2QGNEQVD\SQLEXPRESS
+DB_NAME=LookForDB
+DB_USERNAME=
+DB_PASSWORD=
+DB_ENCRYPT=no
+DB_TRUST_SERVER_CERTIFICATE=yes
+```
 
-They also need to make sure the `LookForDB` database exists before starting the app.
+If `DB_USERNAME` and `DB_PASSWORD` are empty, the app uses Windows trusted connection.
+
+For Azure SQL or another hosted SQL Server, set:
+
+```env
+DB_SERVER=your-server.database.windows.net
+DB_NAME=your-database-name
+DB_USERNAME=your-database-user
+DB_PASSWORD=your-database-password
+DB_ENCRYPT=yes
+DB_TRUST_SERVER_CERTIFICATE=no
+```
+
+Make sure the database exists before starting the app.
 
 ## Run The App
 
@@ -79,6 +101,27 @@ uvicorn main:app --reload
 Then open:
 
 - `http://127.0.0.1:8000`
+
+## Hosting
+
+Recommended setup:
+
+- App hosting: Azure App Service, Render, Railway, or a VPS
+- Database: Azure SQL Database or another reachable SQL Server
+- Environment variables: copy the values from `.env.example` into the hosting provider's settings
+- Start command:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+A `Procfile` is included for hosts that support it:
+
+```Procfile
+web: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+```
+
+Uploads are stored under `static/uploads/`. On hosts with temporary filesystems, use persistent disk storage or move uploads to cloud storage.
 
 ## Notes
 

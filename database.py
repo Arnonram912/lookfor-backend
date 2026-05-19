@@ -1,20 +1,33 @@
-# database.py
+import os
 import urllib
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Your exact server name from SSMS
-server = r'LAPTOP-2QGNEQVD\SQLEXPRESS' 
-database = 'LookForDB'
+load_dotenv()
 
-# Safely encode the connection parameters
-params = urllib.parse.quote_plus(
-    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-    f"SERVER={server};"
-    f"DATABASE={database};"
-    f"trusted_connection=yes;"
-)
+driver = os.getenv("DB_DRIVER", "ODBC Driver 17 for SQL Server")
+server = os.getenv("DB_SERVER", r"LAPTOP-2QGNEQVD\SQLEXPRESS")
+database = os.getenv("DB_NAME", "LookForDB")
+username = os.getenv("DB_USERNAME", "").strip()
+password = os.getenv("DB_PASSWORD", "").strip()
+encrypt = os.getenv("DB_ENCRYPT", "no")
+trust_server_certificate = os.getenv("DB_TRUST_SERVER_CERTIFICATE", "yes")
 
+connection_parts = [
+    f"DRIVER={{{driver}}}",
+    f"SERVER={server}",
+    f"DATABASE={database}",
+    f"Encrypt={encrypt}",
+    f"TrustServerCertificate={trust_server_certificate}",
+]
+
+if username and password:
+    connection_parts.extend([f"UID={username}", f"PWD={password}"])
+else:
+    connection_parts.append("Trusted_Connection=yes")
+
+params = urllib.parse.quote_plus(";".join(connection_parts) + ";")
 SQLALCHEMY_DATABASE_URL = f"mssql+pyodbc:///?odbc_connect={params}"
 
 engine = create_engine(
