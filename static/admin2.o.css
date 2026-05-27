@@ -320,12 +320,29 @@ body {
   cursor: pointer;
 }
 
+.profile-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.topbar-profile-pic {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 224, 0, 0.95);
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    display: block;
+}
+
 .student-profile-trigger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
+    width: 38px;
+    height: 38px;
 }
 
 .student-profile-icon {

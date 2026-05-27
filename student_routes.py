@@ -431,11 +431,16 @@ async def update_student_profile(
         
         user.profile_pic = db_file_path
 
-    # Update Student-Specific Fields
-    user.full_name = full_name
-    user.student_no = student_no
-    user.course = course
-    user.section = section
+    # Only update fields that were submitted. Image-only saves should not erase
+    # existing profile information.
+    if full_name is not None:
+        user.full_name = full_name
+    if student_no is not None:
+        user.student_no = student_no
+    if course is not None:
+        user.course = course
+    if section is not None:
+        user.section = section
 
     db.commit()
     create_student_notification(

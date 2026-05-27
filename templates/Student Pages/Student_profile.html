@@ -8,8 +8,8 @@
 
     <title>Student Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=11"> 
-    <link rel="stylesheet" href="/static/profile.css?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
+    <link rel="stylesheet" href="/static/profile.css?v=16"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -111,7 +111,7 @@
         <div class="profile-container">
         <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-            <i class="fa fa-user"></i>
+            <img id="topbar-profile-pic" class="topbar-profile-pic" src="/static/photos/default-student-avatar.jpg" alt="Profile" width="38" height="38">
             
         </span>
         </div>
@@ -375,6 +375,7 @@ async function confirmProfileAction(title, text, confirmButtonText = 'Confirm') 
             title,
             text,
             showCancelButton: true,
+            reverseButtons: true,
             confirmButtonText,
             cancelButtonText: 'Cancel',
             confirmButtonColor: '#005bab',
@@ -514,6 +515,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         displayPic.src = '/static/photos/default-student-avatar.jpg';
     };
     displayPic.src = profilePic;
+    const topbarProfilePic = document.getElementById('topbar-profile-pic');
+    if (topbarProfilePic) {
+        topbarProfilePic.onerror = () => {
+            topbarProfilePic.onerror = null;
+            topbarProfilePic.src = '/static/photos/default-student-avatar.jpg';
+        };
+        topbarProfilePic.src = profilePic;
+    }
 
     // 2. Update Static Display Labels (What user sees first)
     document.getElementById('label-name').innerText = user.full_name || "N/A";
@@ -667,13 +676,16 @@ async function saveProfileChanges() {
 document.getElementById('imageUpload').onchange = evt => {
     const [file] = document.getElementById('imageUpload').files;
     if (file) {
-        document.getElementById('display-pic').src = URL.createObjectURL(file);
+        const previewUrl = URL.createObjectURL(file);
+        document.getElementById('display-pic').src = previewUrl;
+        const topbarProfilePic = document.getElementById('topbar-profile-pic');
+        if (topbarProfilePic) topbarProfilePic.src = previewUrl;
         document.getElementById('applyProfileImageBtn').style.display = 'block';
     }
 };
 </script>
 
-<script src="/static/session-keepalive.js?v=2"></script>
+<script src="/static/session-keepalive.js?v=5"></script>
 <script src="/static/force-password-change.js?v=2"></script>
 <script src="/static/student-sidebar-access.js?v=2"></script>
 <script src="/static/student-notifications.js?v=4"></script>

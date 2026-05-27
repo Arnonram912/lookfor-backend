@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=13"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -139,7 +139,7 @@
         <div class="profile-container">
         <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-            <i class="fa fa-user"></i>
+            <img class="topbar-profile-pic" src="/static/photos/default-student-avatar.jpg" alt="Profile" width="38" height="38">
             
         </span>
         </div>
@@ -454,15 +454,6 @@ function showToast(text) {
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);
 }
-
-function showLoginSuccessAlert() {
-    const message = sessionStorage.getItem("login_success_message");
-    if (!message) return;
-
-    sessionStorage.removeItem("login_success_message");
-    alert(message);
-}
-
 
 async function handleNotifClick(notifId) {
     const token = sessionStorage.getItem("admin_token");
@@ -1005,7 +996,6 @@ async function processAction(itemId, actionType) {
 
     window.addEventListener("DOMContentLoaded", () => {
         if (!sessionStorage.getItem("admin_token")) window.location.href = "/";
-        showLoginSuccessAlert();
         loadAnnouncements();
         updateDashboardStats();
         setInterval(updateDashboardStats, 30000);
@@ -1018,7 +1008,7 @@ async function processAction(itemId, actionType) {
     };
 </script>
 
-<script src="/static/session-keepalive.js"></script>
+<script src="/static/session-keepalive.js?v=5"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/admin-notifications.js?v=4"></script>
 <script src="/static/force-password-change.js"></script>

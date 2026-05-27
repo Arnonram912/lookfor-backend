@@ -208,6 +208,45 @@
         });
     }
 
+    function normalizeProfilePicUrl(profilePic) {
+        const fallback = "/static/photos/default-student-avatar.jpg";
+        if (!profilePic) return fallback;
+
+        const normalized = String(profilePic).replace(/\\/g, "/");
+        const url = normalized.startsWith("/") ? normalized : `/${normalized}`;
+        const separator = url.includes("?") ? "&" : "?";
+        return `${url}${separator}t=${Date.now()}`;
+    }
+
+    async function loadTopbarProfileAvatar() {
+        const avatars = document.querySelectorAll(".topbar-profile-pic");
+        if (!avatars.length) return;
+
+        const token = getStoredToken();
+        if (!token) return;
+
+        try {
+            const response = await fetch("/api/current-user", {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+
+            if (!response.ok) return;
+
+            const user = await response.json();
+            const profilePicUrl = normalizeProfilePicUrl(user.profile_pic);
+
+            avatars.forEach((avatar) => {
+                avatar.onerror = () => {
+                    avatar.onerror = null;
+                    avatar.src = "/static/photos/default-student-avatar.jpg";
+                };
+                avatar.src = profilePicUrl;
+            });
+        } catch (error) {
+            console.error("Topbar profile avatar load failed:", error);
+        }
+    }
+
     async function cachedCheckAccess(targetUrl, permission) {
         const token = sessionStorage.getItem("admin_token");
 
@@ -237,7 +276,9 @@
     initializeSessionKeepAlive();
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", preloadAdminPermissions, { once: true });
+        document.addEventListener("DOMContentLoaded", loadTopbarProfileAvatar, { once: true });
     } else {
         preloadAdminPermissions();
+        loadTopbarProfileAvatar();
     }
 })();

@@ -164,6 +164,22 @@
     font-size: 0.95rem;
     color: var(--dark-blue);
 }
+
+.topbar-profile-pic {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #FFE000;
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+    display: block;
+}
 .page-scroll-area {
     padding: 24px;
     background: #eef3f8;
@@ -540,18 +556,18 @@
     }
 }
 html, body {
-    height: auto;
+    height: 100%;
     min-height: 100%;
     margin: 0;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden;
 }
 
 .main-content {
-    min-height: 100vh;
-    height: auto;
+    min-height: 0;
+    height: 100vh;
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden;
 }
 
 .action-bar {
@@ -564,7 +580,8 @@ html, body {
     background: #eef3f8;
     min-height: calc(100vh - 120px);
     height: auto;
-    overflow: visible;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .profile-page-card {

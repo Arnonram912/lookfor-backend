@@ -148,6 +148,64 @@
 .modal-send-btn:hover {
     background: #004a8d;
 }
+
+.login-success-box {
+    max-width: 380px;
+    text-align: center;
+    border-top: 6px solid #FFE000;
+    padding: 34px 28px 28px;
+}
+
+.login-success-icon {
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    background: #005BAB;
+    color: #FFE000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 18px;
+    font-size: 2.5rem;
+    font-weight: 800;
+    box-shadow: 0 12px 28px rgba(0, 91, 171, 0.25);
+}
+
+.login-success-title {
+    color: #003366;
+    font-size: 1.55rem;
+    font-weight: 800;
+    margin: 0 0 8px;
+}
+
+.login-success-text {
+    color: #5f6875;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin: 0 0 20px;
+}
+
+.login-success-progress {
+    width: 100%;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e9edf3;
+}
+
+.login-success-progress span {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: #FFE000;
+    transform-origin: left;
+    animation: loginSuccessProgress 1.6s linear forwards;
+}
+
+@keyframes loginSuccessProgress {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
     </style>
 </head>
 <body>
@@ -233,6 +291,16 @@
 </div>
     </div>
 </div>
+
+<div id="loginSuccessModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box login-success-box">
+        <div class="login-success-icon">✓</div>
+        <h3 class="login-success-title">Login Successful!</h3>
+        <p class="login-success-text">Welcome back to LookFor. Redirecting you to your dashboard.</p>
+        <div class="login-success-progress"><span></span></div>
+    </div>
+</div>
+
     <script>
     const loginForm = document.getElementById('loginForm');
     const btn = loginForm.querySelector('.login-btn');
@@ -260,6 +328,7 @@
     const closeForgotModal = document.getElementById('closeForgotModal');
     const cancelForgotModal = document.getElementById('cancelForgotModal');
     const sendResetFromModal = document.getElementById('sendResetFromModal');
+    const loginSuccessModal = document.getElementById('loginSuccessModal');
 
     let authMode = 'login';
 
@@ -285,6 +354,16 @@
         } catch (error) {
             return null;
         }
+    }
+
+    function showLoginSuccessModal(redirectUrl) {
+        btn.textContent = 'Redirecting...';
+        btn.disabled = true;
+        loginSuccessModal.style.display = 'flex';
+
+        setTimeout(() => {
+            window.location.href = redirectUrl;
+        }, 1600);
     }
 
     function finishLogin(data) {
@@ -324,13 +403,8 @@
         localStorage.setItem("is_admin", payload.is_admin);
         localStorage.setItem("user_email", payload.sub);
         localStorage.removeItem("pending_login_email");
-        sessionStorage.setItem("login_success_message", "Login Successful!");
 
-        if (payload.is_admin) {
-            window.location.href = "/admin/dashboard";
-        } else {
-            window.location.href = "/student/dashboard";
-        }
+        showLoginSuccessModal(payload.is_admin ? "/admin/dashboard" : "/student/dashboard");
     }
 
     function switchToLoginMode() {
