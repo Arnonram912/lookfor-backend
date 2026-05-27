@@ -1,0 +1,13 @@
+.git
+.venv
+__pycache__
+*.pyc
+.env
+.env.*
+.azure-created.json
+.vscode
+.idea
+uploads
+Pictures
+Thumbs.db
+.DS_Store
