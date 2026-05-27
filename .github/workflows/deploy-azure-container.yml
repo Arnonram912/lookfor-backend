@@ -1,0 +1,56 @@
+name: Deploy Azure Container
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_CLIENT_ID: 1c1a24e5-7ea7-4e0e-9663-b8e9f05ebaba
+  AZURE_TENANT_ID: e16573b8-3fa7-4165-bc0b-541f2c682383
+  AZURE_SUBSCRIPTION_ID: e0e872b0-c9fd-4624-adeb-0819bffcb3ab
+  AZURE_RESOURCE_GROUP: lookfor-rg
+  AZURE_WEBAPP_NAME: lookfor-app-aafd5427
+  ACR_NAME: lookforacraafd5427
+  ACR_LOGIN_SERVER: lookforacraafd5427.azurecr.io
+  IMAGE_NAME: lookfor-backend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push image
+        run: |
+          az acr login --name "$ACR_NAME"
+          docker build -t "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}" .
+          docker push "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
+
+      - name: Update web app container
+        run: |
+          az webapp config container set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --docker-custom-image-name "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}" \
+            --docker-registry-server-url "https://$ACR_LOGIN_SERVER"
+
+      - name: Restart web app
+        run: |
+          az webapp restart \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME"
