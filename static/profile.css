@@ -7,9 +7,11 @@
 .info-header {
     font-size: 3rem;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start; 
     align-items: center;
+    gap: 12px;
 }
+
 .info-display{
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -28,7 +30,6 @@
     color: var(--sti-blue);
     
 }
-
 
 /* Left Sidebar */
 .profile-sidebar {
@@ -346,6 +347,7 @@
     filter: brightness(1.03);
 }
 
+
 .profile-info-section {
     padding-top: 28px;
 }
@@ -358,20 +360,20 @@
 }
 
 .title-accent {
-    
     width: 10px;
     height: 36px;
     background: #0b67c2;
     border-radius: 4px;
+    margin-left: 0;
+    
 }
 .title-accent h3{
-    align-items: left;
+ text-align: left;
 }
 
 .modern-info-header h3 {
     font-size: 28px;
     color: #1d2433;
-    margin: 0;
     font-weight: 800;
 }
 

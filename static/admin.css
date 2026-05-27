@@ -98,6 +98,8 @@ body {
     top: 45px;
     background-color: white;
     min-width: 320px;
+    width: min(420px, 92vw);
+    max-height: min(70vh, 620px);
     box-shadow: 0px 8px 25px rgba(0,0,0,0.2);
     z-index: 2000;
     border-radius: 8px;
@@ -114,8 +116,29 @@ body {
 
 .notification-dropdown ul {
     list-style: none;
-    max-height: 400px;
+    max-height: calc(min(70vh, 620px) - 96px);
     overflow-y: auto;
+}
+
+.notification-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #fff;
+}
+
+.notification-action-btn {
+    border: none;
+    background: transparent;
+    color: #114b7a;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.notification-action-btn:hover {
+    text-decoration: underline;
 }
 
 .notification-dropdown li {

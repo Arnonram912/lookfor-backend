@@ -129,6 +129,27 @@ Uploads are stored under `static/uploads/`. On hosts with temporary filesystems,
 - Email-based MFA and password reset only work if the `.env` Gmail credentials are valid.
 - Uploaded files, local database contents, and local `.env` secrets are not included in the repo.
 
+## Vercel Deployment
+
+This repo includes an experimental Vercel entrypoint:
+
+- `app.py` exposes the FastAPI `app` from `main.py`
+- `vercel.json` routes all requests to that FastAPI app
+
+To try it:
+
+```powershell
+npm install -g vercel
+vercel login
+vercel
+```
+
+Then add the same environment variables from `.env.example` in the Vercel project settings.
+
+Important: Vercel is not the recommended production host for this backend right now. This app uses SQL Server through `pyodbc`, which needs Microsoft ODBC system drivers, and it also installs large AI dependencies like `torch` and `transformers`. Vercel's Python runtime is serverless and does not run the included Dockerfile, so these dependencies may exceed Vercel's function limits or fail because the ODBC driver is unavailable.
+
+For this project, Azure App Service with the included `Dockerfile` is a better fit because the container can install the SQL Server ODBC driver and run the backend as a normal long-running web app.
+
 ## Share Safely
 
 Your friend should:

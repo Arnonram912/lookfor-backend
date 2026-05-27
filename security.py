@@ -80,21 +80,14 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
 
 # Admin Only
 async def get_current_admin(
-    request: Request, 
     authorization: str = Header(None), 
     db: Session = Depends(get_db)
 ):
     token = None
 
-    # 1. Check Header (Used by JS fetch calls)
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
-    
-    # 2. Check Cookie (Used by Sidebar navigation)
-    if not token:
-        token = request.cookies.get("admin_access_token")
 
-    # If NO token is found in either place, STOP HERE.
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

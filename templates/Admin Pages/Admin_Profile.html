@@ -8,8 +8,8 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10">
-    <link rel="stylesheet" href="{{ url_for('static', path='profile.css') }}?v=10"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=10">
+    <link rel="stylesheet" href="/static/profile.css?v=10"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -169,7 +169,7 @@
                 
                 <div class="avatar-upload modern-avatar">
                     <div class="avatar-preview">
-                        <img id="display-pic" src="/static/photos/default-avatar.png" alt="Profile Picture">
+                        <img id="display-pic" src="/static/photos/default-student-avatar.jpg" alt="Profile Picture">
                     </div>
 
                     <label for="imageUpload" class="upload-label modern-upload-btn">
@@ -341,7 +341,7 @@
         dropdown.style.display = isOpen ? "none" : "block";
     }
  async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
         window.location.href = "/login";
@@ -490,7 +490,7 @@ window.onclick = function(event) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const token = localStorage.getItem('admin_token');
+    const token = sessionStorage.getItem('admin_token');
     if (!token) {
         window.location.href = "/login";
         return;
@@ -501,15 +501,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     if (!response.ok) {
+        sessionStorage.removeItem('admin_token');
         localStorage.removeItem('admin_token');
         window.location.href = "/login";
         return;
     }
 
     const user = await response.json();
-    const profilePic = user.profile_pic ? `/${user.profile_pic}?t=${new Date().getTime()}` : '/static/photos/default-avatar.png';
+    const cleanProfilePic = user.profile_pic ? String(user.profile_pic).replace(/\\/g, '/') : '';
+    const profilePic = cleanProfilePic
+        ? `${cleanProfilePic.startsWith('/') ? cleanProfilePic : '/' + cleanProfilePic}?t=${new Date().getTime()}`
+        : '/static/photos/default-student-avatar.jpg';
 
-    document.getElementById('display-pic').src = profilePic;
+    const displayPic = document.getElementById('display-pic');
+    displayPic.onerror = () => {
+        displayPic.onerror = null;
+        displayPic.src = '/static/photos/default-student-avatar.jpg';
+    };
+    displayPic.src = profilePic;
     document.getElementById('display-name').innerText = user.full_name || "Admin";
     document.getElementById('display-email').innerText = user.email || "N/A";
     document.getElementById('label-name').innerText = user.full_name || "N/A";
@@ -519,7 +528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function saveNewPassword() {
-    const token = localStorage.getItem('admin_token');
+    const token = sessionStorage.getItem('admin_token');
     const currentPass = document.getElementById('current-password').value;
     const newPass = document.getElementById('new-password').value;
     const confirmPass = document.getElementById('confirm-password').value;
@@ -577,7 +586,7 @@ async function saveNewPassword() {
 }
 
 async function saveProfileChanges() {
-    const token = localStorage.getItem('admin_token');
+    const token = sessionStorage.getItem('admin_token');
     const fileInput = document.getElementById('imageUpload');
     const formData = new FormData();
 
@@ -647,7 +656,7 @@ function escapeHtml(text) {
 }
 
 async function loadNotifications() {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     if (!token) return;
 
     try {
@@ -712,7 +721,7 @@ function updateNotificationUI() {
 }
 
 async function handleNotifClick(notifId) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const notif = notifications.find(n => n.id === notifId);
     if (!notif) return;
 
@@ -771,6 +780,7 @@ window.addEventListener('click', function(e) {
 });
 
 function logout() {
+    sessionStorage.removeItem('admin_token');
     localStorage.removeItem('admin_token');
     window.location.href = "/login";
 }
@@ -779,7 +789,7 @@ function logout() {
 
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 <script src="/static/force-password-change.js"></script>
 </body>
 </html>

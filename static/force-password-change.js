@@ -9,7 +9,7 @@
 
     function getStoredToken() {
         const currentPath = (window.location.pathname || "").toLowerCase();
-        const adminToken = localStorage.getItem("admin_token");
+        const adminToken = sessionStorage.getItem("admin_token");
         const studentToken = localStorage.getItem("token");
 
         if (currentPath.startsWith("/admin")) {
@@ -17,10 +17,7 @@
         }
 
         if (currentPath.startsWith("/student")) {
-            if (studentToken) return studentToken;
-
-            const fallbackPayload = decodeTokenPayload(adminToken || "");
-            return fallbackPayload && !fallbackPayload.is_admin ? adminToken : null;
+            return studentToken;
         }
 
         return adminToken || studentToken;
@@ -104,9 +101,10 @@
     }
 
     function fallbackLogout() {
+        sessionStorage.clear();
         localStorage.clear();
         document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-        window.location.replace("/login");
+        window.location.replace("/");
     }
 
     function openForcedPasswordModal() {
@@ -187,6 +185,12 @@
 
         const payload = decodeTokenPayload(token);
         if (!payload || !payload.must_change) return;
+        if (
+            payload.is_admin
+            && String(payload.sub || "").trim().toLowerCase() === "admin@novaliches.sti.edu.ph"
+        ) {
+            return;
+        }
 
         if (document.readyState === "loading") {
             document.addEventListener("DOMContentLoaded", openForcedPasswordModal, { once: true });

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Student Portal | LookFor STI</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v=5">
+    <link rel="stylesheet" href="/static/style.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body class="dashboard-body">
@@ -228,9 +228,9 @@
     </div>
 
 <script>
-// --- 1. SECURITY CHECK (Fixed: checks for 'token' not 'admin_token') ---
+// --- 1. SECURITY CHECK ---
 (function() {
-    const token = localStorage.getItem("admin_token");  // FIXED: was "admin_token"
+    const token = localStorage.getItem("token");
     
     if (!token) {
         window.location.replace("/");
@@ -242,6 +242,7 @@
         const now = Math.floor(Date.now() / 1000);
 
         if (payload.exp && payload.exp < now) {
+            sessionStorage.clear();
             localStorage.clear();
             window.location.replace("/");
             return;
@@ -309,7 +310,7 @@ document.getElementById('forceChangeForm')?.addEventListener('submit', async (e)
     e.preventDefault();
     const newPass = document.getElementById('newPass').value;
     const confirmPass = document.getElementById('confirmPass').value;
-    const token = localStorage.getItem("admin_token");
+    const token = localStorage.getItem("token");
 
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
     
@@ -466,7 +467,7 @@ async function submitFoundReport(event) {
 
     try {
         // 1. Check for matches using Text Details
-       const token = localStorage.getItem("admin_token");
+       const token = localStorage.getItem("token");
 
         const response = await fetch('/api/compare-text-details', {
             method: 'POST',
@@ -482,8 +483,9 @@ async function submitFoundReport(event) {
         // 2. Handle the result
         if (result.action === "show_match" && result.highest_score > 0.22) {
             // Match found!
+            const scorePercent = `${(Number(result.highest_score || 0) * 100).toFixed(1)}%`;
             const confirmMatch = confirm(
-                `Possible match found (Score: ${result.highest_score})!\n\n` +
+                `Possible match found (Score: ${scorePercent})!\n\n` +
                 `Found: ${result.search_query}\n` +
                 `Lost: ${result.matched_item?.category || 'N/A'} at ${result.matched_item?.location || 'N/A'}\n\n` +
                 `Do you want to submit this found item for approval?`
@@ -531,8 +533,7 @@ async function submitLostReport() {
     
     formData.append("image", fileInput.files[0]);
 
-    // Use 'admin_token' or 'student_token' depending on your login setup
-    const token = localStorage.getItem("admin_token") || localStorage.getItem("token");
+    const token = localStorage.getItem("token");
 
     try {
         // 3. Submit to the "Intelligent" Route
@@ -674,6 +675,7 @@ async function toggleNotifications() {
     }
 }
 function logout() {
+    sessionStorage.clear();
     localStorage.clear();
     window.location.replace("/"); 
 }

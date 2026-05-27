@@ -8,8 +8,8 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10">
-    <link rel="stylesheet" href="{{ url_for('static', path='Claim.css') }}?v=1"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=10">
+    <link rel="stylesheet" href="/static/Claim.css?v=1"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -277,7 +277,7 @@
     }
 
      async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
         window.location.href = "/login";
@@ -344,9 +344,16 @@ let claimsCache = [];
 let activeDecisionClaim = null;
 let activeDecisionAction = null;
 
+function getClaimStatusLabel(status) {
+    const normalized = String(status || 'pending').toLowerCase();
+    if (normalized === 'approved') return 'Claimed';
+    if (normalized === 'rejected') return 'Rejected';
+    return 'Pending';
+}
+
 async function loadClaims() {
     try {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const response = await fetch('/api/admin/claims', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -368,7 +375,7 @@ async function loadClaims() {
                         <button class="btn-approve" type="button" onclick="openDecisionModal(${claim.id}, 'approve')">Approve</button>
                         <button class="btn-reject" type="button" onclick="openDecisionModal(${claim.id}, 'reject')">Reject</button>
                     `
-                : `<span style="display:inline-flex; align-items:center; justify-content:center; min-width:110px; padding:8px 14px; border-radius:999px; background:#e5e7eb; color:#374151; font-weight:600;">Completed</span>`;
+                : `<span style="display:inline-flex; align-items:center; justify-content:center; min-width:110px; padding:8px 14px; border-radius:999px; background:#e5e7eb; color:#374151; font-weight:600;">${claimStatus === 'approved' ? 'Claim' : 'Rejected'}</span>`;
             return `
                 <tr>
                     <td><span class="badge badge-similarity">${claim.similarity}</span></td>
@@ -384,7 +391,7 @@ async function loadClaims() {
                             <span>${claim.found_item?.category || 'Unknown item'}</span>
                         </div>
                     </td>
-                    <td><span class="status-text">${claim.status}</span></td>
+                    <td><span class="status-text">${getClaimStatusLabel(claim.status)}</span></td>
                     <td>
                         ${actionContent}
                     </td>
@@ -414,7 +421,7 @@ function openDecisionModal(claimId, action) {
     const report = claim.report || {};
     const claimant = report.claimant || {};
     const item = report.item_description || {};
-    const statusLabel = action === 'approve' ? 'Approved' : 'Rejected';
+    const statusLabel = action === 'approve' ? 'Claimed' : 'Rejected';
 
     document.getElementById('decisionStatusBadge').innerText = statusLabel;
     document.getElementById('decisionStatusBadge').style.background = action === 'approve' ? '#dcfce7' : '#fee2e2';
@@ -445,7 +452,7 @@ function openDecisionModal(claimId, action) {
         empty.style.display = 'block';
     }
 
-    document.getElementById('saveDecisionButton').innerText = action === 'approve' ? 'Save Approval Report' : 'Save Rejection Report';
+    document.getElementById('saveDecisionButton').innerText = action === 'approve' ? 'Save Claim Report' : 'Save Rejection Report';
     renderSavedReport({
         ...report,
         status: statusLabel,
@@ -465,7 +472,7 @@ async function saveDecisionReport() {
     }
 
     const button = document.getElementById('saveDecisionButton');
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const formData = new FormData();
     formData.append("action", activeDecisionAction);
     const reportImage = document.getElementById('decisionReportImage').files[0];
@@ -491,8 +498,8 @@ async function saveDecisionReport() {
             }
             await fireSwalOnTop({
                 icon: 'success',
-                title: activeDecisionAction === 'approve' ? 'Claim approved' : 'Claim rejected',
-                text: activeDecisionAction === 'approve' ? 'Claim approved and report saved.' : 'Claim rejected and report saved.',
+                title: activeDecisionAction === 'approve' ? 'Claim saved' : 'Claim rejected',
+                text: activeDecisionAction === 'approve' ? 'Claim report saved.' : 'Claim rejected and report saved.',
                 confirmButtonColor: '#114b7a'
             });
             renderSavedReport(result.report || activeDecisionClaim.report);
@@ -651,6 +658,7 @@ function toggleNotifications() {
 }
 
 function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -659,6 +667,6 @@ function logout() {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 </body>
 </html>

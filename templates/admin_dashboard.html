@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel | LookFor STI</title>
     
-    <link rel="stylesheet" href="{{ url_for('static', path='admin.css') }}?v=6.0">
+    <link rel="stylesheet" href="/static/admin.css?v=6.0">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     
     
@@ -207,7 +207,7 @@
     }
 
     async function loadNotifications() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         try {
             const res = await fetch("/admin/notifications", {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -256,7 +256,7 @@
     }
 
     async function handleNotifClick(notifId) {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const notif = notifications.find(n => n.id === notifId);
         if (notif) {
             notif.is_read = true;
@@ -294,7 +294,7 @@
 
     // --- DASHBOARD STATS & ACTIONS ---
     async function updateDashboardStats() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         try {
             const resPending = await fetch('/admin/pending-items', {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -339,7 +339,7 @@
     }
 
     async function processAction(id, action) {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const endpoint = action === 'approve' ? `/admin/approve/${id}` : `/admin/archive/${id}`;
         try {
             const res = await fetch(endpoint, {
@@ -378,7 +378,7 @@
             const url = `/admin/items/found?category=${encodeURIComponent(category)}&location=${encodeURIComponent(location)}&date=${date}`;
             
             const res = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+                headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
             });
 
             const items = await res.json();
@@ -415,7 +415,7 @@
     }
     async function archiveFound(itemId) {
         if (!confirm('Archive this item?')) return;
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         try {
             const res = await fetch(`/admin/archive/${itemId}`, {
                 method: 'POST',
@@ -437,7 +437,7 @@
         const btn = document.querySelector("#bulkRegisterModal .success-btn");
         const modalContent = document.querySelector("#bulkRegisterModal .modal-content");
         const textArea = document.getElementById('bulkEmails');
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const rawEmails = textArea.value.split('\n').map(e => e.trim()).filter(e => e !== "");
         const validEmails = rawEmails.filter(e => e.endsWith("@novaliches.sti.edu.ph"));
 
@@ -475,7 +475,7 @@
     }
 
     async function resetSingle(email, index) {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const cell = document.getElementById(`pass-cell-${index}`);
         if (!confirm(`Reset password for ${email}?`)) return;
         cell.innerHTML = "Processing...";
@@ -516,6 +516,7 @@
     }
 
     function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -527,7 +528,7 @@
     };
 
     window.addEventListener("DOMContentLoaded", () => {
-        if (!localStorage.getItem("admin_token")) window.location.href = "/";
+        if (!sessionStorage.getItem("admin_token")) window.location.href = "/";
         updateDashboardStats();
         setInterval(loadNotifications, 20000);
         setInterval(updateDashboardStats, 30000);

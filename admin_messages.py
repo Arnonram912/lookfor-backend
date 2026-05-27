@@ -212,9 +212,6 @@ def get_unread_count(db: Session = Depends(get_db), current_user: models.User = 
         func.trim(func.lower(models.Message.status)) == "unread"
     ).count()
     
-    # Add this print to see the truth in your terminal/command prompt
-    print(f"DEBUG: User {current_user.id} has {count} unread messages.")
-    
     return {"unread_count": count}
 
 @router.put("/message/unread/{message_id}")

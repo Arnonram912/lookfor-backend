@@ -1,0 +1,4 @@
+FROM lookforacraafd5427.azurecr.io/lookfor-backend:page-aliases1
+
+COPY main.py /app/main.py
+COPY student_routes.py /app/student_routes.py

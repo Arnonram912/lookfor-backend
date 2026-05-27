@@ -8,8 +8,8 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=10"> 
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=15"> 
 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -169,6 +169,7 @@
                             <option value="pending">Pending</option>
                             <option value="approved">Approved</option>
                             <option value="matched">Matched</option>
+                            <option value="claimed">Claimed</option>
                             <option value="user-gave">User Gave Item</option>
                         </select>
                         <button class="upload-btn" id="analyzeMatchesBtn" onclick="analyzeItemMatches()">
@@ -422,7 +423,7 @@
     }
 
         async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
         window.location.href = "/login";
@@ -481,7 +482,7 @@ function showAccessDeniedPopup(permName) {
 }
         async function loadLostItems() {
         const grid = document.getElementById("lostItemsGrid");
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
 
         try {
             const response = await fetch('/admin/items/found', {
@@ -513,6 +514,7 @@ function showAccessDeniedPopup(permName) {
                         <div class="card-body">
                             <h3>${item.item_name || item.category}</h3>
                             <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
+                            <p><strong>Found ID:</strong> ${item.found_id || 'N/A'}</p>
                             <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details</span>
                         </div>
                     </div>
@@ -531,7 +533,7 @@ function showAccessDeniedPopup(permName) {
 
         async function loadLostItems() {
         const grid = document.getElementById("lostItemsGrid");
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
 
         try {
             if (showingFoundArchived) {
@@ -646,7 +648,7 @@ function showAccessDeniedPopup(permName) {
     }
 
     async function analyzeItemMatches() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const button = document.getElementById("analyzeMatchesBtn");
         if (!token) {
             window.location.href = "/login";
@@ -697,6 +699,10 @@ function showAccessDeniedPopup(permName) {
             return { label: "Pending", className: "pending" };
         }
 
+        if (item.is_claimed) {
+            return { label: "Claimed", className: "matched" };
+        }
+
         if (item.is_matched) {
             return { label: "Matched", className: "matched" };
         }
@@ -711,6 +717,7 @@ function showAccessDeniedPopup(permName) {
             if (activeFilter === "pending") return Boolean(item.is_pending);
             if (activeFilter === "approved") return !item.is_pending && !item.is_matched;
             if (activeFilter === "matched") return Boolean(item.is_matched);
+            if (activeFilter === "claimed") return Boolean(item.is_claimed);
             if (activeFilter === "user-gave") return Boolean(item.is_surrendered);
             return true;
         });
@@ -740,7 +747,7 @@ function showAccessDeniedPopup(permName) {
                     <div class="card-body">
                         <h3>${item.item_name || item.category}</h3>
                         <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
-                        <p class="item-source-label">${sourceLabel}</p>
+                        <p><strong>Found ID:</strong> ${item.found_id || 'N/A'}</p>
                         <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details</span>
                     </div>
                 </div>
@@ -782,6 +789,9 @@ function showAccessDeniedPopup(permName) {
         if (item.is_pending) {
             statusEl.innerText = "PENDING";
             statusEl.style.color = "#f59f00";
+        } else if (item.is_claimed) {
+            statusEl.innerText = "CLAIMED";
+            statusEl.style.color = "#28a745";
         } else {
             statusEl.innerText = item.is_matched ? "MATCHED" : "APPROVED";
             statusEl.style.color = item.is_matched ? "#28a745" : "#f59f00";
@@ -883,8 +893,9 @@ function renderDirectClaimUserPreview(selectedUser) {
 }
 
 async function searchDirectClaimUsers(query = "") {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const select = document.getElementById("directClaimUserSelect");
+    const preview = document.getElementById("directClaimUserPreview");
 
     if (!select) return;
 
@@ -942,7 +953,7 @@ async function openManualClaimModal(foundItem) {
 }
 
 async function submitDirectClaim() {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const select = document.getElementById("directClaimUserSelect");
     const idImageInput = document.getElementById("directClaimIdImage");
     const confirmBtn = document.getElementById("confirmDirectClaimBtn");
@@ -1028,9 +1039,20 @@ async function submitDirectClaim() {
             updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
         });
 
+        function getCurrentTimeValue() {
+            const now = new Date();
+            return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function setReportTimeToNow() {
+            const timeInput = document.getElementById('reportTime');
+            if (timeInput) timeInput.value = getCurrentTimeValue();
+        }
+
         // --- 2. MODAL CONTROLS ---
         function openModal(id) { 
-            document.getElementById(id).style.display = 'flex'; 
+            document.getElementById(id).style.display = 'flex';
+            if (id === 'reportModal') setReportTimeToNow();
         }
 
         function closeModal(id) { 
@@ -1053,7 +1075,7 @@ async function submitDirectClaim() {
             const response = await fetch(`/admin/items/${itemId}/archive`, {
                 method: 'PUT',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                    'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
 
@@ -1080,7 +1102,7 @@ async function submitDirectClaim() {
             const response = await fetch(`/admin/approve-item/${itemId}`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                    'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
 
@@ -1106,7 +1128,7 @@ async function submitDirectClaim() {
             const response = await fetch(`/admin/archive-pending/${itemId}`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                    'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
 
@@ -1132,7 +1154,7 @@ async function submitDirectClaim() {
             const response = await fetch(`/admin/archive-pending/${itemId}`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                    'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
 
@@ -1168,7 +1190,7 @@ async function submitDirectClaim() {
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                    'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
 
@@ -1328,7 +1350,7 @@ function appendOptionalImages(formData) {
 
 async function executeSubmit() {
     const confirmBtn = document.getElementById('finalConfirmBtn');
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
 
     confirmBtn.innerText = "🤖 AI is Analyzing...";
     confirmBtn.disabled = true;
@@ -1372,11 +1394,17 @@ async function executeSubmit() {
         if (!compareRes.ok) throw new Error("AI Analysis failed.");
 
         const aiResult = await compareRes.json();
+        const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
+        const selectedMatch = aiResult?.matched_item?.id
+            ? aiResult.matched_item
+            : (matchedItems[0]?.score >= 0.55 ? matchedItems[0] : null);
 
         await showFoundReportAlert(
-            'info',
-            'Analysis complete',
-            'Automatic matching only runs on lost item reports. This found item was analyzed and prepared for saving.'
+            selectedMatch ? 'success' : 'info',
+            selectedMatch ? 'Possible match found' : 'Analysis complete',
+            selectedMatch
+                ? `This found item may match Lost Item #${selectedMatch.id}. The lost-item owner will be notified.`
+                : 'No strong lost-item match was found. This found item is ready for saving.'
         );
 
         // STEP 2: Final Save to Database
@@ -1394,6 +1422,10 @@ async function executeSubmit() {
         saveData.append("category", catName);
         saveData.append("department", deptName);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
+        if (selectedMatch?.id) {
+            saveData.append("matched_item_id", selectedMatch.id);
+            saveData.append("ai_score", selectedMatch.score || aiResult.highest_score || 0);
+        }
         appendOptionalImages(saveData);
 
         const saveRes = await fetch('/admin/items/founds', {
@@ -1433,7 +1465,7 @@ async function disposeItem(itemId) {
         const response = await fetch(disposeUrl, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
             }
         });
 
@@ -1452,7 +1484,9 @@ async function disposeItem(itemId) {
 }
         async function fetchCategories() {
             try {
-                const response = await fetch('/admin/category'); 
+                const response = await fetch('/admin/category', {
+                    headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+                }); 
                 const categories = await response.json();
                 
                 const dropdown = document.getElementById('itemCategory');
@@ -1472,7 +1506,9 @@ async function disposeItem(itemId) {
             }
         }
         async function fetchDepartments() {
-            const response = await fetch('/admin/departments');
+            const response = await fetch('/admin/departments', {
+                headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+            });
             const departments = await response.json();
             
             const dropdown = document.getElementById('itemDepartment');
@@ -1503,6 +1539,7 @@ async function disposeItem(itemId) {
             renderPreviewCarousel();
             document.getElementById('itemName').value = "";
             document.getElementById('itemDesc').value = "";
+            setReportTimeToNow();
             // Reset other fields as needed
         }
 
@@ -1511,6 +1548,7 @@ async function disposeItem(itemId) {
             loadLostItems();
             fetchDepartments();
             fetchCategories();
+            setReportTimeToNow();
             
         });
 
@@ -1520,6 +1558,7 @@ async function disposeItem(itemId) {
             }
         };
      function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -1529,7 +1568,7 @@ async function disposeItem(itemId) {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 </body>
 </html>
 

@@ -13,12 +13,7 @@
     }
 
     function getStudentToken() {
-        const studentToken = localStorage.getItem("token");
-        if (studentToken) return studentToken;
-
-        const fallbackToken = localStorage.getItem("admin_token");
-        const payload = decodeTokenPayload(fallbackToken || "");
-        return payload && !payload.is_admin ? fallbackToken : null;
+        return localStorage.getItem("token");
     }
 
     function normalizePath(path) {

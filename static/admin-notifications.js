@@ -1,12 +1,11 @@
 (function () {
     const ADMIN_NOTIFICATION_POLL_MS = 30000;
-    const ADMIN_NOTIFICATION_DROPDOWN_LIMIT = 10;
     let notifications = [];
     let unreadCount = 0;
     let pollHandle = null;
 
     function getAdminToken() {
-        return localStorage.getItem("admin_token");
+        return sessionStorage.getItem("admin_token");
     }
 
     function getAdminAuthHeader() {
@@ -31,6 +30,10 @@
         return "Update";
     }
 
+    function formatUnreadCount(count) {
+        return count > 99 ? "99+" : String(count);
+    }
+
     function updateNotificationUI() {
         const list = document.getElementById("notificationList");
         const countBadge = document.getElementById("notificationCount");
@@ -44,7 +47,7 @@
         if (!notifications.length) {
             if (emptyMsg) emptyMsg.style.display = "block";
             if (countBadge) {
-                countBadge.innerText = String(unreadCount);
+                countBadge.innerText = formatUnreadCount(unreadCount);
                 countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
             }
             return;
@@ -52,7 +55,7 @@
 
         if (emptyMsg) emptyMsg.style.display = "none";
 
-        notifications.slice(0, ADMIN_NOTIFICATION_DROPDOWN_LIMIT).forEach((notif) => {
+        notifications.forEach((notif) => {
             const li = document.createElement("li");
             li.className = `notification-item ${notif.is_read ? "read" : "unread"}`;
             li.setAttribute("onclick", `handleNotifClick(${notif.id})`);
@@ -65,8 +68,37 @@
         });
 
         if (countBadge) {
-            countBadge.innerText = String(unreadCount);
+            countBadge.innerText = formatUnreadCount(unreadCount);
             countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
+        }
+    }
+
+    function ensureNotificationActions() {
+        const dropdown = document.getElementById("notificationDropdown");
+        const list = document.getElementById("notificationList");
+        if (!dropdown || !list) return;
+
+        let actions = document.getElementById("notificationActions");
+        if (actions) return;
+
+        actions = document.createElement("div");
+        actions.id = "notificationActions";
+        actions.className = "notification-actions";
+        actions.innerHTML = `
+            <button type="button" id="markAllNotificationsReadBtn" class="notification-action-btn">
+                Read all unread
+            </button>
+        `;
+
+        list.parentNode.insertBefore(actions, list);
+
+        const button = document.getElementById("markAllNotificationsReadBtn");
+        if (button) {
+            button.addEventListener("click", async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                await markAllNotificationsRead();
+            });
         }
     }
 
@@ -202,6 +234,24 @@
         routeNotification(notif);
     }
 
+    async function markAllNotificationsRead() {
+        if (!notifications.length || unreadCount <= 0) return;
+
+        notifications = notifications.map((notif) => ({ ...notif, is_read: true }));
+        unreadCount = 0;
+        updateNotificationUI();
+
+        try {
+            await fetch("/admin/notifications/mark-all-read", {
+                method: "POST",
+                headers: getAdminAuthHeader()
+            });
+        } catch (error) {
+            console.error("Admin mark-all-read sync failed:", error);
+            loadNotifications();
+        }
+    }
+
     function toggleNotifications() {
         const dropdown = document.getElementById("notificationDropdown");
         if (!dropdown) return;
@@ -222,6 +272,7 @@
     function initAdminNotifications() {
         if (pollHandle || !document.getElementById("notificationList")) return;
 
+        ensureNotificationActions();
         loadNotifications();
         pollHandle = window.setInterval(loadNotifications, ADMIN_NOTIFICATION_POLL_MS);
     }
@@ -230,6 +281,7 @@
     window.loadAdminNotificationUnreadCount = loadUnreadCount;
     window.updateNotificationUI = updateNotificationUI;
     window.handleNotifClick = handleNotifClick;
+    window.markAllNotificationsRead = markAllNotificationsRead;
     window.toggleNotifications = toggleNotifications;
     window.initAdminNotifications = initAdminNotifications;
 

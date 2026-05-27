@@ -1,6 +1,7 @@
 import os
 import re
 from uuid import uuid4
+from urllib.parse import quote
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 import models
@@ -62,6 +63,21 @@ def save_file(file, category: str | None = None):
     # IMPORTANT: Return the path starting with 'static/' 
     # so the database stores a URL the browser can understand.
     return file_path.replace("\\", "/")
+
+
+def public_file_url(path: str | None, fallback: str | None = None) -> str | None:
+    raw_path = str(path or "").strip().split("?", 1)[0]
+    if not raw_path:
+        return fallback
+
+    if raw_path.startswith(("http://", "https://", "//")):
+        return raw_path
+
+    normalized_path = raw_path.replace("\\", "/")
+    if normalized_path.startswith("/"):
+        return quote(normalized_path, safe="/%")
+
+    return "/" + quote(normalized_path, safe="/%")
 
 
 def validate_upload_file_size(file, max_bytes: int = MAX_REPORT_IMAGE_BYTES, label: str = "Image"):

@@ -7,9 +7,9 @@
     <meta charset="UTF-8"> 
 
     <title>Admin Panel | LookFor STI</title> 
-    <script src="{{ url_for('static', path='js/script.js') }}"></script>
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=9"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin_settings.css') }}?v=10"> 
+    <script src="/static/js/script.js"></script>
+    <link rel="stylesheet" href="/static/admin2.o.css?v=9"> 
+    <link rel="stylesheet" href="/static/Admin_Settings.css?v=10"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -209,7 +209,7 @@ function closeModal(id) {
 
 
 function getAuthToken() {
-    return localStorage.getItem('token') || localStorage.getItem('admin_token');
+    return localStorage.getItem('token');
 }
 
 function getSettingsEndpoint() {
@@ -291,6 +291,6 @@ loadSettings();
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>
-<script src="/static/student-notifications.js?v=3"></script>
+<script src="/static/student-notifications.js?v=4"></script>
 </body>
 </html>

@@ -76,7 +76,7 @@
         
             <div class="profile-page-card">
                 <div class="action-bar">
-                <h1 class="section-title">Report <span>Module</span></h1>
+                <h1 class="section-title">Report<span>Module</span></h1>
 
 
                 <div class="summary-cards">
@@ -90,6 +90,7 @@
                 <div class="generate-section">
                     <select id="reportTypeSelect">
                         <option value="all">All Reports</option>
+                        <option value="lost_found">Lost & Found Items</option>
                         <option value="lost">Lost Items</option>
                         <option value="found">Found Items</option>
                         <option value="claim">Claim</option>
@@ -129,7 +130,7 @@
                     <thead>
                         <tr>
                             <th>Select Items</th>
-                            <th>ID</th>
+                            <th>Item Code</th>
                             <th>Item</th>
                             <th>Category</th>
                             <th>Location</th>
@@ -217,6 +218,8 @@ let activeViewRow = null;
 let activeClaimRow = null;
 let printableClaimHtml = '';
 let pendingClaimFocusId = null;
+let reportDataRequestController = null;
+let reportSearchDebounceTimer = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('claimReportImageInput').addEventListener('change', previewClaimReportImage);
@@ -241,9 +244,15 @@ function bindReportFilters() {
 
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            clearTimeout(reportSearchDebounceTimer);
+            reportSearchDebounceTimer = setTimeout(loadReportData, 350);
+        });
+
         searchInput.addEventListener('keydown', event => {
             if (event.key === 'Enter') {
                 event.preventDefault();
+                clearTimeout(reportSearchDebounceTimer);
                 loadReportData();
             }
         });
@@ -265,8 +274,19 @@ function initializeReportFiltersFromUrl() {
 }
 
 async function loadReportData() {
+    if (reportDataRequestController) {
+        reportDataRequestController.abort();
+    }
+    const currentRequestController = new AbortController();
+    reportDataRequestController = currentRequestController;
+
     try {
-        const token = localStorage.getItem('admin_token');
+        const token = sessionStorage.getItem('admin_token');
+        if (!token) {
+            window.location.href = '/';
+            return;
+        }
+
         const params = new URLSearchParams({
             report_type: document.getElementById('reportTypeSelect').value || 'all',
             date_range: document.getElementById('dateRange').value || '',
@@ -277,8 +297,18 @@ async function loadReportData() {
             search: document.getElementById('searchInput').value || '',
         });
 
-        const response = await fetch(`/api/admin/report-module?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token}` } });
-        if (!response.ok) throw new Error('Failed to load report data.');
+        const response = await fetch(`/api/admin/report-module?${params.toString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            signal: currentRequestController.signal
+        });
+        if (!response.ok) {
+            let message = 'Failed to load report data.';
+            try {
+                const errorPayload = await response.json();
+                message = errorPayload.detail || message;
+            } catch (_) {}
+            throw new Error(message);
+        }
 
         const payload = await response.json();
         reportRowsCache = payload.rows || [];
@@ -288,8 +318,15 @@ async function loadReportData() {
         updateChartPlaceholders(payload.summary || {});
         focusRequestedClaimReport();
     } catch (error) {
+        if (error.name === 'AbortError') {
+            return;
+        }
         console.error('Error loading report data:', error);
-        document.getElementById('reportTableBody').innerHTML = '<tr><td colspan="9" style="text-align:center; color:red;">Failed to load report data.</td></tr>';
+        document.getElementById('reportTableBody').innerHTML = `<tr><td colspan="9" style="text-align:center; color:red;">${escapeHtml(error.message || 'Failed to load report data.')}</td></tr>`;
+    } finally {
+        if (reportDataRequestController === currentRequestController) {
+            reportDataRequestController = null;
+        }
     }
 }
 
@@ -309,16 +346,39 @@ function focusRequestedClaimReport() {
 }
 
 function updateSummaryCards(summary) {
-    document.getElementById('summaryTotal').innerText = summary.total || 0;
-    document.getElementById('summaryLost').innerText = summary.lost || 0;
-    document.getElementById('summaryFound').innerText = summary.found || 0;
-    document.getElementById('summaryConfiscated').innerText = summary.confiscated || 0;
-    document.getElementById('summaryClaim').innerText = summary.claim || 0;
+    ensureSummaryCards();
+    setSummaryText('summaryTotal', summary.total || 0);
+    setSummaryText('summaryLost', summary.lost || 0);
+    setSummaryText('summaryFound', summary.found || 0);
+    setSummaryText('summaryConfiscated', summary.confiscated || 0);
+    setSummaryText('summaryClaim', summary.claim || 0);
 }
 
 function updateChartPlaceholders(summary) {
-    document.getElementById('chartSummaryLeft').innerText = `Lost: ${summary.lost || 0} | Found: ${summary.found || 0}`;
-    document.getElementById('chartSummaryRight').innerText = `Claim: ${summary.claim || 0} | Confiscated: ${summary.confiscated || 0}`;
+    // Summary cards are updated by updateSummaryCards().
+}
+
+function setSummaryText(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.innerText = value;
+    }
+}
+
+function ensureSummaryCards() {
+    if (document.getElementById('summaryTotal') && document.getElementById('summaryClaim')) {
+        return;
+    }
+
+    const cards = document.querySelector('.summary-cards');
+    if (!cards) return;
+    cards.innerHTML = `
+        <div id="chartSummaryLeft" class="card">Total Reports<br><strong id="summaryTotal">0</strong></div>
+        <div class="card">Lost Items<br><strong id="summaryLost">0</strong></div>
+        <div class="card">Found Items<br><strong id="summaryFound">0</strong></div>
+        <div class="card">Confiscated Cases<br><strong id="summaryConfiscated">0</strong></div>
+        <div id="chartSummaryRight" class="card">Claim<br><strong id="summaryClaim">0</strong></div>
+    `;
 }
 
 function populateFilterOptions(filters) {
@@ -345,8 +405,21 @@ function renderReportTable(rows) {
         const actionButtons = row.row_type === 'claim'
             ? `<button type="button" onclick="openViewModal(${index})">View</button><button type="button" onclick="openEditModal(${index})">Edit</button>`
             : `<button type="button" onclick="openViewModal(${index})">View</button><button type="button" onclick="openDeleteModal(${index})">Delete</button>`;
-        return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}"></td><td>${escapeHtml(row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td>${actionButtons}</td></tr>`;
+        return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}"></td><td>${escapeHtml(row.item_code || row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td>${actionButtons}</td></tr>`;
     }).join('');
+}
+
+function formatReportItemId(value) {
+    if (value === null || value === undefined || value === '') {
+        return '-';
+    }
+
+    const numericValue = Number(value);
+    if (Number.isInteger(numericValue) && numericValue >= 0) {
+        return String(numericValue).padStart(6, '0');
+    }
+
+    return String(value);
 }
 
 function toggleCustomRange() {
@@ -393,7 +466,7 @@ function buildPrintableReportHtml(rows) {
     const summaryRows = rows.map((row, index) => `
         <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(row.row_id || '-')}</td>
+            <td>${escapeHtml(row.item_code || row.row_id || '-')}</td>
             <td>${escapeHtml(row.item || '-')}</td>
             <td>${escapeHtml(row.category || '-')}</td>
             <td>${escapeHtml(row.location || '-')}</td>
@@ -404,16 +477,18 @@ function buildPrintableReportHtml(rows) {
     `).join('');
 
     const detailBlocks = rows.map((row, index) => {
-        const detailHtml = Object.entries(row.details || {}).map(([label, value]) => `
+        const detailHtml = Object.entries(row.details || {})
+        .filter(([label]) => !String(label || '').toLowerCase().includes('item id'))
+        .map(([label, value]) => `
             <tr>
                 <th>${escapeHtml(label)}</th>
-                <td>${escapeHtml(value || 'Not specified')}</td>
+                <td>${escapeHtml(formatReportDetailValue(label, value))}</td>
             </tr>
         `).join('');
 
         return `
             <section class="detail-block">
-                <h3>${index + 1}. ${escapeHtml(row.item || 'Report Item')} <span>${escapeHtml(row.row_id || '-')}</span></h3>
+                <h3>${index + 1}. ${escapeHtml(row.item || 'Report Item')} <span>${escapeHtml(row.item_code || row.row_id || '-')}</span></h3>
                 <table class="detail-table">
                     ${detailHtml}
                 </table>
@@ -461,7 +536,7 @@ function buildPrintableReportHtml(rows) {
         <thead>
             <tr>
                 <th>#</th>
-                <th>ID</th>
+                <th>Item Code</th>
                 <th>Item</th>
                 <th>Category</th>
                 <th>Location</th>
@@ -529,7 +604,22 @@ function openViewModal(index) {
 }
 
 function buildDetailsHtml(details) {
-    return Object.entries(details).map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value || 'Not specified')}</p>`).join('');
+    return Object.entries(details)
+        .filter(([label]) => !String(label || '').toLowerCase().includes('item id'))
+        .map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(formatReportDetailValue(label, value))}</p>`)
+        .join('');
+}
+
+function formatReportDetailValue(label, value) {
+    if (value === null || value === undefined || value === '') {
+        return 'Not specified';
+    }
+
+    if (String(label || '').toLowerCase().includes('item id')) {
+        return formatReportItemId(value);
+    }
+
+    return value;
 }
 
 function closeViewModal() { document.getElementById('viewModal').style.display = 'none'; }
@@ -626,7 +716,7 @@ function previewClaimReportImage(event) {
 
 async function saveClaimReport() {
     if (!activeClaimRow || !activeClaimRow.claim_id) { alert('No claim is selected.'); return; }
-    const token = localStorage.getItem('admin_token');
+    const token = sessionStorage.getItem('admin_token');
     const button = document.getElementById('saveClaimReportButton');
     const formData = new FormData();
     formData.append('action', document.getElementById('claimActionSelect').value);
@@ -719,8 +809,8 @@ function escapeHtml(value) {
 }
 
 async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem('admin_token');
-    if (!token) { window.location.href = '/login'; return; }
+    const token = sessionStorage.getItem('admin_token');
+    if (!token) { window.location.href = '/'; return; }
     try {
         const response = await fetch('/admin/my-permissions', { headers: { 'Authorization': `Bearer ${token}` } });
         if (!response.ok) throw new Error('Unauthorized');
@@ -751,6 +841,7 @@ function toggleProfile() {
 }
 
 function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -759,6 +850,6 @@ function logout() {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 </body>
 </html>

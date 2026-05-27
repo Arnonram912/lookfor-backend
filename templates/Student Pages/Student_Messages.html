@@ -8,8 +8,8 @@
 
     <title>Student Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='Messages.css') }}?v=12"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=11"> 
+    <link rel="stylesheet" href="/static/Messages.css?v=12"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -844,6 +844,7 @@ function closeModal(id) {
 }
 
 function logout() {
+    sessionStorage.clear();
     localStorage.clear();
     window.location.href = "/";
 }
@@ -864,9 +865,9 @@ window.onclick = function(event) {
 
 let currentChatId = null;
 
-// 1. FIXED: Checks for both 'token' and 'admin_token'
+// Student pages use only the student token.
 const getAuthHeader = () => {
-    const token = localStorage.getItem("token") || localStorage.getItem("admin_token");
+    const token = localStorage.getItem("token");
     return { 'Authorization': `Bearer ${token}` };
 };
 function filterConversations() {
@@ -1128,7 +1129,7 @@ async function sendReply() {
 window.onload = loadUniversalUsers;
 </script>
 <script src="/static/session-keepalive.js"></script>
-<script src="/static/student-notifications.js?v=3"></script>
+<script src="/static/student-notifications.js?v=4"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>
 </body>

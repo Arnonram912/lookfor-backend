@@ -1,5 +1,5 @@
 # models.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, func, Computed
 from datetime import datetime
 from database import Base
 from sqlalchemy.orm import relationship
@@ -19,6 +19,7 @@ class Notification(Base):
     message = Column(String, nullable=False)
     type = Column(String)
     related_id = Column(Integer)
+    created_by_admin_id = Column(Integer, nullable=True)
     target_url = Column(String(500), nullable=True)
     is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -28,11 +29,16 @@ class Item(Base):
     __tablename__ = "items"
 
     id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, Computed("id"))
+    item_code = Column(String(20), Computed(
+        "CASE "
+        "WHEN status = 'lost' THEN 'LOST-' + RIGHT('000000' + CONVERT(VARCHAR(20), id), 6) "
+        "WHEN status = 'found' THEN 'FOUND-' + RIGHT('000000' + CONVERT(VARCHAR(20), id), 6) "
+        "ELSE 'ITEM-' + RIGHT('000000' + CONVERT(VARCHAR(20), id), 6) "
+        "END"
+    ))
     status = Column(String(50))
-    # 1. THE LINK: Add the ForeignKey column
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
-    
-    # 2. THE RELATIONSHIP: Connect back to Category
     category_relationship = relationship("Category", back_populates="items")
     category = Column(String(100))
     department = Column(String)
@@ -44,7 +50,6 @@ class Item(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     is_surrendered = Column(Boolean, default=False)
 
-    # --- ADDED THESE TWO COLUMNS FROM USER STORY ---
     brand = Column(String(100), nullable=True) 
     color = Column(String(50), nullable=True)
 
@@ -54,7 +59,6 @@ class Item(Base):
     date = Column(Date) 
     time_found = Column(String, nullable=True)  
 
-    # --- ADD THESE TWO LINES ---
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     owner = relationship("User", back_populates="items")
 
@@ -88,7 +92,6 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    # Individual name columns for better data management
     first_name = Column(String(100), nullable=True)
     middle_name = Column(String(100), nullable=True)
     last_name = Column(String(100), nullable=True)
@@ -127,11 +130,8 @@ class PendingItem(Base):
     date = Column(Date)
     image_path = Column(String)
 
-    # --- ADDED THESE TWO COLUMNS HERE AS WELL ---
     brand = Column(String(100), nullable=True)
     color = Column(String(50), nullable=True)
-    # ---------------------------------------------
-    # MUST HAVE THESE TWO LINES:
     image_embedding = Column(String) # Matches the NVARCHAR(MAX) above
     matched_item_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -144,7 +144,7 @@ class PendingItem(Base):
 class Department(Base):
     __tablename__ = "departments"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, nullable=False) # e.g., "Library", "CS Dept"
+    name = Column(String(100), unique=True, nullable=False) # e.g., "Library", "CS Dept"
 
 class Message(Base):
     __tablename__ = "messages"
@@ -226,17 +226,6 @@ class ClaimDecisionReport(Base):
     claim = relationship("Claim", foreign_keys=[claim_id])
     created_by_admin = relationship("User", foreign_keys=[created_by_admin_id])
 
-# class AuditLog(Base):
- #   __tablename__ = "audit_logs"
-#
- ##  admin_id = Column(Integer, ForeignKey("users.id"))
-   # action = Column(String(255))  # e.g., "Approved Claim"
-    #target_item = Column(String(255)) # e.g., "Blue Wallet"
-    #created_at = Column(DateTime, default=datetime.utcnow)
-
-    #admin = relationship("User")
-
-# models.py
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)

@@ -8,8 +8,8 @@
 
     <title>Student Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='profile.css') }}?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=11"> 
+    <link rel="stylesheet" href="/static/profile.css?v=15"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -139,7 +139,7 @@
                 
                 <div class="avatar-upload modern-avatar">
                     <div class="avatar-preview">
-                        <img id="display-pic" src="/static/photos/default-avatar.png" alt="Profile Picture">
+                        <img id="display-pic" src="/static/photos/default-student-avatar.jpg" alt="Profile Picture">
                     </div>
 
                     <label for="imageUpload" class="upload-label modern-upload-btn">
@@ -400,22 +400,11 @@ function decodeTokenPayload(token) {
 }
 
 function getStudentToken() {
-    const studentToken = localStorage.getItem('token');
-    if (studentToken) return studentToken;
-
-    const fallbackToken = localStorage.getItem('admin_token');
-    const payload = decodeTokenPayload(fallbackToken || '');
-    return payload && !payload.is_admin ? fallbackToken : null;
+    return localStorage.getItem('token');
 }
 
 function clearStudentSession() {
     localStorage.removeItem('token');
-
-    const fallbackToken = localStorage.getItem('admin_token');
-    const payload = decodeTokenPayload(fallbackToken || '');
-    if (payload && !payload.is_admin) {
-        localStorage.removeItem('admin_token');
-    }
 }
 
 function logout() {
@@ -515,8 +504,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const levelItem = document.getElementById('level-info-item');
 
     // 1. Update Profile Image (with Cache Busting)
-    const profilePic = user.profile_pic ? `/${user.profile_pic}?t=${new Date().getTime()}` : '/static/photos/default-avatar.png';
-    document.getElementById('display-pic').src = profilePic;
+    const cleanProfilePic = user.profile_pic ? String(user.profile_pic).replace(/\\/g, '/') : '';
+    const profilePic = cleanProfilePic
+        ? `${cleanProfilePic.startsWith('/') ? cleanProfilePic : '/' + cleanProfilePic}?t=${new Date().getTime()}`
+        : '/static/photos/default-student-avatar.jpg';
+    const displayPic = document.getElementById('display-pic');
+    displayPic.onerror = () => {
+        displayPic.onerror = null;
+        displayPic.src = '/static/photos/default-student-avatar.jpg';
+    };
+    displayPic.src = profilePic;
 
     // 2. Update Static Display Labels (What user sees first)
     document.getElementById('label-name').innerText = user.full_name || "N/A";
@@ -679,6 +676,6 @@ document.getElementById('imageUpload').onchange = evt => {
 <script src="/static/session-keepalive.js?v=2"></script>
 <script src="/static/force-password-change.js?v=2"></script>
 <script src="/static/student-sidebar-access.js?v=2"></script>
-<script src="/static/student-notifications.js?v=3"></script>
+<script src="/static/student-notifications.js?v=4"></script>
 </body>
 </html>

@@ -17,7 +17,6 @@ import os
 from fastapi import Request, Response, Form, UploadFile, File
 from fastapi.templating import Jinja2Templates
 from clip_test import find_matches_in_dataset, describe_item, get_clip_components, get_text_embedding, get_multi_image_embedding
-import torch
 from PIL import Image
 import json
 from sqlalchemy.exc import IntegrityError
@@ -25,13 +24,16 @@ from models import SettingsUpdate
 from security import get_current_user
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-from utils import save_file, resolve_category_name, validate_upload_file_size
+from utils import public_file_url, save_file, resolve_category_name, validate_upload_file_size
 from sqlalchemy import or_
 from concurrent.futures import ThreadPoolExecutor
 
 
 class AdminCreate(BaseModel):
-    full_name: str
+    full_name: Optional[str] = None
+    last_name: str
+    first_name: str
+    middle_name: Optional[str] = ""
     email: EmailStr
     permissions: List[str]
     department: Optional[str] = None
@@ -58,6 +60,9 @@ class BulkRegisterRequest(BaseModel):
 templates = Jinja2Templates(directory="templates")
 # Change your directory definition
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+STATIC_PROFILE_PICS_DIR = os.path.join(STATIC_DIR, "profile_pics")
+DEFAULT_PROFILE_PIC = "static/photos/default-student-avatar.jpg"
 # Unified path: everything goes into static/uploads
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 
@@ -65,6 +70,22 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 BULK_REGISTRATION_JOBS: dict[str, dict] = {}
 BULK_JOB_LOCK = threading.Lock()
+ROOT_ADMIN_EMAIL = "admin@novaliches.sti.edu.ph"
+ADMIN_PERMISSION_KEYS = [
+    "Messages",
+    "User-Management",
+    "User-Management-Create",
+    "User-Management-Edit",
+    "User-Management-Reset",
+    "User-Management-Archive",
+    "User-Management-Delete",
+    "Lost-Reports",
+    "Found-Reports",
+    "Claim-Management",
+    "Reports",
+    "Confiscated-items",
+    "Content-management",
+]
 STUDENT_ACCESS_PERMISSION = "Student-Portal-Access"
 DELETE_QUEUE_PERMISSION = "__PENDING_DELETE__"
 
@@ -91,6 +112,29 @@ def user_is_faculty_account(user: models.User) -> bool:
     return bool(department and department != "N/A" and not course and not section)
 
 
+def deployed_static_path(path: str | None, fallback: str = DEFAULT_PROFILE_PIC) -> str:
+    raw_path = str(path or "").strip().split("?", 1)[0]
+    if not raw_path:
+        return fallback
+
+    if raw_path.startswith(("http://", "https://", "//")):
+        return raw_path
+
+    normalized_path = raw_path.lstrip("/").replace("\\", "/")
+    if not normalized_path.startswith("static/"):
+        return raw_path
+
+    physical_path = os.path.abspath(os.path.join(BASE_DIR, *normalized_path.split("/")))
+    static_root = os.path.abspath(STATIC_DIR)
+    if os.path.commonpath([static_root, physical_path]) != static_root:
+        return fallback
+
+    if os.path.isfile(physical_path) and os.path.getsize(physical_path) > 0:
+        return public_file_url(normalized_path)
+
+    return public_file_url(fallback)
+
+
 def parse_permissions(raw_permissions) -> list[str]:
     try:
         if isinstance(raw_permissions, str):
@@ -98,6 +142,14 @@ def parse_permissions(raw_permissions) -> list[str]:
         return raw_permissions or []
     except Exception:
         return []
+
+
+def is_root_admin(user: models.User | None) -> bool:
+    return bool(
+        user
+        and user.is_admin
+        and str(user.email or "").strip().lower() == ROOT_ADMIN_EMAIL
+    )
 
 
 def ensure_pending_claim_for_pair(
@@ -148,13 +200,143 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             "score": match.get("score"),
             "category": match.get("category"),
             "location": match.get("location"),
-            "image_path": match.get("image_path"),
+            "image_path": public_file_url(match.get("image_path")),
             "brand": match.get("brand"),
             "color": match.get("color"),
             "description": match.get("description"),
         })
 
     return json.dumps(cleaned_matches) if cleaned_matches else None
+
+
+def serialize_found_item_match(
+    found_item: models.Item,
+    score: float | None = None,
+    previous_pending_id: int | None = None
+) -> dict:
+    return {
+        "id": found_item.id,
+        "score": round(float(score or 0), 4),
+        "category": found_item.category,
+        "location": found_item.location,
+        "image_path": public_file_url(found_item.image_path),
+        "brand": found_item.brand,
+        "color": found_item.color,
+        "description": found_item.description,
+        "source": "found",
+        "previous_pending_id": previous_pending_id,
+    }
+
+
+def item_has_approved_claim(db: Session, item: models.Item) -> bool:
+    if not item:
+        return False
+
+    filters = [models.Claim.status == "approved"]
+    if item.status == "lost":
+        filters.append(models.Claim.lost_item_id == item.id)
+    elif item.status == "found":
+        filters.append(models.Claim.found_item_id == item.id)
+    else:
+        return False
+
+    return bool(db.query(models.Claim.id).filter(*filters).first())
+
+
+def serialize_inventory_item(db: Session, item: models.Item) -> dict:
+    uploader_name = None
+    if item.owner:
+        uploader_name = (
+            item.owner.full_name
+            or " ".join(
+                part for part in [
+                    item.owner.first_name,
+                    item.owner.middle_name,
+                    item.owner.last_name,
+                ] if part
+            ).strip()
+            or None
+        )
+
+    return {
+        "id": item.id,
+        "item_id": getattr(item, "item_id", None) or item.id,
+        "item_code": getattr(item, "item_code", None),
+        "status": item.status,
+        "category_id": item.category_id,
+        "category": item.category,
+        "department": item.department,
+        "description": item.description,
+        "image_path": public_file_url(item.image_path),
+        "possible_matches": normalize_saved_possible_matches(item.possible_matches),
+        "is_matched": item.is_matched,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "is_surrendered": item.is_surrendered,
+        "brand": item.brand,
+        "color": item.color,
+        "approved_at": item.approved_at.isoformat() if item.approved_at else None,
+        "archived": item.archived,
+        "location": item.location,
+        "date": item.date.isoformat() if item.date else None,
+        "time_found": item.time_found,
+        "user_id": item.user_id,
+        "uploader_name": uploader_name,
+        "is_claimed": item_has_approved_claim(db, item),
+    }
+
+
+def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> None:
+    existing_matches = []
+    if lost_item.possible_matches:
+        try:
+            parsed = json.loads(lost_item.possible_matches)
+            existing_matches = parsed if isinstance(parsed, list) else []
+        except Exception:
+            existing_matches = []
+
+    match_id = match_payload.get("id")
+    match_source = match_payload.get("source")
+    previous_pending_id = match_payload.get("previous_pending_id")
+    deduped_matches = [
+        match for match in existing_matches
+        if not (
+            isinstance(match, dict)
+            and (
+                (
+                    match.get("id") == match_id
+                    and match.get("source", "found") == match_source
+                )
+                or (
+                    previous_pending_id
+                    and match.get("id") == previous_pending_id
+                    and match.get("source") == "pending_found"
+                )
+            )
+        )
+    ]
+    lost_item.possible_matches = json.dumps([match_payload, *deduped_matches][:3])
+
+
+def create_student_notification(
+    db: Session,
+    user_id: int,
+    message: str,
+    notif_type: str = "student_match",
+    target_url: str | None = None
+):
+    if target_url is None:
+        target_url = "/student/Lost-report"
+
+    notif = models.Notification(
+        message=message,
+        type=notif_type,
+        related_id=user_id,
+        target_url=target_url,
+        is_read=False,
+        created_at=datetime.utcnow()
+    )
+    db.add(notif)
+    return notif
 
 
 def student_has_portal_access(user: models.User) -> bool:
@@ -166,6 +348,9 @@ def user_is_pending_delete(user: models.User) -> bool:
 
 
 def get_assignable_permissions(admin: models.User) -> set[str]:
+    if is_root_admin(admin):
+        return set(ADMIN_PERMISSION_KEYS)
+
     permissions = set(parse_permissions(admin.permissions))
     permissions.discard(STUDENT_ACCESS_PERMISSION)
     permissions.discard(DELETE_QUEUE_PERMISSION)
@@ -177,12 +362,14 @@ def notify_admin(
     message: str,
     notif_type: str = "new_report",
     related_id: int = None,
-    target_url: str | None = None
+    target_url: str | None = None,
+    created_by_admin_id: int | None = None
 ):
     new_notif = models.Notification(
         message=message,
         type=notif_type,
         related_id=related_id,
+        created_by_admin_id=created_by_admin_id,
         target_url=target_url,
         is_read=False,  # Default to unread
         created_at=datetime.utcnow() # Good for sorting the notification list
@@ -194,6 +381,9 @@ def check_permission(required_permission: str):
     def permission_dependency(
         admin: models.User = Depends(get_current_admin)
     ):
+        if is_root_admin(admin):
+            return admin
+
         # Convert string JSON to list if necessary
         permissions = parse_permissions(admin.permissions)
 
@@ -210,7 +400,8 @@ def create_admin_notification(
     message: str,
     notif_type: str,
     related_id: int,
-    target_url: str | None = None
+    target_url: str | None = None,
+    created_by_admin_id: int | None = None
 ):
     if target_url is None:
         if notif_type == "user_management_students":
@@ -228,6 +419,7 @@ def create_admin_notification(
         message=message,
         type=notif_type,
         related_id=related_id,
+        created_by_admin_id=created_by_admin_id,
         target_url=target_url,
         is_read=False,         # Ensure it starts as unread
         created_at=datetime.utcnow() # Add the time it happened
@@ -368,7 +560,7 @@ def compute_item_match_score(lost_item: models.Item, found_item: models.Item) ->
     return round(score, 4)
 
 
-print("🔥 MONSTER VERSION LOADED")
+print("Admin routes loaded")
 
 
 def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate_action: str):
@@ -446,6 +638,18 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
         seen_student_nos = set()
         seen_emails = set()
 
+        def get_missing_registration_fields(row):
+            missing_fields = []
+            if not row["student_no"]:
+                missing_fields.append("Employee No." if row["is_employee_import"] else "Student ID")
+            elif not row["is_employee_import"] and len(row["student_no"]) < 10:
+                missing_fields.append("Student ID must be at least 10 digits")
+            if not row["first_name"]:
+                missing_fields.append("First Name")
+            if not row["last_name"]:
+                missing_fields.append("Last Name")
+            return missing_fields
+
         for s in users_list:
             source_type = str(s.get("source_type", "student")).strip().lower()
             is_employee_import = source_type == "employee"
@@ -499,7 +703,8 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                 "hashed_password": None
             }
 
-            if not s_id or not first_n or not last_n:
+            missing_fields = get_missing_registration_fields(row)
+            if missing_fields:
                 ignored_count += 1
                 results.append({
                     "email": email_addr,
@@ -510,7 +715,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                     "level": level,
                     "batch_id": batch_val,
                     "temp_password": "",
-                    "status": "Ignored - Missing required fields"
+                    "status": f"Ignored - Missing {', '.join(missing_fields)}"
                 })
                 continue
 
@@ -588,6 +793,23 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
         def hash_password(row):
             return pwd_context.hash(row["temp_password"])
 
+        def apply_registration_row_to_user(user, row, *, keep_archived: bool):
+            user.first_name = row["first_name"]
+            user.middle_name = row["middle_name"]
+            user.last_name = row["last_name"]
+            user.full_name = row["full_name"]
+            user.student_no = row["student_no"]
+            user.email = row["email"]
+            user.course = row["course"]
+            user.department = row["department"]
+            user.level = row["level"]
+            user.batch_id = row["batch_id"]
+            user.hashed_password = row["hashed_password"]
+            user.must_change_password = True
+            user.is_archived = bool(keep_archived)
+            user.is_admin = False
+            user.permissions = row["permissions"]
+
         processed_valid_rows = processed_seed
 
         for row_chunk in chunked(normalized_rows, commit_chunk_size):
@@ -642,6 +864,26 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 "status": "Ignored - Conflicts with existing admin"
                             })
 
+                        elif existing_user.is_archived:
+                            apply_registration_row_to_user(existing_user, row, keep_archived=True)
+
+                            existing_by_student_no[s_id] = existing_user
+                            if email_key:
+                                existing_by_email[email_key] = existing_user
+
+                            pending_counters["replaced"] += 1
+                            pending_results.append({
+                                "email": row["email"],
+                                "student_no": row["student_no"],
+                                "full_name": row["full_name"],
+                                "course": row["course"],
+                                "department": row["department"],
+                                "level": row["level"],
+                                "batch_id": row["batch_id"],
+                                "temp_password": row["temp_password"],
+                                "status": "Saved to archived duplicate"
+                            })
+
                         elif duplicate_action == "ignore":
                             pending_counters["ignored"] += 1
                             pending_results.append({
@@ -657,21 +899,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                             })
 
                         else:
-                            existing_user.first_name = row["first_name"]
-                            existing_user.middle_name = row["middle_name"]
-                            existing_user.last_name = row["last_name"]
-                            existing_user.full_name = row["full_name"]
-                            existing_user.student_no = row["student_no"]
-                            existing_user.email = row["email"]
-                            existing_user.course = row["course"]
-                            existing_user.department = row["department"]
-                            existing_user.level = row["level"]
-                            existing_user.batch_id = row["batch_id"]
-                            existing_user.hashed_password = row["hashed_password"]
-                            existing_user.must_change_password = True
-                            existing_user.is_archived = False
-                            existing_user.is_admin = False
-                            existing_user.permissions = row["permissions"]
+                            apply_registration_row_to_user(existing_user, row, keep_archived=False)
 
                             existing_by_student_no[s_id] = existing_user
                             if email_key:
@@ -768,6 +996,33 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                     f"Registered {processed_valid_rows}/{total_students} users..."
                                 )
 
+                            elif existing_user.is_archived:
+                                apply_registration_row_to_user(existing_user, row, keep_archived=True)
+
+                                db.commit()
+
+                                existing_by_student_no[s_id] = existing_user
+                                if email_key:
+                                    existing_by_email[email_key] = existing_user
+
+                                replaced_count += 1
+                                results.append({
+                                    "email": row["email"],
+                                    "student_no": row["student_no"],
+                                    "full_name": row["full_name"],
+                                    "course": row["course"],
+                                    "department": row["department"],
+                                    "level": row["level"],
+                                    "batch_id": row["batch_id"],
+                                    "temp_password": row["temp_password"],
+                                    "status": "Saved to archived duplicate"
+                                })
+                                processed_valid_rows += 1
+                                push_bulk_progress(
+                                    processed_valid_rows,
+                                    f"Registered {processed_valid_rows}/{total_students} users..."
+                                )
+
                             elif duplicate_action == "ignore":
                                 ignored_count += 1
                                 results.append({
@@ -788,21 +1043,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 )
 
                             else:
-                                existing_user.first_name = row["first_name"]
-                                existing_user.middle_name = row["middle_name"]
-                                existing_user.last_name = row["last_name"]
-                                existing_user.full_name = row["full_name"]
-                                existing_user.student_no = row["student_no"]
-                                existing_user.email = row["email"]
-                                existing_user.course = row["course"]
-                                existing_user.department = row["department"]
-                                existing_user.level = row["level"]
-                                existing_user.batch_id = row["batch_id"]
-                                existing_user.hashed_password = row["hashed_password"]
-                                existing_user.must_change_password = True
-                                existing_user.is_archived = False
-                                existing_user.is_admin = False
-                                existing_user.permissions = row["permissions"]
+                                apply_registration_row_to_user(existing_user, row, keep_archived=False)
 
                                 db.commit()
 
@@ -928,7 +1169,8 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             db,
             f"User batch registration completed. Created {created_count}, replaced {replaced_count}, ignored {ignored_count}.",
             "user_management_students",
-            None
+            None,
+            created_by_admin_id=BULK_REGISTRATION_JOBS.get(job_id, {}).get("requested_by")
         )
 
     except Exception as e:
@@ -953,7 +1195,7 @@ async def toggle_archive(
     user_id: int, 
     archive: bool, 
     db: Session = Depends(get_db),
-    current_admin = Depends(get_current_admin)
+    current_admin: models.User = Depends(get_current_admin)
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -980,7 +1222,8 @@ async def toggle_archive(
         db,
         f"{current_admin.full_name or current_admin.email} {status} user {user.full_name or user.email}.",
         "user_management_students" if not user.is_admin else "user_management_admin",
-        user.id
+        user.id,
+        created_by_admin_id=current_admin.id
     )
     return {"message": f"User {user.full_name} has been {status}."}
 
@@ -1051,7 +1294,8 @@ async def move_user_to_delete(
             db,
             f"{current_admin.full_name or current_admin.email} moved user {user.full_name or user.email} to the delete queue.",
             "user_management_students" if not user.is_admin else "user_management_admin",
-            user.id
+            user.id,
+            created_by_admin_id=current_admin.id
         )
 
     return {"message": f"User {user.full_name} moved to Delete tab."}
@@ -1099,7 +1343,11 @@ async def bulk_move_users_to_delete(
 
 # ROUTE 2: Permanent Delete (Hard Delete)
 @router.delete("/permanent-delete/{user_id}")
-async def permanent_delete(user_id: int, db: Session = Depends(get_db)):
+async def permanent_delete(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("User-Management-Delete"))
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     
     if not user:
@@ -1114,7 +1362,8 @@ async def permanent_delete(user_id: int, db: Session = Depends(get_db)):
             db,
             f"{deleted_user_name} was permanently deleted from User Management.",
             "user_management_admin" if deleted_user_is_admin else "user_management_students",
-            user_id
+            user_id,
+            created_by_admin_id=current_admin.id
         )
         
         return {"message": "User and all related records (messages, claims, items) deleted."}
@@ -1223,6 +1472,7 @@ def generate_embedding(image_path: str):
     img = Image.open(full_path).convert("RGB")
     inputs = processor(images=img, return_tensors="pt")
 
+    import torch
     with torch.no_grad():
         feat = model.get_image_features(**inputs)
         if hasattr(feat, "pooler_output"):
@@ -1266,13 +1516,21 @@ def auto_archive_pending(db: Session):
 
 @router.get("/my-permissions")
 async def get_my_permissions(admin: models.User = Depends(get_current_admin)):
+    if is_root_admin(admin):
+        return ADMIN_PERMISSION_KEYS
+
     # If permissions are stored as a JSON string in DB, decode them
     if isinstance(admin.permissions, str):
         return json.loads(admin.permissions)
     return admin.permissions # Return list directly if already a list
 
 @router.post("/items/confirm-match/{lost_id}/{found_id}")
-async def confirm_match(lost_id: int, found_id: int, db: Session = Depends(get_db)):
+async def confirm_match(
+    lost_id: int,
+    found_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     lost_item = db.query(models.Item).filter(models.Item.id == lost_id).first()
     found_item = db.query(models.Item).filter(models.Item.id == found_id).first()
 
@@ -1315,7 +1573,7 @@ async def analyze_item_matches(
             "matches": [],
         }
 
-    match_threshold = 0.70
+    match_threshold = 0.55
     matched_found_ids: set[int] = set()
     created_matches: list[dict] = []
 
@@ -1378,7 +1636,8 @@ async def analyze_item_matches(
             f"Match analysis completed. {len(created_matches)} lost and found pairs were flagged for review.",
             "match",
             created_matches[0]["lost_id"],
-            "/admin/Claim-Management"
+            "/admin/Claim-Management",
+            created_by_admin_id=current_admin.id
         )
 
     return {
@@ -1390,36 +1649,48 @@ async def analyze_item_matches(
     }
 
 @router.get("/items/found")
-def get_found_items(db: Session = Depends(get_db)):
+def get_found_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
         models.Item.archived == False
     ).all()
-    return items
+    return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/found/archived")
-def get_archived_found_items(db: Session = Depends(get_db)):
+def get_archived_found_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
         models.Item.archived == True
     ).all()
-    return items
+    return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/lost")
-def get_lost_items(db: Session = Depends(get_db)):
+def get_lost_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
         models.Item.archived == False
     ).all()
-    return items
+    return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/lost/archived")
-def get_archived_lost_items(db: Session = Depends(get_db)):
+def get_archived_lost_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
         models.Item.archived == True
     ).all()
-    return items
+    return [serialize_inventory_item(db, item) for item in items]
 @router.get("/dashboard")
 def admin_dashboard(
     request: Request,
@@ -1436,65 +1707,60 @@ def admin_dashboard(
 
 @router.get("/User-Management")
 async def admin_user_management(
-    request: Request,
-    # This automatically handles the token/cookie and checks permissions
-    admin = Depends(check_permission("User-Management"))
+    request: Request
 ):
     return templates.TemplateResponse(
         "Admin Pages/User_Management.html",
-        {"request": request, "admin": admin}
+        {"request": request}
     )
 @router.get("/Messages")
 def admin_Messages( # Renamed this function
-    request: Request,
-    admin = Depends(check_permission("Messages"))
+    request: Request
 ):
    
     return templates.TemplateResponse(
         "Admin Pages/Admin_Message.html",
-        {"request": request, "admin": admin} 
+        {"request": request} 
     )
 
 @router.get("/Lost_Items_Report")
 def admin_lost_items_report( # Renamed this function
-    request: Request,
-    admin = Depends(check_permission("Lost-Reports"))
+    request: Request
 ):
 
     
     return templates.TemplateResponse(
         "Admin Pages/Lost_item_Report.html",
-        {"request": request, "admin": admin} 
+        {"request": request} 
     )
 
 @router.get("/Found_Items_Report")
 def admin_found_items_report( # Renamed this function
-    request: Request,
-    admin = Depends(check_permission("Found-Reports"))
+    request: Request
 ):
     
     return templates.TemplateResponse(
         "Admin Pages/Found_item_Report.html",
-         {"request": request, "admin": admin} 
+         {"request": request} 
     )
 
 @router.get("/Claim-Management" )
 def admin_claim_management( # Renamed this function
-    request: Request,
-    admin = Depends(check_permission("Claim-Management"))
+    request: Request
 ):  
     
     return templates.TemplateResponse(
         "Admin Pages/Claim_Management.html",
-        {"request": request, "admin": admin} 
+        {"request": request} 
     )
 @router.get("/Reports")
 def admin_reports(
-    request: Request,
-    admin = Depends(check_permission("Reports"))
+    request: Request
 ):
-    reports_page = os.path.join(BASE_DIR, "templates", "Admin Pages", "Reports.html")
-    return FileResponse(reports_page)
+    return templates.TemplateResponse(
+        "Admin Pages/Reports.html",
+        {"request": request}
+    )
 @router.get("/Profile")
 def admin_profile(
     request: Request,
@@ -1515,7 +1781,7 @@ async def update_profile(
     section: str = Form(None),
     profile_img: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_admin) 
 ):
     user = current_user
     
@@ -1524,14 +1790,15 @@ async def update_profile(
 
     # Handle Image Upload
     if profile_img and profile_img.filename:
-        os.makedirs("static/profile_pics", exist_ok=True)
+        os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
         file_extension = os.path.splitext(profile_img.filename)[1]
-        file_path = f"static/profile_pics/user_{user.id}{file_extension}"
+        db_file_path = f"static/profile_pics/user_{user.id}{file_extension}"
+        file_path = os.path.join(STATIC_PROFILE_PICS_DIR, f"user_{user.id}{file_extension}")
         
         with open(file_path, "wb") as buffer:
             buffer.write(await profile_img.read())
         
-        user.profile_pic = file_path
+        user.profile_pic = db_file_path
 
     # Update Text Fields (Email remains read-only for security)
     if full_name: user.full_name = full_name
@@ -1545,7 +1812,8 @@ async def update_profile(
         f"{user.full_name or user.email} updated the admin profile information.",
         "user_management_admin",
         user.id,
-        "/admin/Profile"
+        "/admin/Profile",
+        created_by_admin_id=user.id
     )
     return {"message": "Profile updated successfully"}
 
@@ -1562,63 +1830,58 @@ def admin_settings(
     )
 @router.get("/Confiscated-items")
 def admin_confiscated_items(
-    request: Request,
-    admin = Depends(check_permission("Confiscated-items"))
+    request: Request
 ):
    
     return templates.TemplateResponse(
         "Admin Pages/Confiscated_Item.html",
-        {"request": request, "admin": admin} 
+        {"request": request} 
     )   
 
 @router.get("/Content-management")
 def admin_content_management(
-    request: Request,
-    admin = Depends(check_permission("Content-management"))
+    request: Request
 ):
     
     return templates.TemplateResponse(
         "Admin Pages/Content_Management.html",
-        {"request": request, "admin": admin} 
+        {"request": request} 
     )
 @router.get("/Content-management/features")
 def admin_content_management(
-    request: Request,
-    admin = Depends(check_permission("Content-management"))
+    request: Request
 ):
     
     return templates.TemplateResponse(
         "Admin Pages/admin_cms_features.html",
-        {"request": request, "admin": admin} 
+        {"request": request} 
     )
 @router.get("/Content-management/about")
 def admin_content_management(
-    request: Request,
-    admin = Depends(check_permission("Content-management"))
+    request: Request
 ):
     
     return templates.TemplateResponse(
         "Admin Pages/admin_cms_about.html",
-        {"request": request, "admin": admin} 
+        {"request": request} 
     )
 
 
 @router.get("/Content-Editor")
 async def content_editor_page(
-    request: Request,
-    admin = Depends(check_permission("Content-management"))
+    request: Request
 ):
     # You can add logic here to fetch existing content from the DB 
     # to pre-fill the inputs if you want!
     return templates.TemplateResponse(
         "/Admin Pages/admin_cms.html",
-        {"request": request, "admin": admin}
+        {"request": request}
         )
 
 @router.get("/pending-items")
 def get_pending_items(
     db: Session = Depends(get_db),
-    admin: str = Depends(get_current_admin)
+    current_admin: models.User = Depends(get_current_admin)
 ):
     auto_archive_pending(db)
 
@@ -1632,7 +1895,7 @@ def get_pending_items(
 @router.get("/pending-items/archived")
 def get_archived_pending_items(
     db: Session = Depends(get_db),
-    admin: str = Depends(get_current_admin)
+    current_admin: models.User = Depends(get_current_admin)
 ):
     items = db.query(models.PendingItem).filter(
         models.PendingItem.archived == True
@@ -1641,12 +1904,18 @@ def get_archived_pending_items(
     return items
 
 @router.get("/departments")
-async def get_departments(db: Session = Depends(get_db)):
+async def get_departments(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     # Fetches the list we inserted (Registrar, IT Dept, etc.)
     return db.query(models.Department).all()
 
 @router.get("/category")
-async def get_caregory(db: Session = Depends(get_db)):
+async def get_caregory(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     # Fetches the list we inserted (Registrar, IT Dept, etc.)
     return db.query(models.Category).all()
 
@@ -1674,7 +1943,8 @@ async def create_department(
         f"Department '{new_department.name}' was added in Content Management.",
         "new_report",
         new_department.id,
-        "/admin/Content-management"
+        "/admin/Content-management",
+        created_by_admin_id=admin.id
     )
     return {"status": "success", "department": new_department}
 
@@ -1697,7 +1967,8 @@ async def delete_department(
         f"Department '{department_name}' was deleted from Content Management.",
         "new_report",
         department_id,
-        "/admin/Content-management"
+        "/admin/Content-management",
+        created_by_admin_id=admin.id
     )
     return {"status": "success"}
 
@@ -1725,7 +1996,8 @@ async def create_category(
         f"Category '{new_category.name}' was added in Content Management.",
         "new_report",
         new_category.id,
-        "/admin/Content-management"
+        "/admin/Content-management",
+        created_by_admin_id=admin.id
     )
     return {"status": "success", "category": new_category}
 
@@ -1748,7 +2020,8 @@ async def delete_category(
         f"Category '{category_name}' was deleted from Content Management.",
         "new_report",
         category_id,
-        "/admin/Content-management"
+        "/admin/Content-management",
+        created_by_admin_id=admin.id
     )
     return {"status": "success"}
 
@@ -1775,6 +2048,26 @@ async def create_new_admin(
     if any(permission.startswith("User-Management-") for permission in requested_permissions):
         requested_permissions = list(dict.fromkeys(["User-Management", *requested_permissions]))
 
+    first_name = admin_in.first_name.strip()
+    middle_name = (admin_in.middle_name or "").strip()
+    last_name = admin_in.last_name.strip()
+    full_name = (
+        admin_in.full_name.strip()
+        if admin_in.full_name and admin_in.full_name.strip()
+        else f"{first_name} {middle_name} {last_name}".replace("  ", " ").strip()
+    )
+
+    if not first_name or not last_name:
+        raise HTTPException(
+            status_code=400,
+            detail="First name and last name are required"
+        )
+    if not (admin_in.department or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Department / Office is required"
+        )
+
     existing = db.query(models.User).filter(
         models.User.email == admin_in.email
     ).first()
@@ -1789,12 +2082,15 @@ async def create_new_admin(
     temp_password = secrets.token_urlsafe(8)
 
     new_admin = models.User(
-        full_name=admin_in.full_name,
+        first_name=first_name,
+        middle_name=middle_name,
+        last_name=last_name,
+        full_name=full_name,
         email=admin_in.email,
         hashed_password=pwd_context.hash(temp_password),
         is_admin=True,
         permissions=json.dumps(requested_permissions),
-        department=admin_in.department, # Saves to the new column
+        department=admin_in.department.strip(), # Saves to the new column
         section=admin_in.section,
         must_change_password=True
     )
@@ -1804,9 +2100,10 @@ async def create_new_admin(
 
     create_admin_notification(
         db,
-        f"New admin account created for {admin_in.full_name}.",
+        f"New admin account created for {full_name}.",
         "user_management_admin",
-        new_admin.id
+        new_admin.id,
+        created_by_admin_id=current_admin.id
     )
 
     return {
@@ -1874,6 +2171,9 @@ async def get_all_users(
         # 2. Append the formatted dictionary
         user_list.append({
             "id": u.id,
+            "first_name": u.first_name or "",
+            "middle_name": u.middle_name or "",
+            "last_name": u.last_name or "",
             "full_name": u.full_name or "N/A",
             "student_no": u.student_no or "N/A",
             "email": u.email,
@@ -1881,10 +2181,13 @@ async def get_all_users(
             "department": u.department or "N/A",
             "course": u.course or "",
             "section": u.section or "",
+            "level": u.level or "",
             "course_section": f"{u.course or ''} {u.section or ''}".strip() or "N/A",
+            "profile_pic": deployed_static_path(u.profile_pic),
             "last_login": u.last_login.isoformat() if u.last_login else None,
             "is_admin": u.is_admin,
             "is_archived": u.is_archived,
+            "must_change_password": u.must_change_password,
             "is_student_active": is_student_active,
             "is_pending_delete": user_is_pending_delete(u),
             "permissions": perms
@@ -1932,7 +2235,8 @@ async def activate_students(
             db,
             f"{activated_count} student account(s) were activated for portal access.",
             "user_management_students",
-            students[0].id if students else None
+            students[0].id if students else None,
+            created_by_admin_id=current_admin.id
         )
 
     return {
@@ -1981,7 +2285,8 @@ async def deactivate_students(
             db,
             f"{deactivated_count} student account(s) were deactivated for portal access.",
             "user_management_students",
-            students[0].id if students else None
+            students[0].id if students else None,
+            created_by_admin_id=current_admin.id
         )
 
     return {
@@ -2021,7 +2326,8 @@ async def grant_admin_access(
         db,
         f"{user.full_name or user.email} was granted admin access.",
         "user_management_admin",
-        user.id
+        user.id,
+        created_by_admin_id=current_admin.id
     )
 
     return {
@@ -2056,7 +2362,8 @@ async def archive_students_by_batch(
         db,
         f"{len(students)} student account(s) from batch {batch_id} were archived.",
         "user_management_students",
-        students[0].id if students else None
+        students[0].id if students else None,
+        created_by_admin_id=admin.id
     )
 
     return {
@@ -2092,7 +2399,8 @@ async def restore_students_by_batch(
         db,
         f"{len(students)} student account(s) from batch {batch_id} were restored.",
         "user_management_students",
-        students[0].id if students else None
+        students[0].id if students else None,
+        created_by_admin_id=admin.id
     )
 
     return {
@@ -2130,7 +2438,8 @@ async def delete_students_by_batch(
             db,
             f"{count} archived student account(s) from batch {batch_id} were permanently deleted.",
             "user_management_students",
-            sample_student_id
+            sample_student_id,
+            created_by_admin_id=admin.id
         )
         return {
             "message": f"{count} archived student account(s) from batch {batch_id} deleted successfully.",
@@ -2214,7 +2523,11 @@ async def get_bulk_register_status(
 # Approve Item
 # --- FIX 2: The Approval Logic ---
 @router.post("/approve-item/{item_id}")
-async def approve_item(item_id: int, db: Session = Depends(get_db)):
+async def approve_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
     # 1. Find the pending item
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == item_id).first()
     if not pending:
@@ -2241,6 +2554,39 @@ async def approve_item(item_id: int, db: Session = Depends(get_db)):
     )
 
     db.add(new_item)
+    db.flush()
+
+    matched_lost_item = None
+    if pending.matched_item_id:
+        matched_lost_item = db.query(models.Item).filter(
+            models.Item.id == pending.matched_item_id,
+            models.Item.status == "lost",
+            models.Item.archived == False
+        ).first()
+
+    if matched_lost_item:
+        new_item.is_matched = True
+        matched_lost_item.is_matched = True
+        prepend_lost_possible_match(
+            matched_lost_item,
+            serialize_found_item_match(new_item, 0.55, previous_pending_id=pending.id)
+        )
+        claim = ensure_pending_claim_for_pair(
+            db,
+            lost_item=matched_lost_item,
+            found_item=new_item,
+            claimant_id=matched_lost_item.user_id or pending.user_id,
+            similarity_score="Auto Match"
+        )
+        db.flush()
+        create_admin_notification(
+            db,
+            f"Approved found item #{new_item.id} was linked to lost item #{matched_lost_item.id}.",
+            "match",
+            claim.id,
+            f"/admin/Reports?report_type=claim&claim_id={claim.id}",
+            created_by_admin_id=current_admin.id
+        )
 
     # 3. Remove from pending
     db.delete(pending)
@@ -2250,7 +2596,8 @@ async def approve_item(item_id: int, db: Session = Depends(get_db)):
         f"Pending item #{item_id} was approved and moved to active inventory.",
         "new_report",
         new_item.id,
-        "/admin/Found_Items_Report"
+        "/admin/Found_Items_Report",
+        created_by_admin_id=current_admin.id
     )
 
     return {"status": "success", "message": "Item approved and moved to inventory"}
@@ -2261,7 +2608,7 @@ async def approve_item(item_id: int, db: Session = Depends(get_db)):
 def archive_pending(
     pending_id: int,
     db: Session = Depends(get_db),
-    admin: str = Depends(get_current_admin)
+    current_admin: models.User = Depends(get_current_admin)
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -2274,7 +2621,8 @@ def archive_pending(
         f"Pending item #{pending_id} was archived from the approval queue.",
         "new_report",
         pending_id,
-        "/admin/Found_Items_Report"
+        "/admin/Found_Items_Report",
+        created_by_admin_id=getattr(admin, "id", None)
     )
     return {"message": "Item archived"}
 
@@ -2283,7 +2631,7 @@ def archive_pending(
 def dispose_pending_item(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_admin)
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -2319,7 +2667,8 @@ def dispose_pending_item(
             f"Pending item #{pending_id} was disposed and moved to the hidden reference dataset.",
             "new_report",
             pending_id,
-            "/admin/Found_Items_Report"
+            "/admin/Found_Items_Report",
+            created_by_admin_id=current_user.id
         )
         return {"status": "success", "message": "Pending item disposed"}
     except Exception:
@@ -2330,7 +2679,7 @@ def dispose_pending_item(
 def archive_found_item(
     item_id: int, 
     db: Session = Depends(get_db), 
-    admin: str = Depends(get_current_admin)
+    current_admin: models.User = Depends(get_current_admin)
 ):
     # 1. Search in the Items table
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
@@ -2349,11 +2698,8 @@ def archive_found_item(
 def recover_pending(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_admin)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if pending:
         pending.archived = False
@@ -2363,7 +2709,8 @@ def recover_pending(
             f"Pending item #{pending_id} was restored to the approval queue.",
             "new_report",
             pending_id,
-            "/admin/Found_Items_Report"
+            "/admin/Found_Items_Report",
+            created_by_admin_id=current_user.id
         )
         return {"status": "success", "message": "Pending item restored to approval queue", "record_type": "pending"}
 
@@ -2378,7 +2725,8 @@ def recover_pending(
             f"Archived found item #{pending_id} was restored to active inventory.",
             "new_report",
             pending_id,
-            "/admin/Found_Items_Report"
+            "/admin/Found_Items_Report",
+            created_by_admin_id=current_user.id
         )
         return {"status": "success", "message": "Archived found item restored to active inventory", "record_type": "found"}
 
@@ -2388,11 +2736,8 @@ def recover_pending(
 def recover_lost_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_admin)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -2404,7 +2749,8 @@ def recover_lost_item(
         f"Lost report #{item_id} was restored to the active list.",
         "new_report",
         item_id,
-        "/admin/Lost_Items_Report"
+        "/admin/Lost_Items_Report",
+        created_by_admin_id=current_user.id
     )
     return {"status": "success", "message": "Lost report restored to active list"}
 
@@ -2412,11 +2758,8 @@ def recover_lost_item(
 def recover_found_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_admin)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -2428,7 +2771,8 @@ def recover_found_item(
         f"Found item #{item_id} was restored to active inventory.",
         "new_report",
         item_id,
-        "/admin/Found_Items_Report"
+        "/admin/Found_Items_Report",
+        created_by_admin_id=current_user.id
     )
     return {"status": "success", "message": "Item restored to active inventory"}
 
@@ -2444,8 +2788,9 @@ async def reset_student_password(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # 1. Generate a new temporary password
-    new_temp = "STI-" + str(uuid.uuid4())[:8] 
+    # Match the temporary password format used by Generate Accounts.
+    student_no = str(student.student_no or "").strip()
+    new_temp = f"STI{student_no}" if student_no else "STI-" + str(uuid.uuid4())[:8]
     
     # 2. Hash the new password using bcrypt for security
     student.hashed_password = pwd_context.hash(new_temp)
@@ -2458,7 +2803,8 @@ async def reset_student_password(
         db,
         f"Password was reset for student {student.full_name or student.email}.",
         "user_management_students",
-        student.id
+        student.id,
+        created_by_admin_id=current_admin.id
     )
     
     return {
@@ -2501,7 +2847,7 @@ async def finalize_lost_upload(
     matched_item_id: int = Form(None), 
     db: Session = Depends(get_db),
     # 1. Add this dependency to get the logged-in user's info
-    current_user: models.User = Depends(get_current_user) 
+    current_user: models.User = Depends(get_current_admin) 
 ):
     # 2. Save the file
     try:
@@ -2583,7 +2929,8 @@ async def finalize_lost_upload(
             db,
             f"Admin {current_user.full_name} reported: {item_name}",
             related_id=new_item.id,
-            target_url="/admin/Lost_Items_Report"
+            target_url="/admin/Lost_Items_Report",
+            created_by_admin_id=current_user.id
         )
 
         return {
@@ -2620,8 +2967,7 @@ async def finalize_found_upload(
     ai_score: float = Form(0.0),       
     matched_item_id: int = Form(None), 
     db: Session = Depends(get_db),
-    # 1. Add this dependency to get the logged-in user's info
-    current_user: models.User = Depends(get_current_user) 
+    current_user: models.User = Depends(get_current_admin) 
 ):
     # 2. Save the file
     try:
@@ -2684,6 +3030,10 @@ async def finalize_found_upload(
             if lost_item and lost_item.status == "lost" and not lost_item.archived:
                 new_item.is_matched = True
                 lost_item.is_matched = True
+                prepend_lost_possible_match(
+                    lost_item,
+                    serialize_found_item_match(new_item, ai_score)
+                )
                 ensure_pending_claim_for_pair(
                     db,
                     lost_item=lost_item,
@@ -2691,6 +3041,14 @@ async def finalize_found_upload(
                     claimant_id=lost_item.user_id or new_item.user_id or current_user.id,
                     similarity_score=f"{ai_score * 100:.1f}%"
                 )
+                if lost_item.user_id:
+                    create_student_notification(
+                        db,
+                        lost_item.user_id,
+                        f"Possible match found: {current_user.full_name} registered a found {category} that may match your lost item.",
+                        "student_match",
+                        f"/student/Lost-report?item_id={lost_item.id}&show_match=1"
+                    )
 
         db.commit()
         db.refresh(new_item)
@@ -2700,7 +3058,8 @@ async def finalize_found_upload(
             db,
             f"Admin {current_user.full_name} reported: {item_name}",
             related_id=new_item.id,
-            target_url="/admin/Found_Items_Report"
+            target_url="/admin/Found_Items_Report",
+            created_by_admin_id=current_user.id
         )
 
         return {
@@ -2719,7 +3078,7 @@ async def finalize_found_upload(
 async def archive_item(
     item_id: int, 
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_admin)
 ):
     # 1. Find the item
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
@@ -2743,7 +3102,7 @@ async def archive_item(
 async def dispose_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_admin)
 ):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
@@ -2780,8 +3139,24 @@ async def dispose_item(
         raise HTTPException(status_code=500, detail="Could not dispose item")
 
 @router.get("/dashboard-stats")
-async def get_stats(admin_email: str = Depends(get_current_admin)):
-    return {"welcome": f"Hello {admin_email}", "total_items": 150}
+async def get_stats(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    return {
+        "welcome": f"Hello {current_admin.email}",
+        "pending_count": db.query(models.PendingItem.id).filter(
+            models.PendingItem.archived == False
+        ).count(),
+        "found_count": db.query(models.Item.id).filter(
+            models.Item.status == "found",
+            models.Item.archived == False
+        ).count(),
+        "approved_claim_count": db.query(models.Claim.id).filter(
+            models.Claim.status == "approved"
+        ).count(),
+    }
+
 
 # --- 8. AI & UPLOAD ROUTES ---
 def calculate_similarity(vec1_json, vec2_json):
@@ -2794,12 +3169,20 @@ def calculate_similarity(vec1_json, vec2_json):
 @router.get("/notifications")
 def get_notifications(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(get_current_admin),
+    limit: int = 50,
 ):
+    limit = max(1, min(limit, 100))
     notifications = db.query(models.Notification)\
-        .filter(~models.Notification.type.in_(["student_match", "student_update"]))\
+        .filter(
+            ~models.Notification.type.in_(["student_match", "student_update"]),
+            or_(
+                models.Notification.created_by_admin_id == None,
+                models.Notification.created_by_admin_id == current_admin.id
+            )
+        )\
         .order_by(models.Notification.created_at.desc())\
-        .limit(10)\
+        .limit(limit)\
         .all()
     
     return notifications
@@ -2811,6 +3194,10 @@ def get_notification_unread_count(
 ):
     unread_count = db.query(models.Notification).filter(
         ~models.Notification.type.in_(["student_match", "student_update"]),
+        or_(
+            models.Notification.created_by_admin_id == None,
+            models.Notification.created_by_admin_id == current_admin.id
+        ),
         models.Notification.is_read == False
     ).count()
     return {"unread_count": unread_count}
@@ -2821,10 +3208,33 @@ def mark_read(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
-    notif = db.query(models.Notification).filter(models.Notification.id == notif_id).first()
+    notif = db.query(models.Notification).filter(
+        models.Notification.id == notif_id,
+        ~models.Notification.type.in_(["student_match", "student_update"]),
+        or_(
+            models.Notification.created_by_admin_id == None,
+            models.Notification.created_by_admin_id == current_admin.id
+        )
+    ).first()
     if notif:
         notif.is_read = True
         db.commit()
+    return {"status": "success"}
+
+@router.post("/notifications/mark-all-read")
+def mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
+):
+    db.query(models.Notification).filter(
+        ~models.Notification.type.in_(["student_match", "student_update"]),
+        or_(
+            models.Notification.created_by_admin_id == None,
+            models.Notification.created_by_admin_id == current_admin.id
+        ),
+        models.Notification.is_read == False
+    ).update({models.Notification.is_read: True}, synchronize_session=False)
+    db.commit()
     return {"status": "success"}
 
 @router.post("/update-settings")
@@ -2848,7 +3258,8 @@ async def update_settings(
         f"{user.full_name or user.email} updated admin settings.",
         "user_management_admin",
         user.id,
-        "/admin/Settings"
+        "/admin/Settings",
+        created_by_admin_id=current_admin.id
     )
     return {"status": "success", "message": "Settings applied across system"}
 
@@ -2858,7 +3269,8 @@ async def create_announcement(
     title: str = Form(...),
     content: str = Form(...),
     file: UploadFile = File(...), # Changed from 'image' to 'file'
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin)
 ):
     # Keep a single active announcement by replacing the current record.
     upload_dir = Path("static/images")
@@ -2911,7 +3323,8 @@ async def create_announcement(
         f"Announcement '{announcement_title}' was updated in Content Management.",
         "new_report",
         announcement_id,
-        "/admin/Content-management"
+        "/admin/Content-management",
+        created_by_admin_id=current_admin.id
     )
     
     return {"message": message, "path": db_path}
@@ -2926,7 +3339,8 @@ async def report_confiscated(
     location: str = Form(...),
     reason: str = Form(...),
     image: UploadFile = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
 ):
     parsed_date_confiscated = None
     if date_confiscated:
@@ -2965,13 +3379,20 @@ async def report_confiscated(
     return {"message": "Success", "id": new_item.id}
 
 @router.get("/get-confiscated-items")
-async def get_confiscated_items(db: Session = Depends(get_db)):
+async def get_confiscated_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     items = db.query(models.ConfiscatedItem).order_by(models.ConfiscatedItem.created_at.desc()).all()
     return items
 
 
 @router.get("/get-confiscated-item/{item_id}")
-async def get_confiscated_item(item_id: int, db: Session = Depends(get_db)):
+async def get_confiscated_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Confiscated item not found")
@@ -2990,7 +3411,8 @@ async def update_confiscated_item(
     location: str = Form(...),
     reason: str = Form(...),
     image: UploadFile = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
@@ -3026,7 +3448,11 @@ async def update_confiscated_item(
 
 
 @router.delete("/delete-confiscated/{item_id}")
-async def delete_confiscated_item(item_id: int, db: Session = Depends(get_db)):
+async def delete_confiscated_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Confiscated item not found")

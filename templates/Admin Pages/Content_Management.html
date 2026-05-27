@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=10"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <style>
@@ -65,6 +65,12 @@
             box-shadow: 1px 1px 0 #000;
         }
 
+        .mini-action-btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 5px 5px 0px var(--dark-blue);
+
+        }
+
         .content-data-table {
             width: 100%;
             border-collapse: collapse;
@@ -102,6 +108,12 @@
             font-size: 0.9rem;
             font-weight: 700;
             white-space: nowrap;
+        }
+
+        .section-open-hint:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 5px 5px 0px var(--dark-blue);
+
         }
 
         .content-modal-card {
@@ -160,6 +172,36 @@
             cursor: pointer;
             font-weight: 700;
         }
+
+        .upload-btn {
+  
+        background-color: var(--sti-yellow);
+        border: 2px solid var(--dark-blue);
+        padding: 12px 25px;
+        border-radius: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 3px 3px 0px var(--dark-blue);
+        transition: 0.2s;
+  
+        }
+
+        .upload-btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 5px 5px 0px var(--dark-blue);
+
+        }
+
+        .action-bar {
+        display: flex;
+        justify-content: flex-end;  /* push everything to the right */
+        gap: 12px;                  /* space between buttons */
+        margin-top: 10px;
+        }
+
+        
+
+
     </style>
 
 </head> 
@@ -310,10 +352,10 @@
                <div class="action-bar">
         
         <button class="upload-btn" onclick="openModal('announcementModal')">
-            <span class="plus">+</span> Replace Announcement
+            <span class="plus"></span> Replace Announcement
         </button upload-btn >
         <a class="upload-btn" href="/admin/Content-Editor"  style="color: black; text-decoration: none; display: inline-flex; align-items: center;">
-            <span class="plus">+</span> Landing Page Update
+            <span class="plus"></span> Update Landing Page
         </a>
     </div>
 
@@ -495,7 +537,7 @@ function escapeHtml(text) {
 }
 
 function getAdminAuthHeader() {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     return token ? { "Authorization": `Bearer ${token}` } : {};
 }
 
@@ -619,7 +661,7 @@ async function deleteDepartment(departmentId, name) {
 }
     
      async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
         window.location.href = "/login";
@@ -754,6 +796,7 @@ function clearAnnouncementForm() {
 async function loadAnnouncements() {
     try {
         const response = await fetch('/api/announcements');
+        if (!response.ok) throw new Error(`Announcement request failed: ${response.status}`);
         const announcements = await response.json();
         const container = document.getElementById('announcementDisplay');
         renderAnnouncementTable(announcements);
@@ -764,7 +807,8 @@ async function loadAnnouncements() {
         }
 
         const anno = announcements[0];
-        const imgSrc = anno.image_url.startsWith('/') ? anno.image_url : `/${anno.image_url}`;
+        const imageUrl = anno.image_url || '/static/photos/default_news.jpg';
+        const imgSrc = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
 
         container.innerHTML = `
             <div style="position: relative;">
@@ -817,7 +861,7 @@ function submitAnnouncement() {
 }
 
 async function executeSubmitAnnouncement() {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const confirmBtn = document.getElementById('finalConfirmBtn');
     
     confirmBtn.innerText = "Publishing...";
@@ -871,6 +915,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 </body>
 </html>

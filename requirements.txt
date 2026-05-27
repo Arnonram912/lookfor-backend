@@ -1,14 +1,14 @@
-fastapi
+fastapi==0.103.2
 uvicorn[standard]
 sqlalchemy
 pyodbc
 python-dotenv
 python-jose
 passlib[bcrypt]
-bcrypt
+bcrypt==4.0.1
 python-multipart
 jinja2
-pydantic[email]
+pydantic[email]==1.10.15
 pillow
 numpy
 torch

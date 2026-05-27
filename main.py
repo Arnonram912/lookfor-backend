@@ -1,4 +1,6 @@
-import os, shutil, json, time, torch, numpy as np, io
+import os, shutil, json, time, numpy as np, io
+import asyncio
+import sys
 import smtplib
 from datetime import datetime, timedelta, date
 from typing import List
@@ -8,7 +10,8 @@ from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPExcep
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from fastapi.responses import RedirectResponse
+from sqlalchemy.orm import Session, joinedload, load_only
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from dotenv import load_dotenv
@@ -21,7 +24,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, EmailStr
 import models  # This is already there
 from database import engine, get_db
-from utils import UPLOAD_FOLDER, save_file, resolve_category_name, validate_upload_file_size
+from utils import UPLOAD_FOLDER, public_file_url, save_file, resolve_category_name, validate_upload_file_size
 from sqlalchemy import and_, or_, func
 from sqlalchemy import text
 from clip_test import (
@@ -30,13 +33,12 @@ from clip_test import (
     get_text_embedding,
     get_image_embedding,
     get_multi_image_embedding,
-    model,
-    processor
+    get_clip_components
 )
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from admin_messages import router as admin_messages_router
-from admin_routes import router as admin_router, create_admin_notification
+from admin_routes import ADMIN_PERMISSION_KEYS, ROOT_ADMIN_EMAIL, router as admin_router, create_admin_notification
 from student_routes import router as student_router
 from security import (
     pwd_context,
@@ -47,6 +49,10 @@ from security import (
     get_password_hash,
     get_login_email_candidates,
 )
+
+if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -66,14 +72,186 @@ pending_items = []
 main_items = []
 archive_items = []
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/uploads", StaticFiles(directory=os.path.join("static", "uploads")), name="uploads")
-templates = Jinja2Templates(directory="templates")
-# This makes sure we always use the SAME folder at the very top of your project
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+STATIC_UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
+STATIC_PROFILE_PICS_DIR = os.path.join(STATIC_DIR, "profile_pics")
+DEFAULT_PROFILE_PIC = "static/photos/default-student-avatar.jpg"
+
+os.makedirs(STATIC_UPLOADS_DIR, exist_ok=True)
+os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/uploads", StaticFiles(directory=STATIC_UPLOADS_DIR), name="uploads")
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+# This makes sure we always use the SAME folder at the very top of your project
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads") # No "static/" prefix here
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+PAGE_ALIASES = {
+    "/": {
+        "alias": "a26e5a70-842d-5491-9b8c-b61a8ca8b966",
+        "template": "landing.html",
+        "label": "Landing",
+    },
+    "/login": {
+        "alias": "4a2eaf02-397b-5056-9df5-79abe6c14b94",
+        "template": "index.html",
+        "label": "Login",
+    },
+    "/explore": {
+        "alias": "a5908eca-4f65-54c8-bdfb-78722c278680",
+        "template": "explorefeature.html",
+        "label": "Explore",
+    },
+    "/about": {
+        "alias": "6384a023-7141-53be-867e-37b9fd08a7e6",
+        "template": "aboutlookfor.html",
+        "label": "About",
+    },
+    "/admin/dashboard": {
+        "alias": "e93ae889-11fa-5e89-9bda-0083b7f07538",
+        "template": "admin.20.html",
+        "label": "Admin Dashboard",
+        "no_store": True,
+    },
+    "/admin/User-Management": {
+        "alias": "6e1f2095-4d3c-5a1b-b77b-0a476a2d3740",
+        "template": "Admin Pages/User_Management.html",
+        "label": "User Management",
+    },
+    "/admin/Messages": {
+        "alias": "073de3ca-5067-553d-90ba-9033ea9be665",
+        "template": "Admin Pages/Admin_Message.html",
+        "label": "Admin Messages",
+    },
+    "/admin/Lost_Items_Report": {
+        "alias": "6a12cb4b-be2c-83ec-ae4b-671169ad8496",
+        "template": "Admin Pages/Lost_item_Report.html",
+        "label": "Lost Items Report",
+    },
+    "/admin/Found_Items_Report": {
+        "alias": "f63b7f52-4bb0-5d24-8a09-80b3d1f77db2",
+        "template": "Admin Pages/Found_item_Report.html",
+        "label": "Surrendered Items",
+    },
+    "/admin/Claim-Management": {
+        "alias": "f97a07ee-7138-519e-8e81-c077ced9ee0a",
+        "template": "Admin Pages/Claim_Management.html",
+        "label": "Claim Management",
+    },
+    "/admin/Reports": {
+        "alias": "8c2dc56e-79ae-5939-890e-315c8a959b32",
+        "template": "Admin Pages/Reports.html",
+        "label": "Reports",
+    },
+    "/admin/Profile": {
+        "alias": "0e9d22b0-07ed-5a24-aa20-6063d5c9ebfa",
+        "template": "Admin Pages/Admin_Profile.html",
+        "label": "Admin Profile",
+        "no_store": True,
+    },
+    "/admin/Settings": {
+        "alias": "7d38a2ff-96c7-5851-875e-7a3112aeddf1",
+        "template": "Admin Pages/Setting.html",
+        "label": "Admin Settings",
+        "no_store": True,
+    },
+    "/admin/Confiscated-items": {
+        "alias": "dd5c6fcb-8cb9-54c8-bb07-d8b3f6e2aa79",
+        "template": "Admin Pages/Confiscated_Item.html",
+        "label": "Confiscated Items",
+    },
+    "/admin/Content-management": {
+        "alias": "ab3bc951-819c-5bd7-aa04-2740b55a64a4",
+        "template": "Admin Pages/Content_Management.html",
+        "label": "Content Management",
+    },
+    "/admin/Content-management/features": {
+        "alias": "cf6ffae9-1082-5e37-b051-3fffd2866f74",
+        "template": "Admin Pages/admin_cms_features.html",
+        "label": "Content Features",
+    },
+    "/admin/Content-management/about": {
+        "alias": "cb34df2e-2169-53c8-897d-cac57f3ae592",
+        "template": "Admin Pages/admin_cms_about.html",
+        "label": "Content About",
+    },
+    "/admin/Content-Editor": {
+        "alias": "d5e2c76e-2d33-5318-ba15-b150695800aa",
+        "template": "Admin Pages/admin_cms.html",
+        "label": "Content Editor",
+    },
+    "/student/dashboard": {
+        "alias": "1372b8da-4295-5e64-b0c6-376dcfb310ad",
+        "template": "student2.0.html",
+        "label": "Student Dashboard",
+        "no_store": True,
+    },
+    "/student/Messages": {
+        "alias": "bf9af01e-6b61-56aa-b2fd-43b592474c81",
+        "template": "Student Pages/Student_Messages.html",
+        "label": "Student Messages",
+        "no_store": True,
+    },
+    "/student/Lost-report": {
+        "alias": "d42d0341-7220-58bf-a645-ea50972513ae",
+        "template": "Student Pages/Student_LostReport.html",
+        "label": "Student Lost Report",
+        "no_store": True,
+    },
+    "/student/Found-report": {
+        "alias": "0ca573bb-ece0-5781-87b8-b9bcf42fcc3d",
+        "template": "Student Pages/Student_FoundReport.html",
+        "label": "Student Found Report",
+        "no_store": True,
+    },
+    "/student/profile": {
+        "alias": "49546104-8ce2-52b6-ac6f-b67c42712b7e",
+        "template": "Student Pages/Student_profile.html",
+        "label": "Student Profile",
+        "no_store": True,
+    },
+    "/student/settings": {
+        "alias": "4f67af6c-1801-509b-916f-5d8daa20bd0d",
+        "template": "Student Pages/Student_Settings.html",
+        "label": "Student Settings",
+        "no_store": True,
+    },
+}
+
+PAGE_ALIAS_BY_ID = {
+    data["alias"]: {"path": path, **data}
+    for path, data in PAGE_ALIASES.items()
+}
+
+
+def set_no_store_headers(response: Response) -> None:
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+
+
+@app.middleware("http")
+async def redirect_page_paths_to_aliases(request: Request, call_next):
+    if request.method == "GET" and request.url.path in PAGE_ALIASES:
+        alias_path = f"/c/{PAGE_ALIASES[request.url.path]['alias']}"
+        if request.url.query:
+            alias_path = f"{alias_path}?{request.url.query}"
+        return RedirectResponse(alias_path, status_code=307)
+    return await call_next(request)
+
+
+@app.get("/c/{alias_id}")
+def hashed_page(alias_id: str, request: Request, response: Response):
+    page = PAGE_ALIAS_BY_ID.get(alias_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+
+    if page.get("no_store"):
+        set_no_store_headers(response)
+
+    return templates.TemplateResponse(page["template"], {"request": request})
 
 GMAIL_SENDER_EMAIL = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "").strip()
@@ -153,6 +331,33 @@ def ensure_item_possible_matches_column():
         connection.execute(text(statement))
 
 
+def ensure_item_id_column():
+    statement = """
+    IF COL_LENGTH('items', 'item_id') IS NULL
+    BEGIN
+        ALTER TABLE items ADD item_id AS id
+    END
+    """
+    with engine.begin() as connection:
+        connection.execute(text(statement))
+
+
+def ensure_item_code_column():
+    statement = """
+    IF COL_LENGTH('items', 'item_code') IS NULL
+    BEGIN
+        ALTER TABLE items ADD item_code AS
+            CASE
+                WHEN status = 'lost' THEN 'LOST-' + RIGHT('000000' + CONVERT(VARCHAR(20), id), 6)
+                WHEN status = 'found' THEN 'FOUND-' + RIGHT('000000' + CONVERT(VARCHAR(20), id), 6)
+                ELSE 'ITEM-' + RIGHT('000000' + CONVERT(VARCHAR(20), id), 6)
+            END
+    END
+    """
+    with engine.begin() as connection:
+        connection.execute(text(statement))
+
+
 def ensure_notification_columns():
     statements = [
         """
@@ -160,7 +365,58 @@ def ensure_notification_columns():
         BEGIN
             ALTER TABLE notifications ADD target_url NVARCHAR(500) NULL
         END
+        """,
         """
+        IF COL_LENGTH('notifications', 'created_by_admin_id') IS NULL
+        BEGIN
+            ALTER TABLE notifications ADD created_by_admin_id INT NULL
+        END
+        """
+    ]
+
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_report_module_indexes():
+    statements = [
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_items_report_module' AND object_id = OBJECT_ID('items'))
+        BEGIN
+            CREATE INDEX ix_items_report_module ON items (archived, status, created_at)
+        END
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_items_user_id' AND object_id = OBJECT_ID('items'))
+        BEGIN
+            CREATE INDEX ix_items_user_id ON items (user_id)
+        END
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_claims_created_at' AND object_id = OBJECT_ID('claims'))
+        BEGIN
+            CREATE INDEX ix_claims_created_at ON claims (created_at)
+        END
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_claim_decision_reports_claim_id' AND object_id = OBJECT_ID('claim_decision_reports'))
+        BEGIN
+            CREATE INDEX ix_claim_decision_reports_claim_id ON claim_decision_reports (claim_id)
+        END
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_reference_items_deleted_at' AND object_id = OBJECT_ID('reference_items'))
+        BEGIN
+            CREATE INDEX ix_reference_items_deleted_at ON reference_items (deleted_at)
+        END
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_confiscated_items_created_at' AND object_id = OBJECT_ID('confiscated_items'))
+        BEGIN
+            CREATE INDEX ix_confiscated_items_created_at ON confiscated_items (created_at)
+        END
+        """,
     ]
 
     with engine.begin() as connection:
@@ -336,11 +592,14 @@ def auto_archive_pending(db: Session):
 @app.on_event("startup")
 def create_default_admin():
     ensure_user_settings_columns()
+    ensure_item_id_column()
+    ensure_item_code_column()
     ensure_item_possible_matches_column()
     ensure_notification_columns()
+    ensure_report_module_indexes()
     db = next(get_db())
     try:
-        admin_email = "admin@novaliches.sti.edu.ph"
+        admin_email = ROOT_ADMIN_EMAIL
         admin_full_name = "LookForAdministrator"
         admin = db.query(models.User).filter(models.User.email == admin_email).first()
         if not admin:
@@ -349,7 +608,8 @@ def create_default_admin():
                 email=admin_email,
                 hashed_password=hashed_pw,
                 full_name=admin_full_name,
-                is_admin=True
+                is_admin=True,
+                must_change_password=False
             )
             db.add(new_admin)
             db.commit()
@@ -366,24 +626,30 @@ def create_default_admin():
         ).first() if admin else None
 
         if target_admin:
+            root_changed = False
+            if not target_admin.is_admin:
+                target_admin.is_admin = True
+                root_changed = True
+
+            if target_admin.must_change_password:
+                target_admin.must_change_password = False
+                root_changed = True
+
             try:
                 current_permissions = json.loads(target_admin.permissions) if target_admin.permissions else []
             except (json.JSONDecodeError, TypeError):
                 current_permissions = []
 
-            required_permissions = [
-                "User-Management",
-                "User-Management-Create",
-                "User-Management-Edit",
-                "User-Management-Archive",
-                "User-Management-Delete",
-            ]
+            required_permissions = ADMIN_PERMISSION_KEYS
 
             updated_permissions = list(dict.fromkeys(current_permissions + required_permissions))
             if updated_permissions != current_permissions:
                 target_admin.permissions = json.dumps(updated_permissions)
+                root_changed = True
+
+            if root_changed:
                 db.commit()
-                print(f"Granted User Management access bundle to {admin_full_name}")
+                print(f"Normalized root admin access for {admin_full_name}")
 
     finally:
         db.close()
@@ -403,8 +669,7 @@ async def login_for_access_token(
 
     if not user:
         raise HTTPException(
-            status_code=401,
-            detail="invalid_email"
+            status_code=401, detail="invalid_email"
         )
 
     # 2. Check if password is correct
@@ -583,7 +848,7 @@ async def refresh_access_token(
 # --- 6. PAGE ROUTES (HTML) ---
 @app.get("/")
 def landing_page(request: Request):
-    return templates.TemplateResponse("Landing.html", {"request": request})
+    return templates.TemplateResponse("landing.html", {"request": request})
 
 @app.get("/login")
 def login_page(request: Request):
@@ -677,6 +942,29 @@ def get_user_role_label(user: models.User) -> str:
     return "Faculty" if has_department and not has_course and not has_section else "Student"
 
 
+def deployed_static_path(path: str | None, fallback: str = DEFAULT_PROFILE_PIC) -> str:
+    raw_path = str(path or "").strip().split("?", 1)[0]
+    if not raw_path:
+        return fallback
+
+    if raw_path.startswith(("http://", "https://", "//")):
+        return raw_path
+
+    normalized_path = raw_path.lstrip("/").replace("\\", "/")
+    if not normalized_path.startswith("static/"):
+        return raw_path
+
+    physical_path = os.path.abspath(os.path.join(BASE_DIR, *normalized_path.split("/")))
+    static_root = os.path.abspath(STATIC_DIR)
+    if os.path.commonpath([static_root, physical_path]) != static_root:
+        return fallback
+
+    if os.path.isfile(physical_path) and os.path.getsize(physical_path) > 0:
+        return public_file_url(normalized_path)
+
+    return public_file_url(fallback)
+
+
 @app.get("/api/current-user")
 def get_current_user_profile(current_user: models.User = Depends(get_current_user)):
     role_label = get_user_role_label(current_user)
@@ -698,7 +986,7 @@ def get_current_user_profile(current_user: models.User = Depends(get_current_use
         "section": current_user.section,
         "level": getattr(current_user, "level", None),
         "department": current_user.department,
-        "profile_pic": current_user.profile_pic,
+        "profile_pic": deployed_static_path(current_user.profile_pic),
         "is_admin": bool(current_user.is_admin),
         "role_label": role_label,
         "is_student_active": is_student_active,
@@ -800,10 +1088,12 @@ async def quick_compare(
     # Process image
     image_bytes = await file.read()
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    inputs = processor(images=img, return_tensors="pt")
+    model_obj, processor_obj = get_clip_components()
+    inputs = processor_obj(images=img, return_tensors="pt")
 
+    import torch
     with torch.no_grad():
-        outputs = model.get_image_features(**inputs)
+        outputs = model_obj.get_image_features(**inputs)
         if hasattr(outputs, "pooler_output"):
             feat = outputs.pooler_output
         else:
@@ -836,7 +1126,7 @@ async def quick_compare(
             "id": best_item.id if best_item else None,
             "category": best_item.category if best_item else None,
             "description": best_item.description if best_item else None,
-            "image_path": best_item.image_path if best_item else None,
+            "image_path": public_file_url(best_item.image_path) if best_item else None,
         }
     }
 
@@ -914,7 +1204,7 @@ def compute_text_detail_matches(
 ):
     normalized_status = " ".join(str(status or "").strip().lower().split())
     normalized_category = (category or "").strip()
-    if normalized_status != "lost":
+    if normalized_status not in {"lost", "found"}:
         return {
             "highest_score": 0.0,
             "generated_embedding": search_vec.tolist(),
@@ -923,7 +1213,7 @@ def compute_text_detail_matches(
             "action": "no_match"
         }
 
-    target_status = "found"
+    target_status = "found" if normalized_status == "lost" else "lost"
 
     if not normalized_category:
         return {
@@ -953,7 +1243,7 @@ def compute_text_detail_matches(
         models.ReferenceItem.image_embedding.isnot(None)
     ).all()
 
-    strict_match_threshold = 0.68
+    strict_match_threshold = 0.55
     possible_match_threshold = 0.45   # adjust if needed
 
     all_matches = []
@@ -973,7 +1263,7 @@ def compute_text_detail_matches(
                     dataset_text_vec = get_text_embedding(item_dataset_text)
                     text_score = float(np.dot(query_text_vec, dataset_text_vec))
 
-                score = (image_score * 0.7) + (text_score * 0.3)
+                score = (image_score * 0.6) + (text_score * 0.4)
 
                 normalized_brand = normalize_match_value(brand)
                 item_brand = normalize_match_value(item.brand)
@@ -1004,7 +1294,7 @@ def compute_text_detail_matches(
                         "score": round(score, 4),
                         "category": item.category_relationship.name if getattr(item, "category_relationship", None) else item.category,
                         "location": item.location,
-                        "image_path": item.image_path,
+                        "image_path": public_file_url(item.image_path),
                         "brand": item.brand,
                         "color": item.color,
                         "description": item.description
@@ -1133,7 +1423,7 @@ def get_saved_item_possible_matches(
             return {
                 "highest_score": round(highest_score, 4),
                 "generated_embedding": [],
-                "matched_item": best_match if highest_score >= 0.68 else None,
+                "matched_item": best_match if highest_score >= 0.55 else None,
                 "matched_items": saved_matches,
                 "action": "show_match"
             }
@@ -1303,9 +1593,6 @@ async def save_found_item(
     return {"message": "Submitted successfully", "pending_id": new_pending.id}
 
 
-# 1. Make sure you import your clip_test components at the top of main.py
-from clip_test import model, processor, get_text_embedding
-
 @app.post("/api/lost-report-upload")
 async def lost_report_upload(
     category: str = Form(...),
@@ -1360,7 +1647,7 @@ async def lost_report_upload(
 
     best_match_id = None
     final_score = 0.0
-    THRESHOLD = 0.78 
+    THRESHOLD = 0.55
     matched_found_item = None
 
     for item in found_items:
@@ -1604,9 +1891,9 @@ def get_claims(
             "status": claim.status,
             "lost_item": {
                 "category": lost.category if lost else "No lost report",
-                "image": lost.image_path if lost else None
+                "image": public_file_url(lost.image_path) if lost else None
             },
-            "found_item": {"category": found.category, "image": found.image_path},
+            "found_item": {"category": found.category, "image": public_file_url(found.image_path)},
             "claimant": {
                 "name": claimant_name,
                 "student_no": proof.claimant_student_no if proof else None,
@@ -1696,14 +1983,17 @@ def apply_claim_decision(
 
 def build_claim_report_payload(
     claim: models.Claim,
-    db: Session
+    db: Session,
+    decision_report: models.ClaimDecisionReport | None = None
 ):
-    lost = db.query(models.Item).filter(models.Item.id == claim.lost_item_id).first()
-    found = db.query(models.Item).filter(models.Item.id == claim.found_item_id).first()
-    proof = db.query(models.ClaimProof).filter(models.ClaimProof.claim_id == claim.id).first()
-    report = db.query(models.ClaimDecisionReport).filter(
-        models.ClaimDecisionReport.claim_id == claim.id
-    ).first()
+    lost = claim.lost_item or db.query(models.Item).filter(models.Item.id == claim.lost_item_id).first()
+    found = claim.found_item or db.query(models.Item).filter(models.Item.id == claim.found_item_id).first()
+    proof = claim.proof or db.query(models.ClaimProof).filter(models.ClaimProof.claim_id == claim.id).first()
+    report = decision_report
+    if report is None:
+        report = db.query(models.ClaimDecisionReport).filter(
+            models.ClaimDecisionReport.claim_id == claim.id
+        ).first()
 
     claimant = claim.claimant
     claimant_name = format_user_display_name(claimant)
@@ -1722,18 +2012,30 @@ def build_claim_report_payload(
     elif found:
         item_name = getattr(found, "item_name", None) or found.category
 
+    lost_item_id = getattr(lost, "item_id", None) or (lost.id if lost else None)
+    found_item_id = getattr(found, "item_id", None) or (found.id if found else None)
+    lost_item_code = getattr(lost, "item_code", None) if lost else None
+    found_item_code = getattr(found, "item_code", None) if found else None
+    status_label = "Claimed" if claim.status == "approved" else (claim.status.title() if claim.status else "Pending")
+
     return {
         "claim_id": claim.id,
+        "lost_item_id": lost_item_id,
+        "found_item_id": found_item_id,
+        "lost_item_code": lost_item_code,
+        "found_item_code": found_item_code,
         "item_name": item_name or "Unspecified Item",
         "date_claimed": claim.created_at.isoformat() if claim.created_at else None,
-        "status": claim.status.title() if claim.status else "Pending",
+        "status": status_label,
         "claimant": {
             "full_name": claimant_name,
             "student_employee_id": claimant_student_no or "Not available",
             "department_course": claimant_department_or_course or "Not available",
-            "proof_id_image": proof.id_image_path if proof else None,
+            "proof_id_image": public_file_url(proof.id_image_path) if proof else None,
         },
         "item_description": {
+            "item_id": lost_item_id or found_item_id,
+            "item_code": lost_item_code or found_item_code,
             "item_name": (
                 getattr(lost, "item_name", None)
                 or (lost.category if lost else None)
@@ -1763,9 +2065,9 @@ def build_claim_report_payload(
         },
         "matched_item": {
             "category": found.category if found else "Unknown",
-            "image": found.image_path if found else None,
+            "image": public_file_url(found.image_path) if found else None,
         },
-        "report_image": report.report_image_path if report else None,
+        "report_image": public_file_url(report.report_image_path) if report else None,
         "report_exists": bool(report),
     }
 
@@ -1859,11 +2161,37 @@ def get_report_module_data(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
+    normalized_report_type = " ".join(str(report_type or "all").strip().lower().replace("-", "_").split())
+    report_type_aliases = {
+        "lost and found": "lost_found",
+        "lost & found": "lost_found",
+        "lostfound": "lost_found",
+        "lost_found_items": "lost_found",
+    }
+    report_type = report_type_aliases.get(normalized_report_type, normalized_report_type)
+    valid_report_types = {"all", "lost", "found", "lost_found", "claim", "confiscated", "disposal"}
+    if report_type not in valid_report_types:
+        report_type = "all"
+
     def normalize(value) -> str:
         return " ".join(str(value or "").strip().lower().split())
 
     def display_name(user: models.User | None) -> str:
         return format_user_display_name(user)
+
+    def item_report_id(item: models.Item | None) -> int | None:
+        if not item:
+            return None
+        return getattr(item, "item_id", None) or item.id
+
+    def item_report_code(item: models.Item | None) -> str | None:
+        if not item:
+            return None
+        report_id = item_report_id(item)
+        if getattr(item, "item_code", None):
+            return item.item_code
+        prefix = "LOST" if item.status == "lost" else ("FOUND" if item.status == "found" else "ITEM")
+        return f"{prefix}-{report_id:06d}" if report_id is not None else None
 
     def parse_date(value):
         if value is None:
@@ -1904,26 +2232,62 @@ def get_report_module_data(
 
     rows: list[dict] = []
 
-    if report_type in {"all", "lost", "found"}:
-        item_query = db.query(models.Item).filter(models.Item.archived == False)
+    if report_type in {"all", "lost", "found", "lost_found"}:
+        item_query = (
+            db.query(models.Item)
+            .options(
+                load_only(
+                    models.Item.id,
+                    models.Item.item_id,
+                    models.Item.item_code,
+                    models.Item.status,
+                    models.Item.category,
+                    models.Item.created_at,
+                    models.Item.brand,
+                    models.Item.color,
+                    models.Item.archived,
+                    models.Item.location,
+                    models.Item.date,
+                    models.Item.user_id,
+                    models.Item.description,
+                    models.Item.image_path,
+                ),
+                joinedload(models.Item.owner).load_only(
+                    models.User.id,
+                    models.User.full_name,
+                    models.User.first_name,
+                    models.User.middle_name,
+                    models.User.last_name,
+                ),
+            )
+            .filter(models.Item.archived == False)
+        )
         if report_type == "lost":
             item_query = item_query.filter(models.Item.status == "lost")
         elif report_type == "found":
             item_query = item_query.filter(models.Item.status == "found")
+        elif report_type == "lost_found":
+            item_query = item_query.filter(models.Item.status.in_(["lost", "found"]))
 
         for item in item_query.order_by(models.Item.created_at.desc()).all():
-            owner = db.query(models.User).filter(models.User.id == item.user_id).first() if item.user_id else None
+            owner = item.owner
+            report_item_id = item_report_id(item)
+            report_item_code = item_report_code(item)
             rows.append({
                 "row_type": item.status or "item",
-                "row_id": f"ITEM-{item.id}",
+                "row_id": report_item_code or f"ITEM-{report_item_id}",
+                "item_id": report_item_id,
+                "item_code": report_item_code,
                 "item": item.category or "Unspecified Item",
                 "category": item.category or "Uncategorized",
                 "location": item.location or "Not specified",
                 "status": "Lost" if item.status == "lost" else "Found",
                 "date": item.date.isoformat() if item.date else (item.created_at.isoformat() if item.created_at else None),
                 "reported_by": display_name(owner),
-                "image_path": item.image_path,
+                "image_path": public_file_url(item.image_path),
                 "details": {
+                    "Item Code": report_item_code or "Not specified",
+                    "Item ID": report_item_id,
                     "Title": item.category or "Unspecified Item",
                     "Type": "Lost Item" if item.status == "lost" else "Found Item",
                     "Category": item.category or "Uncategorized",
@@ -1938,11 +2302,74 @@ def get_report_module_data(
             })
 
     if report_type in {"all", "claim"}:
-        for claim in db.query(models.Claim).order_by(models.Claim.created_at.desc()).all():
-            report = build_claim_report_payload(claim, db)
+        claim_query = (
+            db.query(models.Claim)
+            .options(
+                load_only(
+                    models.Claim.id,
+                    models.Claim.lost_item_id,
+                    models.Claim.found_item_id,
+                    models.Claim.claimant_id,
+                    models.Claim.status,
+                    models.Claim.created_at,
+                ),
+                joinedload(models.Claim.lost_item).load_only(
+                    models.Item.id,
+                    models.Item.item_id,
+                    models.Item.item_code,
+                    models.Item.category,
+                    models.Item.brand,
+                    models.Item.color,
+                    models.Item.date,
+                    models.Item.location,
+                ),
+                joinedload(models.Claim.found_item).load_only(
+                    models.Item.id,
+                    models.Item.item_id,
+                    models.Item.item_code,
+                    models.Item.category,
+                    models.Item.brand,
+                    models.Item.color,
+                    models.Item.date,
+                    models.Item.location,
+                    models.Item.image_path,
+                ),
+                joinedload(models.Claim.claimant).load_only(
+                    models.User.id,
+                    models.User.full_name,
+                    models.User.first_name,
+                    models.User.middle_name,
+                    models.User.last_name,
+                    models.User.student_no,
+                    models.User.course,
+                    models.User.department,
+                ),
+                joinedload(models.Claim.proof).load_only(
+                    models.ClaimProof.claim_id,
+                    models.ClaimProof.claimant_student_no,
+                    models.ClaimProof.id_image_path,
+                ),
+            )
+            .order_by(models.Claim.created_at.desc())
+        )
+        claims = claim_query.all()
+        claim_ids = [claim.id for claim in claims]
+        decision_reports = {}
+        if claim_ids:
+            decision_reports = {
+                report.claim_id: report
+                for report in db.query(models.ClaimDecisionReport)
+                .filter(models.ClaimDecisionReport.claim_id.in_(claim_ids))
+                .all()
+            }
+
+        for claim in claims:
+            report = build_claim_report_payload(claim, db, decision_reports.get(claim.id))
             rows.append({
                 "row_type": "claim",
                 "row_id": f"CL-{claim.id}",
+                "item_id": report["item_description"]["item_id"],
+                "item_code": report["item_description"]["item_code"],
                 "item": report["item_name"],
                 "category": report["item_description"]["item_name"],
                 "location": report["item_description"]["location_lost"],
@@ -1952,6 +2379,10 @@ def get_report_module_data(
                 "image_path": report["matched_item"]["image"],
                 "details": {
                     "Claim ID": claim.id,
+                    "Lost Item Code": report["lost_item_code"] or "Not specified",
+                    "Lost Item ID": report["lost_item_id"] or "Not specified",
+                    "Found Item Code": report["found_item_code"] or "Not specified",
+                    "Found Item ID": report["found_item_id"] or "Not specified",
                     "Item name": report["item_name"],
                     "Status": report["status"],
                     "Date claimed": report["date_claimed"] or "Not specified",
@@ -1968,18 +2399,40 @@ def get_report_module_data(
             })
 
     if report_type in {"all", "confiscated"}:
-        for confiscated in db.query(models.ConfiscatedItem).order_by(models.ConfiscatedItem.created_at.desc()).all():
+        for confiscated in (
+            db.query(models.ConfiscatedItem)
+            .options(
+                load_only(
+                    models.ConfiscatedItem.id,
+                    models.ConfiscatedItem.category,
+                    models.ConfiscatedItem.brand,
+                    models.ConfiscatedItem.color,
+                    models.ConfiscatedItem.date_confiscated,
+                    models.ConfiscatedItem.location,
+                    models.ConfiscatedItem.estimated_time,
+                    models.ConfiscatedItem.reason,
+                    models.ConfiscatedItem.image_path,
+                    models.ConfiscatedItem.created_at,
+                )
+            )
+            .order_by(models.ConfiscatedItem.created_at.desc())
+            .all()
+        ):
             rows.append({
                 "row_type": "confiscated",
                 "row_id": f"CONF-{confiscated.id}",
+                "item_id": confiscated.id,
+                "item_code": f"CONF-{confiscated.id:06d}",
                 "item": confiscated.category or "Confiscated Item",
                 "category": confiscated.category or "Uncategorized",
                 "location": confiscated.location or "Not specified",
                 "status": "Confiscated",
                 "date": confiscated.date_confiscated.isoformat() if confiscated.date_confiscated else (confiscated.created_at.isoformat() if confiscated.created_at else None),
                 "reported_by": "Admin",
-                "image_path": confiscated.image_path,
+                "image_path": public_file_url(confiscated.image_path),
                 "details": {
+                    "Item ID": confiscated.id,
+                    "Item Code": f"CONF-{confiscated.id:06d}",
                     "Title": confiscated.category or "Confiscated Item",
                     "Reason": confiscated.reason or "Not specified",
                     "Brand": confiscated.brand or "Not specified",
@@ -1992,19 +2445,50 @@ def get_report_module_data(
             })
 
     if report_type in {"all", "disposal"}:
-        for ref in db.query(models.ReferenceItem).order_by(models.ReferenceItem.deleted_at.desc()).all():
-            owner = db.query(models.User).filter(models.User.id == ref.user_id).first() if ref.user_id else None
+        reference_items = (
+            db.query(models.ReferenceItem)
+            .options(
+                load_only(
+                    models.ReferenceItem.id,
+                    models.ReferenceItem.category,
+                    models.ReferenceItem.status,
+                    models.ReferenceItem.brand,
+                    models.ReferenceItem.color,
+                    models.ReferenceItem.location,
+                    models.ReferenceItem.user_id,
+                    models.ReferenceItem.deleted_reason,
+                    models.ReferenceItem.deleted_at,
+                    models.ReferenceItem.image_path,
+                )
+            )
+            .order_by(models.ReferenceItem.deleted_at.desc())
+            .all()
+        )
+        owner_ids = {ref.user_id for ref in reference_items if ref.user_id}
+        reference_owners = {}
+        if owner_ids:
+            reference_owners = {
+                user.id: user
+                for user in db.query(models.User).filter(models.User.id.in_(owner_ids)).all()
+            }
+
+        for ref in reference_items:
+            owner = reference_owners.get(ref.user_id)
             rows.append({
                 "row_type": "disposal",
                 "row_id": f"REF-{ref.id}",
+                "item_id": ref.id,
+                "item_code": f"REF-{ref.id:06d}",
                 "item": ref.category or "Disposed Item",
                 "category": ref.category or "Uncategorized",
                 "location": ref.location or "Not specified",
                 "status": "Disposed",
                 "date": ref.deleted_at.isoformat() if ref.deleted_at else None,
                 "reported_by": display_name(owner),
-                "image_path": ref.image_path,
+                "image_path": public_file_url(ref.image_path),
                 "details": {
+                    "Item ID": ref.id,
+                    "Item Code": f"REF-{ref.id:06d}",
                     "Title": ref.category or "Disposed Item",
                     "Status": ref.status or "Unknown",
                     "Deleted Reason": ref.deleted_reason or "Not specified",
@@ -2029,6 +2513,7 @@ def get_report_module_data(
         if normalized_search:
             haystack = normalize(" ".join([
                 str(row["row_id"]),
+                str(row.get("item_id") or ""),
                 str(row["item"]),
                 str(row["category"]),
                 str(row["location"]),
@@ -2228,10 +2713,22 @@ def get_categories(db: Session = Depends(get_db)):
 async def get_announcements(db: Session = Depends(get_db)):
     # Return only the current active announcement.
     latest = db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).first()
-    return [latest] if latest else []
+    if not latest:
+        return []
+
+    return [{
+        "id": latest.id,
+        "title": latest.title or "",
+        "content": latest.content or "",
+        "image_url": public_file_url(latest.image_url, "/static/photos/default_news.jpg"),
+        "created_at": latest.created_at.isoformat() if latest.created_at else None,
+    }]
 
 @app.get("/api/students")
-def get_students(db: Session = Depends(get_db)):
+def get_students(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
     students = db.query(models.User).filter(models.User.is_admin == False).all()
     
     result = []
@@ -2569,7 +3066,7 @@ async def get_landing_content(db: Session = Depends(get_db)):
         response["hero"] = {
             "title": hero_data.title,
             "description": hero_data.description,
-            "image_path": hero_data.image_path  # Added this!
+            "image_path": public_file_url(hero_data.image_path)  # Added this!
         }
     else:
         # Default Fallback
@@ -2584,7 +3081,7 @@ async def get_landing_content(db: Session = Depends(get_db)):
         response["why_choose_us"] = {
             "title": why_data.title,
             "description": why_data.description,
-            "image_path": why_data.image_path  # Added this!
+            "image_path": public_file_url(why_data.image_path)  # Added this!
         }
     else:
         # Default Fallback
@@ -2597,7 +3094,7 @@ async def get_landing_content(db: Session = Depends(get_db)):
         response["cta_feature"] = {
             "title": cta_data.title,
             "description": cta_data.description,
-            "image_path": cta_data.image_path  # Added this!
+            "image_path": public_file_url(cta_data.image_path)  # Added this!
         }
 
     if reunite_data:
@@ -2631,22 +3128,22 @@ async def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": feature_1_data.title if feature_1_data else "AI Image-Text Matching",
             "description": feature_1_data.description if feature_1_data else "Get image-text matching to quickly match the lost and found item",
-            "image_path": feature_1_data.image_path if feature_1_data and feature_1_data.image_path else "/static/images/ai.png",
+            "image_path": public_file_url(feature_1_data.image_path, "/static/images/ai.png") if feature_1_data else "/static/images/ai.png",
         },
         {
             "title": feature_2_data.title if feature_2_data else "Lost and Found Report",
             "description": feature_2_data.description if feature_2_data else "Report lost and found item to easily reunite the item with its owner",
-            "image_path": feature_2_data.image_path if feature_2_data and feature_2_data.image_path else "/static/images/glass.png",
+            "image_path": public_file_url(feature_2_data.image_path, "/static/images/glass.png") if feature_2_data else "/static/images/glass.png",
         },
         {
             "title": feature_3_data.title if feature_3_data else "Conversation Chatbox",
             "description": feature_3_data.description if feature_3_data else "Connect with administrator to further discuss the surrendering and retrieving...",
-            "image_path": feature_3_data.image_path if feature_3_data and feature_3_data.image_path else "/static/images/chat.png",
+            "image_path": public_file_url(feature_3_data.image_path, "/static/images/chat.png") if feature_3_data else "/static/images/chat.png",
         },
         {
             "title": feature_4_data.title if feature_4_data else "Instant Notification",
             "description": feature_4_data.description if feature_4_data else "Receive notifications and alerts real-time to monitor the changes of item status",
-            "image_path": feature_4_data.image_path if feature_4_data and feature_4_data.image_path else "/static/images/notif.png",
+            "image_path": public_file_url(feature_4_data.image_path, "/static/images/notif.png") if feature_4_data else "/static/images/notif.png",
         },
     ]
     response["explore_hero"] = {
@@ -2661,17 +3158,17 @@ async def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": explore_student_1_data.title if explore_student_1_data and explore_student_1_data.title else "Report Lost Items",
             "description": explore_student_1_data.description if explore_student_1_data and explore_student_1_data.description else "Submit lost item reports with clear details and photos so the community can help you faster.",
-            "image_path": explore_student_1_data.image_path if explore_student_1_data and explore_student_1_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_student_1_data.image_path, "/static/images/stilogo.png") if explore_student_1_data else "/static/images/stilogo.png",
         },
         {
             "title": explore_student_2_data.title if explore_student_2_data and explore_student_2_data.title else "Track Match Progress",
             "description": explore_student_2_data.description if explore_student_2_data and explore_student_2_data.description else "Monitor possible matches and claim updates in one organized place.",
-            "image_path": explore_student_2_data.image_path if explore_student_2_data and explore_student_2_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_student_2_data.image_path, "/static/images/stilogo.png") if explore_student_2_data else "/static/images/stilogo.png",
         },
         {
             "title": explore_student_3_data.title if explore_student_3_data and explore_student_3_data.title else "Chat With Admin",
             "description": explore_student_3_data.description if explore_student_3_data and explore_student_3_data.description else "Coordinate with the admin office when you need verification or claim assistance.",
-            "image_path": explore_student_3_data.image_path if explore_student_3_data and explore_student_3_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_student_3_data.image_path, "/static/images/stilogo.png") if explore_student_3_data else "/static/images/stilogo.png",
         },
     ]
     response["explore_admin_section"] = {
@@ -2682,17 +3179,17 @@ async def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": explore_admin_1_data.title if explore_admin_1_data and explore_admin_1_data.title else "Monitor Activities",
             "description": explore_admin_1_data.description if explore_admin_1_data and explore_admin_1_data.description else "Review user and system activity while enforcing school policies inside the platform.",
-            "image_path": explore_admin_1_data.image_path if explore_admin_1_data and explore_admin_1_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_admin_1_data.image_path, "/static/images/stilogo.png") if explore_admin_1_data else "/static/images/stilogo.png",
         },
         {
             "title": explore_admin_2_data.title if explore_admin_2_data and explore_admin_2_data.title else "Manage Reports",
             "description": explore_admin_2_data.description if explore_admin_2_data and explore_admin_2_data.description else "Handle lost and found submissions efficiently from a centralized dashboard.",
-            "image_path": explore_admin_2_data.image_path if explore_admin_2_data and explore_admin_2_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_admin_2_data.image_path, "/static/images/stilogo.png") if explore_admin_2_data else "/static/images/stilogo.png",
         },
         {
             "title": explore_admin_3_data.title if explore_admin_3_data and explore_admin_3_data.title else "Generate Summaries",
             "description": explore_admin_3_data.description if explore_admin_3_data and explore_admin_3_data.description else "Generate summaries and semester reports for better oversight and decision-making.",
-            "image_path": explore_admin_3_data.image_path if explore_admin_3_data and explore_admin_3_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_admin_3_data.image_path, "/static/images/stilogo.png") if explore_admin_3_data else "/static/images/stilogo.png",
         },
     ]
     response["explore_cta"] = {
@@ -2711,17 +3208,17 @@ async def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": about_benefit_1_data.title if about_benefit_1_data and about_benefit_1_data.title else "AI Matching",
             "description": about_benefit_1_data.description if about_benefit_1_data and about_benefit_1_data.description else "Our intelligent AI system analyzes photos and text descriptions to find potential matches for lost items, saving time and effort.",
-            "image_path": about_benefit_1_data.image_path if about_benefit_1_data and about_benefit_1_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_benefit_1_data.image_path, "/static/images/stilogo.png") if about_benefit_1_data else "/static/images/stilogo.png",
         },
         {
             "title": about_benefit_2_data.title if about_benefit_2_data and about_benefit_2_data.title else "Effortless Reporting",
             "description": about_benefit_2_data.description if about_benefit_2_data and about_benefit_2_data.description else "Easily report lost and found items through the system, accessible from anywhere and anytime.",
-            "image_path": about_benefit_2_data.image_path if about_benefit_2_data and about_benefit_2_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_benefit_2_data.image_path, "/static/images/stilogo.png") if about_benefit_2_data else "/static/images/stilogo.png",
         },
         {
             "title": about_benefit_3_data.title if about_benefit_3_data and about_benefit_3_data.title else "Secured & Centralized",
             "description": about_benefit_3_data.description if about_benefit_3_data and about_benefit_3_data.description else "All information is stored in a central database with management and authority handled by school staff.",
-            "image_path": about_benefit_3_data.image_path if about_benefit_3_data and about_benefit_3_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_benefit_3_data.image_path, "/static/images/stilogo.png") if about_benefit_3_data else "/static/images/stilogo.png",
         },
     ]
     response["about_clip"] = {
@@ -2732,17 +3229,17 @@ async def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": about_clip_1_data.title if about_clip_1_data and about_clip_1_data.title else "Reporting",
             "description": about_clip_1_data.description if about_clip_1_data and about_clip_1_data.description else "Effortless and simple processing of lost and found cases.",
-            "image_path": about_clip_1_data.image_path if about_clip_1_data and about_clip_1_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_clip_1_data.image_path, "/static/images/stilogo.png") if about_clip_1_data else "/static/images/stilogo.png",
         },
         {
             "title": about_clip_2_data.title if about_clip_2_data and about_clip_2_data.title else "AI",
             "description": about_clip_2_data.description if about_clip_2_data and about_clip_2_data.description else "AI-powered image-text matching for quick recovery of items.",
-            "image_path": about_clip_2_data.image_path if about_clip_2_data and about_clip_2_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_clip_2_data.image_path, "/static/images/stilogo.png") if about_clip_2_data else "/static/images/stilogo.png",
         },
         {
             "title": about_clip_3_data.title if about_clip_3_data and about_clip_3_data.title else "Notifications",
             "description": about_clip_3_data.description if about_clip_3_data and about_clip_3_data.description else "Real-time notifications for updates regarding report status.",
-            "image_path": about_clip_3_data.image_path if about_clip_3_data and about_clip_3_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_clip_3_data.image_path, "/static/images/stilogo.png") if about_clip_3_data else "/static/images/stilogo.png",
         },
     ]
     response["about_system"] = {
@@ -2753,26 +3250,26 @@ async def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": about_system_1_data.title if about_system_1_data and about_system_1_data.title else "AI Matching & Search",
             "description": about_system_1_data.description if about_system_1_data and about_system_1_data.description else "AI analyzes details and images to find potential matches quickly.",
-            "image_path": about_system_1_data.image_path if about_system_1_data and about_system_1_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_system_1_data.image_path, "/static/images/stilogo.png") if about_system_1_data else "/static/images/stilogo.png",
         },
         {
             "title": about_system_2_data.title if about_system_2_data and about_system_2_data.title else "Uploads",
             "description": about_system_2_data.description if about_system_2_data and about_system_2_data.description else "Report lost or found items through a simple online form with photo uploads and text descriptions.",
-            "image_path": about_system_2_data.image_path if about_system_2_data and about_system_2_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_system_2_data.image_path, "/static/images/stilogo.png") if about_system_2_data else "/static/images/stilogo.png",
         },
         {
             "title": about_system_3_data.title if about_system_3_data and about_system_3_data.title else "Alerts & Notifications",
             "description": about_system_3_data.description if about_system_3_data and about_system_3_data.description else "Receive instant alerts and notifications when report progress changes.",
-            "image_path": about_system_3_data.image_path if about_system_3_data and about_system_3_data.image_path else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_system_3_data.image_path, "/static/images/stilogo.png") if about_system_3_data else "/static/images/stilogo.png",
         },
     ]
     response["about_system_graphic"] = {
-        "image_path": about_system_graphic_data.image_path if about_system_graphic_data and about_system_graphic_data.image_path else "/static/images/background.jpg",
+        "image_path": public_file_url(about_system_graphic_data.image_path, "/static/images/background.jpg") if about_system_graphic_data else "/static/images/background.jpg",
     }
     response["about_cta"] = {
         "title": about_cta_data.title if about_cta_data and about_cta_data.title else "Ready to reunite<br>with your item?",
         "description": about_cta_data.description if about_cta_data and about_cta_data.description else "Join our school community and reunite with your lost items with LookFor.",
-        "image_path": about_cta_data.image_path if about_cta_data and about_cta_data.image_path else "/static/images/stilogo.png",
+        "image_path": public_file_url(about_cta_data.image_path, "/static/images/stilogo.png") if about_cta_data else "/static/images/stilogo.png",
     }
     return response
 

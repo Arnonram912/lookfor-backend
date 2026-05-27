@@ -7,9 +7,9 @@
     <meta charset="UTF-8"> 
 
     <title>Admin Panel | LookFor STI</title> 
-    <script src="{{ url_for('static', path='js/script.js') }}"></script>
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin_settings.css') }}?v=9"> 
+    <script src="/static/js/script.js"></script>
+    <link rel="stylesheet" href="/static/admin2.o.css?v=10"> 
+    <link rel="stylesheet" href="/static/Admin_Settings.css?v=9"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -164,11 +164,11 @@
     <section class="settings-card">
         <h3>Privacy & Security</h3>
         <div class="setting-item">
-            <label>Two-Factor Authentication</label>
+            <p>Two-Factor Authentication</p>
             <input type="checkbox" id="2fa-toggle" class="switch">
         </div>
         <div class="setting-item">
-            <label>Session Management</label>
+            <p>Session Management</p>
             <button class="btn-outline">Logout all other devices</button>
         </div>
     </section>
@@ -176,11 +176,11 @@
     <section class="settings-card">
         <h3>Notifications</h3>
         <div class="setting-item">
-            <label>Push Alerts</label>
+            <p>Push Alerts</p>
             <input type="checkbox" id="push-toggle" class="switch" checked>
         </div>
         <div class="setting-item">
-            <label>Sound/Vibration</label>
+            <p>Sound/Vibration</p>
             <select id="notif-sound">
                 <option value="default">Default STI Tone</option>
                 <option value="mute">Mute</option>
@@ -189,13 +189,13 @@
     </section>
 
     <section class="settings-card">
-        <h3>Display Layout</h3>
+        <h3>Display & Layout</h3>
         <div class="setting-item">
-            <label>Theme Mode</label>
+            <p>Theme Mode</p>
             <button id="theme-toggle" onclick="toggleTheme()">Toggle Dark/Light</button>
         </div>
         <div class="setting-item">
-            <label>Font Size</label>
+            <p>Font Size</p>
             <input type="range" id="font-slider" min="12" max="24" value="16">
             <span id="font-value">16px</span>
         </div>
@@ -204,7 +204,7 @@
 
 <div class="settings-footer">
     <button class="upload-btn" onclick="saveSettings()">Save All Changes</button>
-    <button class="btn-archive-big" style="background:#888;">Reset to Default</button>
+    <button class="btn-reset">Reset to Default</button>
 </div>
 
 
@@ -239,7 +239,7 @@ function closeAllDropdowns() {
     }
 
  async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
         window.location.href = "/login";
@@ -298,7 +298,7 @@ function showAccessDeniedPopup(permName) {
 }
 
 function getAuthToken() {
-    return localStorage.getItem('admin_token');
+    return sessionStorage.getItem('admin_token');
 }
 
 function getSettingsEndpoint() {
@@ -373,6 +373,7 @@ document.getElementById('font-slider').addEventListener('input', (event) => {
 
 loadSettings();
 function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -381,6 +382,6 @@ function logout() {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 </body>
 </html>

@@ -129,7 +129,7 @@
 }
 
     async function pollJobStatus() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const jobId = getJobId();
 
         if (!token || !jobId) {
@@ -175,7 +175,7 @@
     }
 
     function startPolling() {
-    if (!getJobId() || !localStorage.getItem("admin_token")) return;
+    if (!getJobId() || !sessionStorage.getItem("admin_token")) return;
 
     if (poller) clearInterval(poller);
 

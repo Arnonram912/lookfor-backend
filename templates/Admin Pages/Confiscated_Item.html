@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=10"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=10"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -200,6 +200,47 @@
             box-shadow: 5px 5px 0 #003d75;
         }
 
+        .upload-btn {
+  
+        background-color: var(--sti-yellow);
+        border: 2px solid var(--dark-blue);
+        padding: 12px 25px;
+        border-radius: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 3px 3px 0px var(--dark-blue);
+        transition: 0.2s;
+  
+        }
+
+        .upload-btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 5px 5px 0px var(--dark-blue);
+
+        }
+
+        .action-bar {
+        display: flex;
+        flex-direction: column;   /* stack title and button */
+        align-items: flex-start;  /* keep title left */
+        }   
+
+        .action-bar .upload-btn {
+         margin-left: auto;    /* push button to right */
+        margin-top: 10px;         /* space below title */
+        }
+
+        .section-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--sti-blue);
+        width: 100%;              
+        padding-bottom: 5px;
+        border-bottom: 2px solid var(--sti-blue); 
+        margin: 0;
+        }
+
+
         .conf-submit-btn {
             background: #005bab;
             color: #fff;
@@ -222,6 +263,7 @@
             font-size: 14px;
             line-height: 1.7;
         }
+        
 
         @media (max-width: 760px) {
             .form-container {
@@ -384,7 +426,7 @@
                 <div class="action-bar">
         <h1 class="section-title">Confiscated <span>Items</span></h1>
         <button class="upload-btn" onclick="openConfiscatedModal()" style="padding: 10px 20px;">
-            + Report New Item
+            + Upload New Item
         </button>
     </div>
 
@@ -549,7 +591,7 @@ let activeConfiscatedEditId = null;
 async function viewDetails(itemId) {
     try {
         const response = await fetch(`/admin/get-confiscated-item/${itemId}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
         const item = await response.json();
 
@@ -575,7 +617,7 @@ async function viewDetails(itemId) {
 }
 
 async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
 
     if (!token) {
         window.location.href = "/login";
@@ -676,7 +718,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function loadConfiscatedItems() {
     try {
         const response = await fetch('/admin/get-confiscated-items', {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
         const items = await response.json();
 
@@ -843,7 +885,7 @@ async function submitConfiscated() {
         const response = await fetch(isEditing ? `/admin/update-confiscated/${activeConfiscatedEditId}` : '/admin/report-confiscated', {
             method: isEditing ? 'PUT' : 'POST',
             body: formData,
-            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
 
         const result = await response.json();
@@ -867,7 +909,7 @@ async function submitConfiscated() {
 async function fetchCategories(selectedCategory = null) {
     try {
         const response = await fetch('/admin/category', {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
         const categories = await response.json();
 
@@ -898,7 +940,7 @@ async function fetchCategories(selectedCategory = null) {
 async function editConfiscated(itemId) {
     try {
         const response = await fetch(`/admin/get-confiscated-item/${itemId}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
         const item = await response.json();
         if (!response.ok) {
@@ -937,7 +979,7 @@ async function deleteConfiscated(itemId) {
     try {
         const response = await fetch(`/admin/delete-confiscated/${itemId}`, {
             method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) {
@@ -963,6 +1005,7 @@ document.getElementById('confImage').addEventListener('change', function(event) 
 });
 
 function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -971,6 +1014,6 @@ function logout() {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 </body>
 </html>

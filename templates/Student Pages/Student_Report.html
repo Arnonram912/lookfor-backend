@@ -8,7 +8,7 @@
 
     <title>Student Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=9"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=9"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -89,7 +89,7 @@
     <ul class="topbar-menu">
         <li>           <!-- 💬 MESSAGES -->
            <div class="message-container">
-                <a href="/admin/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
+                <a href="/student/Messages" class="message-icon" style="text-decoration: none; cursor: pointer; display: flex; align-items: center; position: relative;">
                     💬 <span id="totalUnreadBadge" class="badge red" style="display: none;">0</span>
                 </a>
             </div>
@@ -218,6 +218,6 @@ window.onclick = function(event) {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>
-<script src="/static/student-notifications.js?v=3"></script>
+<script src="/static/student-notifications.js?v=4"></script>
 </body>
 </html>

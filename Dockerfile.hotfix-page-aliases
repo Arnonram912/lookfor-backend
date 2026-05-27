@@ -1,0 +1,3 @@
+FROM lookforacraafd5427.azurecr.io/lookfor-backend:found-items-hotfix1
+
+COPY main.py /app/main.py

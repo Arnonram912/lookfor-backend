@@ -3,8 +3,8 @@
 <head> 
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='Lost_item_report.css') }}?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=11"> 
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=15"> 
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -323,9 +323,20 @@ function toggleDropdown(id) {
     dropdown.style.display = isOpen ? "none" : "block";
 }
 
+function getCurrentTimeValue() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function setReportTimeToNow() {
+    const timeInput = document.getElementById('reportTime');
+    if (timeInput) timeInput.value = getCurrentTimeValue();
+}
+
 function openModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.style.display = "flex";
+    if (id === 'reportModal') setReportTimeToNow();
 }
 
 function closeModal(id) {
@@ -335,11 +346,17 @@ function closeModal(id) {
 
 let matchResultsModalResolver = null;
 let currentSelectedMatchId = null;
+let notificationMatchOpened = false;
 
 function escapeModalHtml(value) {
     const div = document.createElement('div');
     div.textContent = value ?? '';
     return div.innerHTML;
+}
+
+function formatMatchScore(score) {
+    const numericScore = Number(score || 0);
+    return `${(numericScore * 100).toFixed(1)}%`;
 }
 
 function getMatchImageUrl(match) {
@@ -388,7 +405,7 @@ function showMatchResultsModal({ title, summary, topMatch, matches }) {
                     <div style="font-size: 20px; font-weight: 700; color: #0e2742;">${escapeModalHtml(topMatch.category || 'Matched Item')}</div>
                     <div style="margin-top: 8px; color: #41556b;">ID: ${escapeModalHtml(String(topMatch.id || 'N/A'))}</div>
                     <div style="margin-top: 4px; color: #41556b;">Location: ${escapeModalHtml(topMatch.location || 'Unknown')}</div>
-                    <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Score: ${Number(topMatch.score || 0).toFixed(2)}</div>
+                    <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Score: ${formatMatchScore(topMatch.score)}</div>
                 </div>
             </div>
         `;
@@ -409,7 +426,7 @@ function showMatchResultsModal({ title, summary, topMatch, matches }) {
                         <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
                     </div>
                 </div>
-                <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${Number(match.score || 0).toFixed(2)}</div>
+                <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${formatMatchScore(match.score)}</div>
             </div>
         </label>
     `).join('');
@@ -429,22 +446,11 @@ function decodeTokenPayload(token) {
 }
 
 function getStudentToken() {
-    const studentToken = localStorage.getItem("token");
-    if (studentToken) return studentToken;
-
-    const fallbackToken = localStorage.getItem("admin_token");
-    const payload = decodeTokenPayload(fallbackToken || "");
-    return payload && !payload.is_admin ? fallbackToken : null;
+    return localStorage.getItem("token");
 }
 
 function clearStudentSession() {
     localStorage.removeItem("token");
-
-    const fallbackToken = localStorage.getItem("admin_token");
-    const payload = decodeTokenPayload(fallbackToken || "");
-    if (payload && !payload.is_admin) {
-        localStorage.removeItem("admin_token");
-    }
 }
 
 function logout() {
@@ -533,9 +539,29 @@ async function loadLostItems() {
                 </div>
             `;
         }).join('');
+
+        openNotificationMatchFromUrl(items);
     } catch (err) {
         grid.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">${err.message}</p>`;
     }
+}
+
+function openNotificationMatchFromUrl(items) {
+    if (notificationMatchOpened) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const itemId = params.get("item_id");
+    const shouldShowMatch = params.get("show_match") === "1";
+    if (!itemId || !shouldShowMatch) return;
+
+    const matchedReport = (items || []).find(item => String(item.id) === String(itemId));
+    if (!matchedReport) return;
+
+    notificationMatchOpened = true;
+    viewItemDetails(matchedReport);
+
+    const cleanUrl = `${window.location.pathname}`;
+    window.history.replaceState({}, document.title, cleanUrl);
 }
 
 
@@ -626,7 +652,7 @@ function submitReport() {
 // --- 2. EXECUTE UPLOAD (REFINED) ---
 async function executeSubmit() {
     const confirmBtn = document.getElementById('finalConfirmBtn');
-    const token = localStorage.getItem("token") || localStorage.getItem("admin_token");
+    const token = localStorage.getItem("token");
 
     // 1. Get initial values
     const imageFile = document.getElementById('itemImage').files[0];
@@ -679,14 +705,14 @@ async function executeSubmit() {
                 matchMessage += `ID: ${aiResult.matched_item.id}\n`;
                 matchMessage += `Category: ${aiResult.matched_item.category || catName}\n`;
                 matchMessage += `Location: ${matchedLocation}\n`;
-                matchMessage += `Score: ${Number(aiResult.highest_score || 0).toFixed(2)}\n\n`;
+                matchMessage += `Score: ${formatMatchScore(aiResult.highest_score)}\n\n`;
             } else {
                 matchMessage += `No highly confident match found, but here are the possible matches:\n\n`;
             }
 
             matchMessage += `Possible Matches:\n`;
             matchedItems.slice(0, 5).forEach((item, index) => {
-                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${Number(item.score || 0).toFixed(2)}\n`;
+                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${formatMatchScore(item.score)}\n`;
             });
 
             selectedMatch = await showMatchResultsModal({
@@ -706,7 +732,7 @@ async function executeSubmit() {
             await showLostUploadAlert(
                 'info',
                 'Analysis complete',
-                `No possible matches found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+                `No possible matches found yet. Score: ${formatMatchScore(aiResult?.highest_score)}.`
             );
         }
         
@@ -723,6 +749,7 @@ async function executeSubmit() {
         saveData.append("color", document.getElementById('itemColor').value);
         saveData.append("brand", document.getElementById('itemBrand').value);
         saveData.append("date", document.getElementById('reportDate').value);
+        saveData.append("time_found", document.getElementById('reportTime').value);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
         saveData.append("possible_matches", JSON.stringify(matchedItems));
         appendOptionalImages(saveData);
@@ -865,14 +892,14 @@ async function executeSubmit() {
                 matchMessage += `ID: ${aiResult.matched_item.id}\n`;
                 matchMessage += `Category: ${aiResult.matched_item.category || catName}\n`;
                 matchMessage += `Location: ${matchedLocation}\n`;
-                matchMessage += `Score: ${Number(aiResult.highest_score || 0).toFixed(2)}\n\n`;
+                matchMessage += `Score: ${formatMatchScore(aiResult.highest_score)}\n\n`;
             } else {
                 matchMessage += `No highly confident match found, but here are the possible matches:\n\n`;
             }
 
             matchMessage += `Possible Matches:\n`;
             matchedItems.slice(0, 5).forEach((item, index) => {
-                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${Number(item.score || 0).toFixed(2)}\n`;
+                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${formatMatchScore(item.score)}\n`;
             });
 
             selectedMatch = await showMatchResultsModal({
@@ -892,7 +919,7 @@ async function executeSubmit() {
             await showLostUploadAlert(
                 'info',
                 'Analysis complete',
-                `No possible matches found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+                `No possible matches found yet. Score: ${formatMatchScore(aiResult?.highest_score)}.`
             );
         }
 
@@ -906,6 +933,7 @@ async function executeSubmit() {
         saveData.append("color", document.getElementById('itemColor').value);
         saveData.append("brand", document.getElementById('itemBrand').value);
         saveData.append("date", reportDate);
+        saveData.append("time_found", document.getElementById('reportTime').value);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding || []));
         saveData.append("possible_matches", JSON.stringify(matchedItems));
         appendOptionalImages(saveData);
@@ -1075,7 +1103,7 @@ async function loadPossibleMatchesForDetail(itemId, categoryFallback = '') {
                     <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.category || categoryFallback || 'Item')}</div>
                     <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                     <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
-                    <div style="margin-top:4px; color:#556678;">Score: ${Number(match.score || 0).toFixed(2)}</div>
+                    <div style="margin-top:4px; color:#556678;">Score: ${formatMatchScore(match.score)}</div>
                 </div>
             </div>
         `).join('');
@@ -1127,6 +1155,7 @@ function viewItemDetails(item) {
         document.addEventListener('DOMContentLoaded', () => {
             loadLostItems();   // Loads the student's personal reports
             fetchCategories(); // Fills the category dropdown
+            setReportTimeToNow();
         });
 
         const MAX_REPORT_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -1154,7 +1183,8 @@ function viewItemDetails(item) {
 
         // --- 2. MODAL CONTROLS ---
         function openModal(id) { 
-            document.getElementById(id).style.display = 'flex'; 
+            document.getElementById(id).style.display = 'flex';
+            if (id === 'reportModal') setReportTimeToNow();
         }
 
         function closeModal(id) { 
@@ -1174,7 +1204,7 @@ function viewItemDetails(item) {
         }
         async function fetchCategories() {
             try {
-                const response = await fetch('/admin/category'); 
+                const response = await fetch('/api/categories'); 
                 const categories = await response.json();
                 
                 const dropdown = document.getElementById('itemCategory');
@@ -1210,7 +1240,7 @@ function viewItemDetails(item) {
             document.getElementById('itemBrand').value = "";
             document.getElementById('itemDesc').value = "";
             document.getElementById('reportDate').value = "";
-            document.getElementById('reportTime').value = "";
+            setReportTimeToNow();
             document.getElementById('reportLocation').value = "";
         }
 
@@ -1221,7 +1251,7 @@ function viewItemDetails(item) {
         };
     </script>
 <script src="/static/session-keepalive.js"></script>
-<script src="/static/student-notifications.js?v=3"></script>
+<script src="/static/student-notifications.js?v=4"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>
 </body>

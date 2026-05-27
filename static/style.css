@@ -1209,7 +1209,8 @@ line-height: 35px;
     position: absolute;
     top: 50px;
     right: 0;
-    width: 320px;
+    width: min(420px, 92vw);
+    max-height: min(70vh, 620px);
     background: white;
     border-radius: 12px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.2);
@@ -1217,6 +1218,7 @@ line-height: 35px;
     z-index: 3000;
     padding: 15px;
     color: #333;
+    overflow: hidden;
 }
 
 .notification-dropdown h3 {
@@ -1229,8 +1231,30 @@ line-height: 35px;
 
 #notificationList {
     list-style: none;
-    max-height: 300px;
+    max-height: calc(min(70vh, 620px) - 120px);
     overflow-y: auto;
+}
+
+.notification-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 0 10px;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 10px;
+}
+
+.notification-action-btn {
+    border: none;
+    background: transparent;
+    color: #114b7a;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.notification-action-btn:hover {
+    text-decoration: underline;
 }
 
 .notification-item {

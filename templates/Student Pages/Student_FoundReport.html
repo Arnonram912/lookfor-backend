@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Student Panel | LookFor STI</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11">
-    <link rel="stylesheet" href="{{ url_for('static', path='Found_item_report.css') }}?v=15">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=11">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=15">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -296,9 +296,20 @@ function toggleDropdown(id) {
     dropdown.style.display = isOpen ? "none" : "block";
 }
 
+function getCurrentTimeValue() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function setReportTimeToNow() {
+    const timeInput = document.getElementById('reportTime');
+    if (timeInput) timeInput.value = getCurrentTimeValue();
+}
+
 function openModal(id) {
     const modal = document.getElementById(id);
     if (modal) modal.style.display = "flex";
+    if (id === 'reportModal') setReportTimeToNow();
 }
 
 function closeModal(id) {
@@ -321,12 +332,6 @@ function decodeTokenPayload(token) {
 
 function clearStudentSession() {
     localStorage.removeItem("token");
-
-    const fallbackToken = localStorage.getItem("admin_token");
-    const payload = decodeTokenPayload(fallbackToken || "");
-    if (payload && !payload.is_admin) {
-        localStorage.removeItem("admin_token");
-    }
 }
 
 window.onclick = function(event) {
@@ -343,12 +348,7 @@ window.onclick = function(event) {
 
 
         function getStudentToken() {
-            const studentToken = localStorage.getItem("token");
-            if (studentToken) return studentToken;
-
-            const fallbackToken = localStorage.getItem("admin_token");
-            const payload = decodeTokenPayload(fallbackToken || "");
-            return payload && !payload.is_admin ? fallbackToken : null;
+            return localStorage.getItem("token");
         }
 
         async function loadFoundItems() {
@@ -505,6 +505,10 @@ window.onclick = function(event) {
 
                 if (!compareRes.ok) throw new Error("AI comparison failed.");
                 const aiResult = await compareRes.json();
+                const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
+                const selectedMatch = aiResult?.matched_item?.id
+                    ? aiResult.matched_item
+                    : (matchedItems[0]?.score >= 0.55 ? matchedItems[0] : null);
 
                 const formData = new FormData();
                 formData.append("item_name", document.getElementById('itemName').value);
@@ -518,6 +522,10 @@ window.onclick = function(event) {
                 formData.append("time_found", reportTime);
                 formData.append("image", imageFile);
                 formData.append("image_embedding", JSON.stringify(aiResult.generated_embedding || []));
+                if (selectedMatch?.id) {
+                    formData.append("matched_item_id", selectedMatch.id);
+                    formData.append("ai_score", selectedMatch.score || aiResult.highest_score || 0);
+                }
                 appendOptionalImages(formData);
 
                 const response = await fetch('/student/found', {
@@ -582,7 +590,7 @@ window.onclick = function(event) {
 
         async function fetchCategories() {
             try {
-                const response = await fetch('/admin/category');
+                const response = await fetch('/api/categories');
                 const categories = await response.json();
                 const dropdown = document.getElementById('itemCategory');
 
@@ -615,12 +623,13 @@ window.onclick = function(event) {
             document.getElementById('itemBrand').value = "";
             document.getElementById('itemDesc').value = "";
             document.getElementById('reportDate').value = "";
-            document.getElementById('reportTime').value = "";
+            setReportTimeToNow();
             document.getElementById('reportLocation').value = "";
         }
 
         function openModal(id) {
             document.getElementById(id).style.display = 'flex';
+            if (id === 'reportModal') setReportTimeToNow();
         }
 
         function closeModal(id) {
@@ -795,6 +804,7 @@ window.onclick = function(event) {
         document.addEventListener('DOMContentLoaded', () => {
             loadFoundItems();
             fetchCategories();
+            setReportTimeToNow();
         });
 
         window.onclick = function(event) {
@@ -805,7 +815,7 @@ window.onclick = function(event) {
     </script>
 
     <script src="/static/session-keepalive.js"></script>
-    <script src="/static/student-notifications.js?v=3"></script>
+    <script src="/static/student-notifications.js?v=4"></script>
     <script src="/static/force-password-change.js"></script>
     <script src="/static/student-sidebar-access.js"></script>
 </body>

@@ -1,7 +1,10 @@
 (function () {
-    const STUDENT_NOTIFICATION_DROPDOWN_LIMIT = 10;
     let notifications = [];
     let unreadCount = 0;
+
+    function formatUnreadCount(count) {
+        return count > 99 ? "99+" : String(count);
+    }
 
     function decodeTokenPayload(token) {
         try {
@@ -12,12 +15,7 @@
     }
 
     function getStudentToken() {
-        const studentToken = localStorage.getItem("token");
-        if (studentToken) return studentToken;
-
-        const fallbackToken = localStorage.getItem("admin_token");
-        const payload = decodeTokenPayload(fallbackToken || "");
-        return payload && !payload.is_admin ? fallbackToken : null;
+        return localStorage.getItem("token");
     }
 
     function getStudentAuthHeader() {
@@ -42,12 +40,12 @@
             list.innerHTML = "";
             emptyState.style.display = "block";
             countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
-            countBadge.innerText = String(unreadCount);
+            countBadge.innerText = formatUnreadCount(unreadCount);
             return;
         }
 
         emptyState.style.display = "none";
-        list.innerHTML = notifications.slice(0, STUDENT_NOTIFICATION_DROPDOWN_LIMIT).map(notif => `
+        list.innerHTML = notifications.map(notif => `
             <li class="notification-item ${notif.is_read ? 'read' : 'unread'}"
                 onclick="markStudentNotificationRead(${notif.id})"
                 style="cursor:pointer;">
@@ -56,8 +54,37 @@
             </li>
         `).join("");
 
-        countBadge.innerText = String(unreadCount);
+        countBadge.innerText = formatUnreadCount(unreadCount);
         countBadge.style.display = unreadCount > 0 ? "inline-flex" : "none";
+    }
+
+    function ensureNotificationActions() {
+        const dropdown = document.getElementById("notificationDropdown");
+        const list = document.getElementById("notificationList");
+        if (!dropdown || !list) return;
+
+        let actions = document.getElementById("notificationActions");
+        if (actions) return;
+
+        actions = document.createElement("div");
+        actions.id = "notificationActions";
+        actions.className = "notification-actions";
+        actions.innerHTML = `
+            <button type="button" id="markAllNotificationsReadBtn" class="notification-action-btn">
+                Read all unread
+            </button>
+        `;
+
+        list.parentNode.insertBefore(actions, list);
+
+        const button = document.getElementById("markAllNotificationsReadBtn");
+        if (button) {
+            button.addEventListener("click", async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                await markAllStudentNotificationsRead();
+            });
+        }
     }
 
     async function loadUnreadCount() {
@@ -147,12 +174,32 @@
         }
     }
 
+    async function markAllStudentNotificationsRead() {
+        if (!notifications.length || unreadCount <= 0) return;
+
+        notifications = notifications.map((notif) => ({ ...notif, is_read: true }));
+        unreadCount = 0;
+        updateNotificationUI();
+
+        try {
+            await fetch("/student/notifications/mark-all-read", {
+                method: "POST",
+                headers: getStudentAuthHeader()
+            });
+        } catch (error) {
+            console.error("Student mark-all-read sync failed:", error);
+            loadNotifications();
+        }
+    }
+
     window.loadNotifications = loadNotifications;
     window.loadStudentNotificationUnreadCount = loadUnreadCount;
     window.markStudentNotificationRead = markStudentNotificationRead;
+    window.markAllStudentNotificationsRead = markAllStudentNotificationsRead;
 
     document.addEventListener("DOMContentLoaded", () => {
         if (document.getElementById("notificationList")) {
+            ensureNotificationActions();
             loadNotifications();
             setInterval(loadNotifications, 30000);
         }

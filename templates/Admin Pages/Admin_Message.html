@@ -9,8 +9,8 @@
     <title>Admin Panel | LookFor STI</title> 
 
     
-    <link rel="stylesheet" href="{{ url_for('static', path='Messages.css') }}?v=12"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11">
+    <link rel="stylesheet" href="/static/Messages.css?v=12"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=11">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <style>
@@ -653,7 +653,7 @@
 <script>
 
     async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
         window.location.href = "/login";
@@ -713,7 +713,7 @@ function showAccessDeniedPopup(permName) {
 
    // Ensure this matches your specific page's helper function
 const getHeader = () => {
-    return localStorage.getItem("admin_token") ? getAdminAuthHeader() : getAuthHeader();
+    return sessionStorage.getItem("admin_token") ? getAdminAuthHeader() : getAuthHeader();
 };
 
 let searchTimeout; 
@@ -907,7 +907,7 @@ setInterval(checkNewMessages, 10000);
 let currentChatId = null;
 
 const getAdminAuthHeader = () => {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     return { 'Authorization': `Bearer ${token}` };
 };
 
@@ -1142,6 +1142,7 @@ window.onload = loadStudents;
 
 
 function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -1162,7 +1163,7 @@ function escapeHtml(text) {
 // --- NOTIFICATION LOGIC ---
 
 async function loadNotifications() {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     if (!token) return;
 
     try {
@@ -1224,7 +1225,7 @@ function updateNotificationUI() {
 }
 
 async function handleNotifClick(notifId) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const notif = notifications.find(n => n.id === notifId);
     if (!notif) return;
 
@@ -1304,6 +1305,7 @@ window.addEventListener('click', function(e) {
 });
 
 function logout() {
+    sessionStorage.clear();
     localStorage.clear();
     window.location.href = "/";
 }
@@ -1317,7 +1319,7 @@ window.onload = () => {
 
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 <script src="/static/force-password-change.js"></script>
 </body>
 </html>

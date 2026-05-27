@@ -13,10 +13,9 @@ from datetime import datetime
 import uuid
 from clip_test import get_clip_components
 from PIL import Image
-import torch
 import numpy as np
 import json
-from utils import save_file, resolve_category_name, validate_upload_file_size
+from utils import public_file_url, save_file, resolve_category_name, validate_upload_file_size
 from clip_test import get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
 
@@ -25,8 +24,12 @@ router = APIRouter(prefix="/student", tags=["Student"])
 templates = Jinja2Templates(directory="templates")
 STUDENT_ACCESS_PERMISSION = "Student-Portal-Access"
 
-UPLOAD_DIR = "static/uploads"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+STATIC_PROFILE_PICS_DIR = os.path.join(STATIC_DIR, "profile_pics")
+UPLOAD_DIR = os.path.join(STATIC_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
 
 
 def parse_permissions(raw_permissions) -> list[str]:
@@ -100,13 +103,63 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             "score": match.get("score"),
             "category": match.get("category"),
             "location": match.get("location"),
-            "image_path": match.get("image_path"),
+            "image_path": public_file_url(match.get("image_path")),
             "brand": match.get("brand"),
             "color": match.get("color"),
             "description": match.get("description"),
         })
 
     return json.dumps(cleaned_matches) if cleaned_matches else None
+
+
+def serialize_pending_found_match(pending_item: models.PendingItem, score: float | None = None) -> dict:
+    return {
+        "id": pending_item.id,
+        "score": round(float(score or 0), 4),
+        "category": pending_item.category,
+        "location": pending_item.location,
+        "image_path": public_file_url(pending_item.image_path),
+        "brand": pending_item.brand,
+        "color": pending_item.color,
+        "description": pending_item.description,
+        "source": "pending_found",
+    }
+
+
+def serialize_found_item_match(found_item: models.Item, score: float | None = None) -> dict:
+    return {
+        "id": found_item.id,
+        "score": round(float(score or 0), 4),
+        "category": found_item.category,
+        "location": found_item.location,
+        "image_path": public_file_url(found_item.image_path),
+        "brand": found_item.brand,
+        "color": found_item.color,
+        "description": found_item.description,
+        "source": "found",
+    }
+
+
+def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> None:
+    existing_matches = []
+    if lost_item.possible_matches:
+        try:
+            parsed = json.loads(lost_item.possible_matches)
+            existing_matches = parsed if isinstance(parsed, list) else []
+        except Exception:
+            existing_matches = []
+
+    match_source = match_payload.get("source")
+    match_id = match_payload.get("id")
+    deduped_matches = [
+        match for match in existing_matches
+        if not (
+            isinstance(match, dict)
+            and match.get("id") == match_id
+            and match.get("source", "found") == match_source
+        )
+    ]
+    lost_item.possible_matches = json.dumps([match_payload, *deduped_matches][:3])
 
 
 def ensure_student_claim_for_pair(
@@ -146,7 +199,7 @@ async def get_student_notifications(
             and_(models.Notification.type == "chat", models.Notification.related_id == current_user.id),
             and_(models.Notification.type.in_(["student_match", "student_update"]), models.Notification.related_id == current_user.id)
         )
-    ).order_by(models.Notification.created_at.desc()).limit(10).all()
+    ).order_by(models.Notification.created_at.desc()).all()
 
     return notifications
 
@@ -182,6 +235,22 @@ async def mark_student_notification_read(
         raise HTTPException(status_code=403, detail="You do not have access to this notification")
 
     notif.is_read = True
+    db.commit()
+    return {"status": "success"}
+
+
+@router.post("/notifications/mark-all-read")
+async def mark_all_student_notifications_read(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user)
+):
+    db.query(models.Notification).filter(
+        or_(
+            and_(models.Notification.type == "chat", models.Notification.related_id == current_user.id),
+            and_(models.Notification.type.in_(["student_match", "student_update"]), models.Notification.related_id == current_user.id)
+        ),
+        models.Notification.is_read == False
+    ).update({models.Notification.is_read: True}, synchronize_session=False)
     db.commit()
     return {"status": "success"}
 
@@ -280,13 +349,21 @@ async def report_found_item(
     db.flush()
 
     matched_lost_item = None
+    match_score = float(ai_score or 0)
     if is_auto_match:
         matched_lost_item = db.query(models.Item).filter(
             models.Item.id == matched_item_id,
-            models.Item.status == "lost"
+            models.Item.status == "lost",
+            models.Item.archived == False
         ).first()
         if matched_lost_item:
             admin_match_score = f"{ai_score * 100:.1f}%"
+            pending_item.matched_item_id = matched_lost_item.id
+            matched_lost_item.is_matched = True
+            prepend_lost_possible_match(
+                matched_lost_item,
+                serialize_pending_found_match(pending_item, match_score)
+            )
             db.add(models.Notification(
                 message=f"AI MATCH ({admin_match_score}): Found {category} may match Lost Item #{matched_item_id}.",
                 type="match",
@@ -296,13 +373,14 @@ async def report_found_item(
                 created_at=datetime.utcnow()
             ))
 
-            if matched_lost_item.user_id and matched_lost_item.user_id != current_user.id:
+            if matched_lost_item.user_id:
                 reporter_name = current_user.full_name or current_user.email or "A student"
                 create_student_notification(
                     db,
                     matched_lost_item.user_id,
                     f"Possible match found: {reporter_name} submitted a found {category} that may match your lost item.",
-                    "student_match"
+                    "student_match",
+                    f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1"
                 )
     else:
         db.add(models.Notification(
@@ -343,14 +421,15 @@ async def update_student_profile(
 
     # Handle Image Upload
     if profile_img and profile_img.filename:
-        os.makedirs("static/profile_pics", exist_ok=True)
+        os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
         file_extension = os.path.splitext(profile_img.filename)[1]
-        file_path = f"static/profile_pics/student_{user.id}{file_extension}"
+        db_file_path = f"static/profile_pics/student_{user.id}{file_extension}"
+        file_path = os.path.join(STATIC_PROFILE_PICS_DIR, f"student_{user.id}{file_extension}")
         
         with open(file_path, "wb") as buffer:
             buffer.write(await profile_img.read())
         
-        user.profile_pic = file_path
+        user.profile_pic = db_file_path
 
     # Update Student-Specific Fields
     user.full_name = full_name
@@ -429,7 +508,7 @@ def view_profile(
     response.headers["Pragma"] = "no-cache"
 
     return templates.TemplateResponse(
-        "Student Pages/Student_Profile.html",
+        "Student Pages/Student_profile.html",
         {"request": request} 
     )
 
@@ -501,7 +580,7 @@ async def get_my_found_items(
                 "brand": p.brand,
                 "color": p.color,
                 "location": p.location,
-                "image_path": p.image_path,
+                "image_path": public_file_url(p.image_path),
                 "description": p.description,
                 "date": p.date,
                 "time_found": p.time_found,
@@ -520,7 +599,7 @@ async def get_my_found_items(
                 "brand": a.brand,
                 "color": a.color,
                 "location": a.location,
-                "image_path": a.image_path,
+                "image_path": public_file_url(a.image_path),
                 "description": a.description,
                 "date": a.date,
                 "time_found": a.time_found,
@@ -530,6 +609,20 @@ async def get_my_found_items(
         })
         
     return results
+
+
+@router.get("/items/found/active-count")
+async def get_active_found_item_count(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user)
+):
+    count = db.query(models.Item).filter(
+        models.Item.status == "found",
+        models.Item.archived == False
+    ).count()
+    return {"count": count}
+
+
 @router.post("/items/lost/report")
 async def submit_user_lost_report(
     item_name: str = Form(...),
@@ -540,6 +633,7 @@ async def submit_user_lost_report(
     brand: str = Form(None),
     color: str = Form(None),
     date: str = Form(None),
+    time_found: str = Form(None),
     image: UploadFile = File(None),
     extra_image_1: UploadFile = File(None),
     extra_image_2: UploadFile = File(None),
@@ -621,6 +715,7 @@ async def submit_user_lost_report(
         possible_matches=saved_possible_matches,
         user_id=current_user.id,
         date=parsed_date,
+        time_found=(time_found or "").strip() or None,
         is_matched=is_auto_match,
         department=None, # Explicitly no department for student reports
         is_surrendered=False, # Students keep their lost item (it's lost!)

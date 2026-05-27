@@ -3,9 +3,9 @@
 <head> 
     <meta charset="UTF-8"> 
     <title>Admin Panel | LookFor STI</title> 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=11"> 
     
-    <link rel="stylesheet" href="{{ url_for('static', path='Lost_item_report.css') }}?v=15"> 
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=15"> 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head> 
@@ -155,7 +155,9 @@
                             <option value="all">All Items</option>
                             <option value="pending">Pending</option>
                             <option value="matched">Matched</option>
+                            <option value="claimed">Claimed</option>
                         </select>
+
                         <button class="upload-btn" id="analyzeMatchesBtn" onclick="analyzeItemMatches()">
                             Analyze Matches
                         </button>
@@ -387,7 +389,7 @@
         dropdown.style.display = isOpen ? "none" : "block";
     }
     async function loadNotifications() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         try {
             const res = await fetch("/admin/notifications", {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -402,7 +404,7 @@
     }
 
         async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
         window.location.href = "/login";
@@ -461,7 +463,7 @@ function showAccessDeniedPopup(permName) {
 }
         async function loadLostItems() {
         const grid = document.getElementById("lostItemsGrid");
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
 
         try {
             const response = await fetch('/admin/items/lost', {
@@ -508,7 +510,7 @@ function showAccessDeniedPopup(permName) {
 
         async function loadLostItems() {
         const grid = document.getElementById("lostItemsGrid");
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
 
         try {
             const response = await fetch(showingLostArchived ? '/admin/items/lost/archived' : '/admin/items/lost', {
@@ -537,7 +539,7 @@ function showAccessDeniedPopup(permName) {
     }
 
     async function analyzeItemMatches() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const button = document.getElementById("analyzeMatchesBtn");
         if (!token) {
             window.location.href = "/login";
@@ -602,7 +604,8 @@ function showAccessDeniedPopup(permName) {
         const activeFilter = getLostFilterValue();
         const filteredItems = lostItemsCache.filter(item => {
             if (activeFilter === "matched") return Boolean(item.is_matched);
-            if (activeFilter === "pending") return !item.is_matched;
+            if (activeFilter === "claimed") return Boolean(item.is_claimed);
+            if (activeFilter === "pending") return !item.is_matched && !item.is_claimed;
             return true;
         });
 
@@ -617,9 +620,11 @@ function showAccessDeniedPopup(permName) {
             const cleanPath = (item.image_path || "").replace(/\\/g, '/');
             const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
             const itemData = JSON.stringify(item).replace(/'/g, "\\'");
-            const statusTag = item.is_matched
-                ? '<span class="inventory-state-tag matched">Matched</span>'
-                : '<span class="inventory-state-tag surrendered">Surrendered</span>';
+            const statusTag = item.is_claimed
+                ? '<span class="inventory-state-tag matched">Claimed</span>'
+                : (item.is_matched
+                    ? '<span class="inventory-state-tag matched">Matched</span>'
+                    : '<span class="inventory-state-tag surrendered">Pending</span>');
 
             return `
                 <div class="item-card">
@@ -652,7 +657,7 @@ function showAccessDeniedPopup(permName) {
 
     try {
         const response = await fetch(`/api/items/${itemId}/possible-matches`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
 
         if (!response.ok) {
@@ -679,7 +684,7 @@ function showAccessDeniedPopup(permName) {
                         <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                         <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
                     </div>
-                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${Number(match.score || 0).toFixed(2)}</div>
+                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${formatMatchScore(match.score)}</div>
                 </div>
             </label>
         `).join('');
@@ -716,7 +721,7 @@ function showAccessDeniedPopup(permName) {
         const response = await fetch('/api/admin/manual-claim', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
             },
             body: formData
         });
@@ -786,8 +791,8 @@ function showAccessDeniedPopup(permName) {
     }
 
     if (statusEl) {
-        statusEl.innerText = item.is_matched ? "MATCHED" : "SURRENDERED";
-        statusEl.style.color = item.is_matched ? "#28a745" : "#f59f00";
+        statusEl.innerText = item.is_claimed ? "CLAIMED" : (item.is_matched ? "MATCHED" : "PENDING");
+        statusEl.style.color = (item.is_claimed || item.is_matched) ? "#28a745" : "#f59f00";
     }
 
     // Description
@@ -842,9 +847,20 @@ function showAccessDeniedPopup(permName) {
             updatePreviewSlide(2, this.files[0], 'Optional Image 3', 'itemImageExtra2Trigger', '+ Add Optional Image 3');
         });
 
+        function getCurrentTimeValue() {
+            const now = new Date();
+            return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function setReportTimeToNow() {
+            const timeInput = document.getElementById('reportTime');
+            if (timeInput) timeInput.value = getCurrentTimeValue();
+        }
+
         // --- 2. MODAL CONTROLS ---
         function openModal(id) { 
-            document.getElementById(id).style.display = 'flex'; 
+            document.getElementById(id).style.display = 'flex';
+            if (id === 'reportModal') setReportTimeToNow();
         }
 
     function closeModal(id) { 
@@ -858,6 +874,11 @@ function showAccessDeniedPopup(permName) {
         const div = document.createElement('div');
         div.textContent = value ?? '';
         return div.innerHTML;
+    }
+
+    function formatMatchScore(score) {
+        const numericScore = Number(score || 0);
+        return `${(numericScore * 100).toFixed(1)}%`;
     }
 
     function getMatchImageUrl(match) {
@@ -906,7 +927,7 @@ function showAccessDeniedPopup(permName) {
                         <div style="font-size: 20px; font-weight: 700; color: #0e2742;">${escapeModalHtml(topMatch.category || 'Matched Item')}</div>
                         <div style="margin-top: 8px; color: #41556b;">ID: ${escapeModalHtml(String(topMatch.id || 'N/A'))}</div>
                         <div style="margin-top: 4px; color: #41556b;">Location: ${escapeModalHtml(topMatch.location || 'Unknown')}</div>
-                        <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Score: ${Number(topMatch.score || 0).toFixed(2)}</div>
+                        <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Score: ${formatMatchScore(topMatch.score)}</div>
                     </div>
                 </div>
             `;
@@ -927,7 +948,7 @@ function showAccessDeniedPopup(permName) {
                             <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
                         </div>
                     </div>
-                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${Number(match.score || 0).toFixed(2)}</div>
+                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${formatMatchScore(match.score)}</div>
                 </div>
             </label>
         `).join('');
@@ -969,7 +990,7 @@ function showAccessDeniedPopup(permName) {
             const response = await fetch(`/admin/items/${itemId}/archive`, {
                 method: 'PUT',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                    'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
                 }
             });
 
@@ -1081,7 +1102,7 @@ function showAccessDeniedPopup(permName) {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`,
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -1195,7 +1216,7 @@ function showAccessDeniedPopup(permName) {
 
 async function executeSubmit() {
     const confirmBtn = document.getElementById('finalConfirmBtn');
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const imageFile = document.getElementById('itemImage').files[0];
     const catSelect = document.getElementById('itemCategory');
     const deptSelect = document.getElementById('itemDepartment');
@@ -1247,14 +1268,14 @@ async function executeSubmit() {
                 matchMessage += `ID: ${aiResult.matched_item.id}\n`;
                 matchMessage += `Category: ${aiResult.matched_item.category || catName}\n`;
                 matchMessage += `Location: ${matchedLocation}\n`;
-                matchMessage += `Score: ${Number(aiResult.highest_score || 0).toFixed(2)}\n\n`;
+                matchMessage += `Score: ${formatMatchScore(aiResult.highest_score)}\n\n`;
             } else {
                 matchMessage += `No highly confident match found, but here are the possible matches:\n\n`;
             }
 
             matchMessage += `Possible Matches:\n`;
             matchedItems.slice(0, 5).forEach((item, index) => {
-                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${Number(item.score || 0).toFixed(2)}\n`;
+                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${formatMatchScore(item.score)}\n`;
             });
 
             selectedMatch = await showMatchResultsModal({
@@ -1274,7 +1295,7 @@ async function executeSubmit() {
             await showLostUploadAlert(
                 'info',
                 'Analysis complete',
-                `No possible matches found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+                `No possible matches found yet. Score: ${formatMatchScore(aiResult?.highest_score)}.`
             );
         }
 
@@ -1428,7 +1449,7 @@ function appendOptionalImages(formData) {
 
 async function executeSubmit() {
     const confirmBtn = document.getElementById('finalConfirmBtn');
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
 
     confirmBtn.innerText = "🤖 AI is Analyzing...";
     confirmBtn.disabled = true;
@@ -1486,14 +1507,14 @@ async function executeSubmit() {
                 matchMessage += `ID: ${aiResult.matched_item.id}\n`;
                 matchMessage += `Category: ${aiResult.matched_item.category || catName}\n`;
                 matchMessage += `Location: ${matchedLocation}\n`;
-                matchMessage += `Score: ${Number(aiResult.highest_score || 0).toFixed(2)}\n\n`;
+                matchMessage += `Score: ${formatMatchScore(aiResult.highest_score)}\n\n`;
             } else {
                 matchMessage += `No highly confident match found, but here are the possible matches:\n\n`;
             }
 
             matchMessage += `Possible Matches:\n`;
             matchedItems.slice(0, 5).forEach((item, index) => {
-                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${Number(item.score || 0).toFixed(2)}\n`;
+                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${formatMatchScore(item.score)}\n`;
             });
 
             selectedMatch = await showMatchResultsModal({
@@ -1510,7 +1531,7 @@ async function executeSubmit() {
                 matches: matchedItems
             }) || selectedMatch;
         } else {
-            alert(`Analysis complete.\n\nNo possible matches found yet.\nScore: ${Number(aiResult?.highest_score || 0).toFixed(2)}`);
+            alert(`Analysis complete.\n\nNo possible matches found yet.\nScore: ${formatMatchScore(aiResult?.highest_score)}`);
         }
         
         // STEP 2: Final Save to Database
@@ -1558,7 +1579,7 @@ async function executeSubmit() {
 }
 async function executeSubmit() {
     const confirmBtn = document.getElementById('finalConfirmBtn');
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const imageFile = document.getElementById('itemImage').files[0];
     const catSelect = document.getElementById('itemCategory');
     const deptSelect = document.getElementById('itemDepartment');
@@ -1610,14 +1631,14 @@ async function executeSubmit() {
                 matchMessage += `ID: ${aiResult.matched_item.id}\n`;
                 matchMessage += `Category: ${aiResult.matched_item.category || catName}\n`;
                 matchMessage += `Location: ${matchedLocation}\n`;
-                matchMessage += `Score: ${Number(aiResult.highest_score || 0).toFixed(2)}\n\n`;
+                matchMessage += `Score: ${formatMatchScore(aiResult.highest_score)}\n\n`;
             } else {
                 matchMessage += `No highly confident match found, but here are the possible matches:\n\n`;
             }
 
             matchMessage += `Possible Matches:\n`;
             matchedItems.slice(0, 5).forEach((item, index) => {
-                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${Number(item.score || 0).toFixed(2)}\n`;
+                matchMessage += `${index + 1}. ID: ${item.id} | Category: ${item.category || catName} | Location: ${item.location || "Unknown"} | Score: ${formatMatchScore(item.score)}\n`;
             });
 
             selectedMatch = await showMatchResultsModal({
@@ -1637,7 +1658,7 @@ async function executeSubmit() {
             await showLostUploadAlert(
                 'info',
                 'Analysis complete',
-                `No possible matches found yet. Score: ${Number(aiResult?.highest_score || 0).toFixed(2)}.`
+                `No possible matches found yet. Score: ${formatMatchScore(aiResult?.highest_score)}.`
             );
         }
 
@@ -1700,7 +1721,7 @@ async function disposeItem(itemId) {
         const response = await fetch(`/admin/items/${itemId}/dispose`, {
             method: 'DELETE',
             headers: {
-                'Authorization': `Bearer ${localStorage.getItem("admin_token")}`
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
             }
         });
 
@@ -1719,7 +1740,9 @@ async function disposeItem(itemId) {
 }
         async function fetchCategories() {
             try {
-                const response = await fetch('/admin/category'); 
+                const response = await fetch('/admin/category', {
+                    headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+                }); 
                 const categories = await response.json();
                 
                 const dropdown = document.getElementById('itemCategory');
@@ -1739,7 +1762,9 @@ async function disposeItem(itemId) {
             }
         }
         async function fetchDepartments() {
-            const response = await fetch('/admin/departments');
+            const response = await fetch('/admin/departments', {
+                headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+            });
             const departments = await response.json();
             
             const dropdown = document.getElementById('itemDepartment');
@@ -1770,6 +1795,7 @@ async function disposeItem(itemId) {
             renderPreviewCarousel();
             document.getElementById('itemName').value = "";
             document.getElementById('itemDesc').value = "";
+            setReportTimeToNow();
             // Reset other fields as needed
         }
 
@@ -1778,6 +1804,7 @@ async function disposeItem(itemId) {
             loadLostItems();
             fetchDepartments();
             fetchCategories();
+            setReportTimeToNow();
             
         });
 
@@ -1787,6 +1814,7 @@ async function disposeItem(itemId) {
             }
         };
      function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
@@ -1794,7 +1822,7 @@ async function disposeItem(itemId) {
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 </body>
 </html>
 

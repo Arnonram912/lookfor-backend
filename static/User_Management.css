@@ -126,11 +126,147 @@ body.swal2-height-auto > .swal2-container {
     background: var(--white);
     padding: 35px;
     border-radius: 20px; /* Matching your dashboard cards */
-    width: 100%;
-    max-width: 550px;
+    width: min(860px, calc(100vw - 32px));
+    max-width: 860px;
+    max-height: 90vh;
+    overflow-y: auto;
     border-top: 8px solid var(--sti-blue); /* Strong branding accent */
     box-shadow: 0 15px 40px rgba(0,0,0,0.4);
     position: relative;
+}
+
+.bulk-register-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.bulk-register-intro {
+    margin: 0 0 12px;
+    color: #555;
+    font-size: 14px;
+}
+
+.bulk-import-group {
+    order: 1;
+}
+
+.bulk-entry-group {
+    order: 2;
+}
+
+#bulkManualSection {
+    order: 5;
+    padding: 18px;
+    border: 1px solid #d9e2ec;
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.bulk-settings-grid {
+    order: 3;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.bulk-batch-preview {
+    order: 4;
+}
+
+#bulkUploadSection {
+    order: 5;
+}
+
+.bulk-modal-footer {
+    order: 6;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.bulk-modal-footer .btn-secondary,
+.bulk-modal-footer .success-btn {
+    width: auto !important;
+    min-width: 150px;
+    min-height: 42px;
+    padding: 10px 18px !important;
+    font-size: 14px !important;
+    border-radius: 10px !important;
+}
+
+.bulk-register-content.manual-entry-active #bulkManualSection {
+    order: 3;
+    margin-top: 0 !important;
+}
+
+.bulk-register-content.manual-entry-active .bulk-settings-grid {
+    order: 4;
+    margin-top: 16px;
+}
+
+.bulk-register-content.manual-entry-active .bulk-batch-preview {
+    order: 5;
+}
+
+.bulk-register-content.manual-entry-active .bulk-modal-footer {
+    order: 6;
+}
+
+.bulk-manual-heading {
+    grid-column: 1 / -1;
+    margin-bottom: 12px;
+}
+
+.bulk-manual-heading h3 {
+    margin: 0 0 4px;
+    color: var(--sti-blue);
+    font-size: 18px;
+}
+
+.bulk-manual-heading p {
+    margin: 0;
+    color: #667085;
+    font-size: 13px;
+}
+
+#bulkManualSection {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 14px;
+}
+
+.manual-entry-active #bulkManualSection {
+    display: grid !important;
+}
+
+#bulkManualSection .form-group {
+    margin-bottom: 0 !important;
+}
+
+#manualStudentFields,
+#manualFacultyFields {
+    display: contents;
+}
+
+#bulkManualHint {
+    grid-column: 1 / -1;
+    margin: 2px 0 0 !important;
+}
+
+@media (max-width: 760px) {
+    .bulk-settings-grid,
+    .manual-entry-active #bulkManualSection {
+        grid-template-columns: 1fr;
+    }
+
+    .bulk-modal-footer {
+        flex-direction: column-reverse;
+    }
+
+    .bulk-modal-footer .btn-secondary,
+    .bulk-modal-footer .success-btn {
+        width: 100% !important;
+    }
 }
 
 #resetStudentPasswordModal .modal-content {
@@ -155,6 +291,38 @@ body.swal2-height-auto > .swal2-container {
     position: relative;
 }
 
+#createAdminModal .create-admin-content {
+    width: min(860px, calc(100vw - 32px));
+    max-width: 860px;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-top: 8px solid var(--dark-blue);
+}
+
+.create-admin-info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 14px;
+}
+
+.create-admin-info-grid .form-group {
+    margin-bottom: 0;
+}
+
+.create-admin-email-field {
+    grid-column: span 2;
+}
+
+@media (max-width: 760px) {
+    .create-admin-info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .create-admin-email-field {
+        grid-column: span 1;
+    }
+}
+
 /* Textarea for Emails */
 #bulkEmails {
     width: 100%;
@@ -177,6 +345,7 @@ body.swal2-height-auto > .swal2-container {
 
 /* Modal Action Button (Matches your upload-btn) */
 #bulkRegisterModal .success-btn,
+#createAdminModal .success-btn,
 #resetStudentPasswordModal .success-btn,
 #resetPasswordResultModal .success-btn {
     background-color: var(--sti-yellow);
@@ -209,6 +378,7 @@ body.swal2-height-auto > .swal2-container {
 }
 
 #bulkRegisterModal .success-btn:active,
+#createAdminModal .success-btn:active,
 #resetStudentPasswordModal .success-btn:active,
 #resetPasswordResultModal .success-btn:active {
     transform: translate(2px, 2px);
@@ -412,6 +582,83 @@ body.dark-theme #bulkEmails {
     width: 16px;
     height: 16px;
     accent-color: #003366;
+}
+
+.semester-filter-chip input:disabled {
+    cursor: not-allowed;
+}
+
+.semester-filter-chip.locked {
+    background: #eef5fb;
+    border-color: #9fb7d3;
+    cursor: not-allowed;
+}
+
+.student-year-term-label {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-left: 4px solid #003366;
+    border-radius: 10px;
+    background: #eef5fb;
+    color: #0f3d66;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.archive-folder-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 12px 0 18px;
+}
+
+.archive-folder-card {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 190px;
+    padding: 14px 16px;
+    border: 1px solid #cfd8e3;
+    border-radius: 14px;
+    background: #fff;
+    color: #17324f;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(15, 61, 102, 0.08);
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.archive-folder-card:hover,
+.archive-folder-card.active {
+    transform: translateY(-1px);
+    border-color: #003366;
+    box-shadow: 0 12px 24px rgba(15, 61, 102, 0.14);
+}
+
+.archive-folder-card.active {
+    background: #eef5fb;
+}
+
+.archive-folder-title {
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.archive-folder-meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: #5b6f86;
+}
+
+.archive-folder-empty {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px dashed #cfd8e3;
+    border-radius: 14px;
+    color: #5b6f86;
+    background: #f8fafc;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .select-all-control {
@@ -736,6 +983,272 @@ body.dark-theme #bulkEmails {
     font-weight: 600;
 }
 
+.user-profile-card,
+.user-management-modal-card {
+    width: min(720px, calc(100vw - 32px));
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 15px;
+}
+
+.user-profile-card.admin-profile-view {
+    width: min(920px, calc(100vw - 32px));
+    max-height: none;
+    overflow-y: visible;
+}
+
+.admin-profile-view .user-profile-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.profile-information-scroll {
+    max-height: 128px;
+    overflow-y: auto;
+}
+
+.admin-profile-view .permission-chip {
+    padding: 5px 9px;
+    font-size: 11px;
+}
+
+.compact-permissions-card {
+    width: min(920px, calc(100vw - 32px));
+    overflow-y: visible;
+}
+
+.compact-permissions-card .permission-modal-header {
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.compact-permissions-card .permission-modal-header h2 {
+    margin: 0 0 4px !important;
+    font-size: 28px;
+}
+
+.compact-permissions-card #editUserDisplay {
+    margin: 0;
+    font-size: 14px !important;
+}
+
+.compact-permissions-card .permission-state-badge {
+    min-width: 126px;
+    padding: 7px 13px;
+}
+
+.compact-permissions-card .permissions-container {
+    padding: 12px 14px;
+}
+
+.compact-permissions-card .permissions-container > p:first-child {
+    margin-bottom: 6px !important;
+    padding-bottom: 6px !important;
+    font-size: 15px;
+}
+
+.compact-permissions-card .permission-helper-text,
+.compact-permissions-card .perm-desc,
+.compact-permissions-card .user-management-access-help {
+    display: none;
+}
+
+.compact-permissions-card .permissions-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.compact-permissions-card .perm-item.professional {
+    min-height: 44px;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 10px;
+    border-radius: 8px;
+}
+
+.compact-permissions-card .perm-title {
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.compact-permissions-card .user-management-access-panel {
+    padding: 10px 12px;
+    margin: 0;
+    border-radius: 8px;
+}
+
+.compact-permissions-card .user-management-access-title {
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.compact-permissions-card .nested-permission-group {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 0;
+    padding-left: 0;
+    border-left: 0;
+}
+
+.compact-permissions-card .permission-summary-panel {
+    margin-top: 10px;
+    padding: 10px 12px;
+}
+
+.compact-permissions-card .permission-summary-title {
+    margin-bottom: 5px;
+    font-size: 12px;
+}
+
+.compact-permissions-card .permission-summary-text {
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+.compact-permissions-card .permission-chip-list {
+    gap: 5px;
+}
+
+.compact-permissions-card .permission-chip {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.compact-access-review {
+    max-height: 118px;
+    overflow-y: auto;
+}
+
+.compact-permissions-footer {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.55fr) minmax(190px, 1fr);
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.compact-permissions-footer .btn-secondary,
+.compact-permissions-footer .btn-primary {
+    width: 100%;
+    min-height: 42px;
+    white-space: nowrap;
+    padding: 10px 12px;
+}
+
+@media (max-width: 640px) {
+    .user-profile-card.admin-profile-view {
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .admin-profile-view .user-profile-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .compact-permissions-card {
+        overflow-y: auto;
+    }
+
+    .compact-permissions-card .permissions-grid,
+    .compact-permissions-card .nested-permission-group {
+        grid-template-columns: 1fr;
+    }
+
+    .compact-permissions-footer {
+        grid-template-columns: 1fr;
+    }
+}
+
+.user-profile-header {
+    display: grid;
+    grid-template-columns: 82px 1fr auto;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 22px;
+}
+
+.user-profile-photo {
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #e8eef7;
+    background: #f3f6fa;
+}
+
+.user-profile-title h2 {
+    margin: 0 0 6px;
+    color: var(--sti-blue);
+    font-size: 24px;
+}
+
+.user-profile-title p {
+    margin: 0;
+    color: #667085;
+    font-size: 13px;
+}
+
+.user-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.profile-info-item {
+    padding: 13px 14px;
+    border: 1px solid #d9e2ec;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.profile-info-item span {
+    display: block;
+    margin-bottom: 5px;
+    color: #667085;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.profile-info-item strong {
+    display: block;
+    color: #12344d;
+    font-size: 14px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.user-profile-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+@media (max-width: 640px) {
+    .user-profile-header {
+        grid-template-columns: 64px 1fr;
+    }
+
+    .user-profile-header .permission-state-badge {
+        grid-column: 1 / -1;
+        justify-self: flex-start;
+    }
+
+    .user-profile-photo {
+        width: 64px;
+        height: 64px;
+    }
+
+    .user-profile-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .user-profile-actions {
+        flex-direction: column-reverse;
+    }
+}
+
 /* ============ BUTTONS ============ */
 .btn-primary {
     background: #003366;
@@ -803,3 +1316,4 @@ body.dark-theme #bulkEmails {
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid black; padding: 8px; text-align: left; }
 }
+

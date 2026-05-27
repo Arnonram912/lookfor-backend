@@ -1,15 +1,17 @@
 # clip_test.py
-import torch
 from PIL import Image
-from transformers import CLIPProcessor, CLIPModel
 import numpy as np
 import json
-import torch
-# Load the model and processor once
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-_model = model
-_processor = processor
+# Load the model and processor only when an AI comparison endpoint needs them.
+# This keeps normal pages from failing during app startup when the CLIP weights
+# are not already cached locally.
+torch = None
+CLIPProcessor = None
+CLIPModel = None
+model = None
+processor = None
+_model = None
+_processor = None
 
 
 def _center_crop(image: Image.Image, crop_ratio: float = 0.85) -> Image.Image:
@@ -32,10 +34,11 @@ def _build_image_views(image: Image.Image) -> list[Image.Image]:
 
 
 def _encode_image_views(images: list[Image.Image]) -> np.ndarray:
-    inputs = processor(images=images, return_tensors="pt", padding=True)
+    model_obj, processor_obj = get_clip_components()
+    inputs = processor_obj(images=images, return_tensors="pt", padding=True)
 
     with torch.no_grad():
-        feat = model.get_image_features(**inputs)
+        feat = model_obj.get_image_features(**inputs)
         if hasattr(feat, "pooler_output"):
             feat = feat.pooler_output
         feat = feat / feat.norm(p=2, dim=-1, keepdim=True)
@@ -100,12 +103,13 @@ def describe_item(image_path, categories=None):
         categories = ["wallet", "bag", "id card", "umbrella", "keys"]
 
     img = Image.open(image_path).convert("RGB")
+    model_obj, processor_obj = get_clip_components()
     
     # We provide the image AND the text labels to the processor
-    inputs = processor(text=categories, images=img, return_tensors="pt", padding=True)
+    inputs = processor_obj(text=categories, images=img, return_tensors="pt", padding=True)
 
     with torch.no_grad():
-        outputs = model(**inputs)
+        outputs = model_obj(**inputs)
         # CLIP calculates the "logits" (likelihood) for each text label
         logits_per_image = outputs.logits_per_image 
         probs = logits_per_image.softmax(dim=1) # Turn scores into percentages
@@ -145,10 +149,11 @@ def find_matches_in_dataset(search_image_path, db_items):
     return sorted(matches, key=lambda x: x['score'], reverse=True)
 
 def get_text_embedding(text):
-    inputs = processor(text=[text], return_tensors="pt", padding=True)
+    model_obj, processor_obj = get_clip_components()
+    inputs = processor_obj(text=[text], return_tensors="pt", padding=True)
 
     with torch.no_grad():
-        outputs = model.get_text_features(**inputs)
+        outputs = model_obj.get_text_features(**inputs)
         
         # FIX: Ensure we are working with the Tensor, not the Output object
         # If outputs is the object, we extract the features. 
@@ -194,9 +199,18 @@ def find_matches_by_text_details(category, location, date, db_items):
     return sorted(matches, key=lambda x: x['score'], reverse=True)
 def get_clip_components():
     """Lazy-loads the model and processor only when needed."""
-    global _model, _processor
+    global model, processor, _model, _processor, torch, CLIPModel, CLIPProcessor
+    if torch is None:
+        import torch as torch_module
+        torch = torch_module
+    if CLIPModel is None or CLIPProcessor is None:
+        from transformers import CLIPModel as clip_model_cls, CLIPProcessor as clip_processor_cls
+        CLIPModel = clip_model_cls
+        CLIPProcessor = clip_processor_cls
     if _model is None or _processor is None:
         print("🚀 Loading CLIP Model (this happens only once)...")
         _model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         _processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        model = _model
+        processor = _processor
     return _model, _processor

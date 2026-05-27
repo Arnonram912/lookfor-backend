@@ -19,6 +19,16 @@ body {
   background-color: var(--bg-light);
 }
 
+.section-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--sti-blue);
+    width: 100%;              
+    padding-bottom: 5px;
+    border-bottom: 2px solid var(--sti-blue); 
+    margin: 0;
+}
+
 /* --- Sidebar --- */
 .sidebar {
   width: 260px;
@@ -122,13 +132,34 @@ body {
 
 .action-bar {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 16px;
+  flex-direction: column;   /* keep vertical layout */
+  align-items: flex-start;  /* title stays left */
+  gap: 12px;
+}
+
+/* Push ONLY the button to the right */
+.action-bar .upload-btn {
+  align-self: flex-end;
 }
 
 .action-bar .section-title {
   margin-bottom: 0;
+}
+
+.profile-page-card .upload-btn {
+  margin-left: 0;
+}
+
+.profile-page-card .inventory-actions {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+  flex-wrap: nowrap !important; /* 🔥 prevents breaking into new line */
+}
+
+.profile-page-card .inventory-actions button:first-of-type {
+  margin-left: auto;
 }
 
 .inventory-actions {
@@ -160,6 +191,7 @@ body {
   cursor: pointer;
   box-shadow: 3px 3px 0px var(--dark-blue);
   transition: 0.2s;
+  margin-left: auto;
 }
 
 .upload-btn:hover {

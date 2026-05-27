@@ -346,11 +346,6 @@ body {
     right: -8px;
 }
 
-.notification-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
 
 .notification-bell {
     cursor: pointer;
@@ -369,9 +364,9 @@ body {
     right: -10px;
     border: 2px solid #114b7a;
 }
-
+/*
 .notification-dropdown {
-    display: none; /* Toggled via JS */
+    display: none;
     position: absolute;
     right: 0;
     top: 45px;
@@ -388,8 +383,29 @@ body {
     text-align: center;
     color: #888;
     font-size: 0.85rem;
-    display: block; /* Shown by default when empty */
+    display: block; 
 }
+.notification-container {
+    margin: 10px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.notification-box {
+    background-color: #fff;
+    border-radius: 8px;
+    padding: 20px;         
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 300px;     
+}
+
+
+.notification-box h2 {
+    margin-bottom: 15px;
+    font-size: 1.2rem;
+}
+
 
 .notification-dropdown ul {
     list-style: none;
@@ -405,7 +421,7 @@ body {
     cursor: pointer;
 }
 .notification-dropdown h3 {
-    color: #000000; /* Sets the text to black */
+    color: #000000; 
     margin-top: 0;
     margin-bottom: 10px;
     font-size: 1.1rem;
@@ -413,7 +429,115 @@ body {
     padding-bottom: 8px;
     font-family: 'Montserrat', sans-serif;
 }
+*/
+/* 1. Main Container (The Bell & Dropdown Wrapper) */
+.notification-container {
+    margin: 10px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
 
+/* 2. The Bell Icon & Badge */
+.notification-bell {
+    cursor: pointer;
+    font-size: 1.5rem;
+    position: relative;
+    padding: 5px;
+    transition: transform 0.2s ease;
+}
+
+.notification-bell:hover {
+    transform: scale(1.1);
+}
+
+.badge.red {
+    background-color: #ff4d4d;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    position: absolute;
+    top: 0;
+    right: -5px;
+    font-family: Arial, sans-serif;
+}
+
+/* 3. The Dropdown Menu */
+.notification-dropdown {
+    display: none; /* Toggled via JS */
+    position: absolute;
+    right: 0;
+    top: 50px; /* Slightly more gap from the bell */
+    background-color: white;
+    min-width: 320px;
+    box-shadow: 0px 8px 30px rgba(0,0,0,0.15);
+    z-index: 2000;
+    border-radius: 12px; /* Smoother corners */
+    padding: 16px; /* The "Internal Space" you were missing */
+    overflow: hidden; 
+}
+
+/* 4. The Header Inside Dropdown */
+.notification-dropdown h3 {
+    color: #1a1a1a; 
+    margin: 0 0 12px 0;
+    font-size: 1.15rem;
+    border-bottom: 1px solid #f0f0f0;
+    padding-bottom: 12px;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+}
+
+/* 5. The Notification List */
+.notification-dropdown ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.notification-dropdown li {
+    padding: 12px 8px;
+    border-bottom: 1px solid #f9f9f9;
+    font-size: 0.9rem;
+    color: #444;
+    cursor: pointer;
+    transition: background 0.2s;
+    border-radius: 4px;
+}
+
+.notification-dropdown li:hover {
+    background-color: #f8f9fa;
+}
+
+.notification-dropdown li:last-child {
+    border-bottom: none;
+}
+
+/* 6. Empty State Message */
+#emptyNotif {
+    padding: 40px 10px; /* Large vertical space for "No new notifications" */
+    text-align: center;
+    color: #999;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+/* Custom Scrollbar for better UI */
+.notification-dropdown ul::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notification-dropdown ul::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.notification-dropdown ul::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
+}
 .notification-dropdown li.unread,
 .notification-dropdown .notif-item.unread,
 .notification-dropdown .notif-msg.unread { background: #edf2fa; font-weight: 600; }
@@ -859,7 +983,6 @@ h2 {
     font-size: 2rem; 
     margin-bottom: 30px; 
     border-bottom: solid 2px var(--sti-blue);
-     
     font-family:'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif; 
 }
 .section-title span{
@@ -1005,4 +1128,9 @@ h2 {
     min-height: 160px;
     padding: 32px 28px;
 }
-
+.close_btn{
+    padding: 8px 20px; cursor: pointer; background:rgb(214, 88, 88); border-radius: 5px; 
+}
+.close_btn:hover{
+    background:red;
+}
