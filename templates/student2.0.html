@@ -8,8 +8,8 @@
 
     <title>Student Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='student_dashboard.css') }}?v=10"> 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=11"> 
+    <link rel="stylesheet" href="/static/student_dashboard.css?v=10"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=11"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -264,7 +264,7 @@ async function loadAnnouncements() {
         // Map the data to HTML
         container.innerHTML = announcements.map((anno, index) => `
             <div class="carousel-slide ${index === 0 ? 'active' : ''}">
-                <img src="/${anno.image_url}" alt="${escapeHtml(anno.title)}" onerror="this.src='/static/photos/default_news.jpg'">
+                <img src="${String(anno.image_url || '').startsWith('/') ? anno.image_url : '/' + anno.image_url}" alt="${escapeHtml(anno.title)}" onerror="this.src='/static/photos/default_news.jpg'">
                 <div class="carousel-caption">
                     <h2>${escapeHtml(anno.title)}</h2>
                     <p>${escapeHtml(anno.content)}</p>
@@ -306,12 +306,15 @@ function decodeTokenPayload(token) {
 }
 
 function getStudentToken() {
-    const studentToken = localStorage.getItem("token");
-    if (studentToken) return studentToken;
+    return localStorage.getItem("token");
+}
 
-    const fallbackToken = localStorage.getItem("admin_token");
-    const payload = decodeTokenPayload(fallbackToken || "");
-    return payload && !payload.is_admin ? fallbackToken : null;
+function showLoginSuccessAlert() {
+    const message = sessionStorage.getItem("login_success_message");
+    if (!message) return;
+
+    sessionStorage.removeItem("login_success_message");
+    alert(message);
 }
 
 // --- 3. DASHBOARD STATS ---
@@ -322,7 +325,7 @@ async function updateDashboardStats() {
     try {
         const [resMine, resFound] = await Promise.all([
             fetch('/student/items/found/me', { headers: { 'Authorization': `Bearer ${token}` } }),
-            fetch('/admin/items/found', { headers: { 'Authorization': `Bearer ${token}` } })
+            fetch('/student/items/found/active-count', { headers: { 'Authorization': `Bearer ${token}` } })
         ]);
 
         if (!resMine.ok || !resFound.ok) {
@@ -330,16 +333,16 @@ async function updateDashboardStats() {
         }
 
         const myItems = await resMine.json();
-        const foundItems = await resFound.json();
+        const foundStats = await resFound.json();
         const pendingItems = myItems.filter(item => item.display_status === "Pending Approval");
         const claimedItems = myItems.filter(item => item.display_status !== "Pending Approval");
 
         document.getElementById('pendingCount').innerText = pendingItems.length || 0;
-        document.getElementById('foundCount').innerText = foundItems.length || 0;
+        document.getElementById('foundCount').innerText = Number(foundStats.count || 0);
         document.getElementById('claimedCount').innerText = claimedItems.length || 0;
         
         window.allPending = pendingItems;
-        window.allFound = foundItems;
+        window.allFound = [];
     } catch (err) {
         console.error("Stats sync failed");
     }
@@ -361,6 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 2. Initial Data Load
+    showLoginSuccessAlert();
     loadAnnouncements();
     updateDashboardStats();
     loadNotifications(); // Make sure this is defined
@@ -396,6 +400,7 @@ function closeModal(id) {
 }
 
 function logout() {
+    sessionStorage.clear();
     localStorage.clear();
     window.location.href = "/";
 }
@@ -414,7 +419,7 @@ window.onclick = function(event) {
 </script>
 
 <script src="/static/session-keepalive.js?v=2"></script>
-<script src="/static/student-notifications.js?v=3"></script>
+<script src="/static/student-notifications.js?v=4"></script>
 <script src="/static/force-password-change.js?v=2"></script>
 <script src="/static/student-sidebar-access.js?v=2"></script>
 </body> 

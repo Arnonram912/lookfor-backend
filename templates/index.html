@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LookFor | Login</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='landing.css') }}?v=5.0">
+    <link rel="stylesheet" href="/static/landing.css?v=5.1">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         .reset-btn {
@@ -294,11 +294,12 @@
             return;
         }
 
-        const existingAdminToken = localStorage.getItem("admin_token");
+        const existingAdminToken = sessionStorage.getItem("admin_token");
         const existingStudentToken = localStorage.getItem("token");
 
         if (payload.is_admin) {
-            localStorage.setItem("admin_token", data.access_token);
+            sessionStorage.setItem("admin_token", data.access_token);
+            localStorage.removeItem("admin_token");
 
             if (existingStudentToken) {
                 const studentPayload = decodeJwtPayload(existingStudentToken);
@@ -312,20 +313,18 @@
             if (existingAdminToken) {
                 const adminPayload = decodeJwtPayload(existingAdminToken);
                 if (adminPayload && !adminPayload.is_admin) {
+                    sessionStorage.removeItem("admin_token");
                     localStorage.removeItem("admin_token");
                 }
             }
         }
 
-        if (payload.is_admin) {
-            document.cookie = `admin_access_token=${data.access_token}; path=/; max-age=86400; SameSite=Strict`;
-        } else {
-            document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-        }
+        document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
         localStorage.setItem("is_admin", payload.is_admin);
         localStorage.setItem("user_email", payload.sub);
         localStorage.removeItem("pending_login_email");
+        sessionStorage.setItem("login_success_message", "Login Successful!");
 
         if (payload.is_admin) {
             window.location.href = "/admin/dashboard";
@@ -655,6 +654,7 @@
     });
 
     function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
         window.location.replace("/login");

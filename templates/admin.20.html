@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="{{ url_for('static', path='admin2.o.css') }}?v=12"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=13"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -123,6 +123,7 @@
         </li>
         <li>
             <div class="notification-container">
+                
                 <span class="notification-bell" onclick="toggleNotifications()" style="cursor:pointer;">
                     🔔 <span id="notificationCount" class="badge red">0</span>
                 </span>
@@ -131,6 +132,7 @@
                     <ul id="notificationList"></ul>
                     <div id="emptyNotif" class="no-notif-msg">No new notifications</div>
                 </div>
+            
             </div>
         </li>
         <!-- 👤 PROFILE -->
@@ -247,7 +249,7 @@
                     </div>
                 </div>
                 <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
-                    <button class="btn-secondary" onclick="closeModal('adminActionModal')" style="padding: 8px 20px; cursor: pointer;">Close</button>
+                    <button class="close_btn" onclick="closeModal('adminActionModal')">Close</button>
                 </div>
             </div>
         </div>
@@ -263,7 +265,7 @@
                     </div>
                 </div>
                 <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
-                    <button class="btn-secondary" onclick="closeModal('claimedItemsModal')" style="padding: 8px 20px; cursor: pointer;">Close</button>
+                    <button class="close_btn" onclick="closeModal('claimedItemsModal')">Close</button>
                 </div>
             </div>
         </div>
@@ -312,7 +314,7 @@
         dropdown.style.display = isOpen ? "none" : "block";
     }
     async function loadNotifications() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         try {
             const res = await fetch("/admin/notifications", {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -326,10 +328,10 @@
         }
     }
     async function checkAccess(targetUrl, permission) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     if (!token) {
-        window.location.href = "/login";
+        window.location.href = "/";
         return;
     }
 
@@ -386,7 +388,7 @@ function showAccessDeniedPopup(permName) {
 
     async function updateUnreadBadge() {
     try {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const response = await fetch("/admin/api/messages/unread-count", { 
             headers: { 'Authorization': `Bearer ${token}` } 
         });
@@ -453,9 +455,17 @@ function showToast(text) {
     setTimeout(() => toast.remove(), 4000);
 }
 
+function showLoginSuccessAlert() {
+    const message = sessionStorage.getItem("login_success_message");
+    if (!message) return;
+
+    sessionStorage.removeItem("login_success_message");
+    alert(message);
+}
+
 
 async function handleNotifClick(notifId) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     
     // 1. Find the specific notification object
     const notif = notifications.find(n => n.id === notifId);
@@ -537,52 +547,34 @@ async function handleNotifClick(notifId) {
 
     // --- DASHBOARD STATS & ACTIONS ---
     async function updateDashboardStats() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         try {
-            const resPending = await fetch('/admin/pending-items', {
+            const response = await fetch('/admin/dashboard-stats', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            const pendingItems = await resPending.json();
-            document.getElementById('pendingCount').innerText = pendingItems.length;
-            window.allPending = pendingItems;
+            if (!response.ok) throw new Error("Stats request failed");
 
-            const resFound = await fetch('/admin/items/found', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const foundItems = await resFound.json();
-            document.getElementById('foundCount').innerText = foundItems.length;
-            window.allFound = foundItems;
-
-            const resClaims = await fetch('/api/admin/claims', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const claims = await resClaims.json();
-            const approvedClaims = Array.isArray(claims)
-                ? claims.filter(claim => String(claim.status || '').toLowerCase() === 'approved')
-                : [];
-            document.getElementById('claimedCount').innerText = approvedClaims.length;
-            window.allApprovedClaims = approvedClaims;
+            const stats = await response.json();
+            document.getElementById('pendingCount').innerText = Number(stats.pending_count || 0);
+            document.getElementById('foundCount').innerText = Number(stats.found_count || 0);
+            document.getElementById('claimedCount').innerText = Number(stats.approved_claim_count || 0);
         } catch (err) {
             console.error("Stats sync failed");
         }
     }
 
     async function openPendingSurrenderWithAccess() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
 
         if (!token) {
-            window.location.href = "/login";
+            window.location.href = "/";
             return;
         }
 
         try {
-            const response = await fetch("/admin/my-permissions", {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-
-            if (!response.ok) throw new Error("Unauthorized");
-
-            const permissions = await response.json();
+            const permissions = typeof window.getAdminPermissionsCached === "function"
+                ? await window.getAdminPermissionsCached(false)
+                : [];
 
             if (permissions.includes("Found-Reports")) {
                 openPendingSurrenderModal();
@@ -596,21 +588,17 @@ async function handleNotifClick(notifId) {
     }
 
     async function openClaimedItemsWithAccess() {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
 
         if (!token) {
-            window.location.href = "/login";
+            window.location.href = "/";
             return;
         }
 
         try {
-            const response = await fetch("/admin/my-permissions", {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
-
-            if (!response.ok) throw new Error("Unauthorized");
-
-            const permissions = await response.json();
+            const permissions = typeof window.getAdminPermissionsCached === "function"
+                ? await window.getAdminPermissionsCached(false)
+                : [];
 
             if (permissions.includes("Claim-Management")) {
                 openClaimedItemsModal();
@@ -626,7 +614,7 @@ async function handleNotifClick(notifId) {
     async function openPendingSurrenderModal() {
     const container = document.getElementById('adminModalList');
     const title = document.getElementById('adminModalTitle');
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
 
     // 1. Set UI to loading state and show modal
     title.innerText = "Pending Surrender Items";
@@ -689,7 +677,7 @@ async function handleNotifClick(notifId) {
 async function openClaimedItemsModal() {
     const container = document.getElementById('claimedItemsList');
     const title = document.getElementById('claimedItemsModalTitle');
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
 
     title.innerText = "Approved Claimed Items";
     container.innerHTML = `<div style="text-align:center; padding:30px;">
@@ -774,7 +762,7 @@ function goToClaimReportDetails(claimId) {
 
 
 async function processAction(itemId, actionType) {
-    const token = localStorage.getItem("admin_token");
+    const token = sessionStorage.getItem("admin_token");
     const confirmMsg = actionType === 'approve' ? "Approve this item and move to inventory?" : "Reject/Archive this report?";
     
     if (!confirm(confirmMsg)) return;
@@ -827,7 +815,7 @@ async function processAction(itemId, actionType) {
             const url = `/admin/items/found?category=${encodeURIComponent(category)}&location=${encodeURIComponent(location)}&date=${date}`;
             
             const res = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem("admin_token")}` }
+                headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
             });
 
             const items = await res.json();
@@ -864,7 +852,7 @@ async function processAction(itemId, actionType) {
     }
     async function archiveFound(itemId) {
         if (!confirm('Archive this item?')) return;
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         try {
             const res = await fetch(`/admin/archive/${itemId}`, {
                 method: 'POST',
@@ -886,7 +874,7 @@ async function processAction(itemId, actionType) {
         const btn = document.querySelector("#bulkRegisterModal .success-btn");
         const modalContent = document.querySelector("#bulkRegisterModal .modal-content");
         const textArea = document.getElementById('bulkEmails');
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const rawEmails = textArea.value.split('\n').map(e => e.trim()).filter(e => e !== "");
         const validEmails = rawEmails.filter(e => e.endsWith("@novaliches.sti.edu.ph"));
 
@@ -924,7 +912,7 @@ async function processAction(itemId, actionType) {
     }
 
     async function resetSingle(email, index) {
-        const token = localStorage.getItem("admin_token");
+        const token = sessionStorage.getItem("admin_token");
         const cell = document.getElementById(`pass-cell-${index}`);
         if (!confirm(`Reset password for ${email}?`)) return;
         cell.innerHTML = "Processing...";
@@ -965,6 +953,7 @@ async function processAction(itemId, actionType) {
 
         try {
             const response = await fetch('/api/announcements');
+            if (!response.ok) throw new Error(`Announcement request failed: ${response.status}`);
             const announcements = await response.json();
 
             if (!announcements || announcements.length === 0) {
@@ -973,9 +962,10 @@ async function processAction(itemId, actionType) {
             }
 
             container.innerHTML = announcements.map((announcement, index) => {
-                const imgSrc = announcement.image_url && announcement.image_url.startsWith('/')
-                    ? announcement.image_url
-                    : `/${announcement.image_url || 'static/photos/default_news.jpg'}`;
+                const imageUrl = announcement.image_url || '/static/photos/default_news.jpg';
+                const imgSrc = imageUrl.startsWith('/')
+                    ? imageUrl
+                    : `/${imageUrl}`;
 
                 return `
                     <div class="carousel-slide ${index === 0 ? 'active' : ''}">
@@ -1001,19 +991,22 @@ async function processAction(itemId, actionType) {
     }
 
     function logout() {
+        sessionStorage.clear();
         localStorage.clear();
         window.location.href = "/";
     }
 
     // --- LIFECYCLE HANDLERS ---
-    window.onload = function() {
-        initAdminNotifications();
-        loadFoundItems();
-        loadAnnouncements();
-    };
+    window.addEventListener("load", function() {
+        if (typeof initAdminNotifications === "function") {
+            initAdminNotifications();
+        }
+    });
 
     window.addEventListener("DOMContentLoaded", () => {
-        if (!localStorage.getItem("admin_token")) window.location.href = "/";
+        if (!sessionStorage.getItem("admin_token")) window.location.href = "/";
+        showLoginSuccessAlert();
+        loadAnnouncements();
         updateDashboardStats();
         setInterval(updateDashboardStats, 30000);
     });
@@ -1027,7 +1020,7 @@ async function processAction(itemId, actionType) {
 
 <script src="/static/session-keepalive.js"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
-<script src="/static/admin-notifications.js?v=3"></script>
+<script src="/static/admin-notifications.js?v=4"></script>
 <script src="/static/force-password-change.js"></script>
 </body> 
 
