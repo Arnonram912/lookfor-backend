@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
-    <link rel="stylesheet" href="/static/User_Management.css?v=11"> 
+    <link rel="stylesheet" href="/static/User_Management.css?v=14"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
@@ -140,7 +140,7 @@
         <div class="profile-container">
         <span class="profile-trigger" onclick="toggleProfile()" class="profile-icon" style="cursor:pointer;">
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-            <img class="topbar-profile-pic" src="/static/photos/default-student-avatar.jpg" alt="Profile" width="38" height="38">
+            <img class="topbar-profile-pic" src="/static/photos/default-student-avatar.jpg" alt="Profile" width="38" height="38" style="width:38px;height:38px;min-width:38px;max-width:38px;min-height:38px;max-height:38px;border-radius:50%;object-fit:cover;display:block;">
             
         </span>
         </div>
@@ -186,8 +186,8 @@
 <div class="table-header-actions">
     <div class="table-header-top">
         <div class="tab-group user-tabs">
-        <button id="btnShowAdmin" class="tab-btn active" onclick="filterTable('admin')">Admin Staff</button>
-        <button id="btnShowStudent" class="tab-btn" onclick="filterTable('student')">Users</button>
+        <button id="btnShowAdmin" class="tab-btn active" onclick="filterTable('admin')">Admin/Staff</button>
+        <button id="btnShowStudent" class="tab-btn" onclick="filterTable('student')">Student/Faculty</button>
 
         <div class="tab-divider" aria-hidden="true"></div>
 
@@ -202,6 +202,7 @@
             <div class="search-container search-container-wide">
                 <input type="text" class="Srch" id="userSearch" placeholder="Search by name or ID..." 
                 onkeydown="handleSearchKeydown(event)">
+                <button type="button" class="search-action-btn" onclick="searchUsers()">Search</button>
             </div>
             <div id="batchFilterContainer" class="batch-filter-container">
                 <select id="batchFilterInput" class="Srch" onchange="onBatchFilterChange()" style="max-width: 220px; display:none;">
@@ -221,13 +222,13 @@
     </div>
     <div class="action-bar action-bar-below">
         <button id="openBulkRegisterBtn" class="upload-btn" onclick="openModal('bulkRegisterModal')"> 
-            + Register Users
+            + Register Student/Faculty
         </button> 
          <button id="openCreateAdminBtn" class="upload-btn" onclick="openModal('createAdminModal')"> 
             + Create an Admin
         </button>
         <button id="openResetStudentPasswordBtn" class="upload-btn" onclick="openModal('resetStudentPasswordModal')">
-            + Reset User Password
+            + Reset Student/Faculty Password
         </button>
         <button id="btnArchiveSelected" class="tab-btn archive-style batch-action-btn" style="color: #ff4d4d; border-color: #ff4d4d; display: none;" onclick="archiveSelectedUsers()">
             <i class="fas fa-box-archive"></i> Move to Archive 
@@ -249,7 +250,7 @@
 
 <div id="adminContainer" class="table-box">
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID</th><th>Full Name</th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="adminTableBody"></tbody>
     </table>
 </div>
@@ -257,16 +258,16 @@
 <div id="studentContainer" class="table-box">
     <div id="studentYearEndTermLabel" class="student-year-term-label" style="display:none;"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>User ID</th><th>Full Name</th><th>Course/Section</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course/Section/Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="studentTableBody"></tbody>
     </table>
 </div>
 
 <div id="archiveContainer" class="table-box archive-theme" style="display:none;">
-    <h3 id="archiveTitle"><i class="fas fa-box-archive"></i> Archived Users</h3>
+    <h3 id="archiveTitle"><i class="fas fa-box-archive"></i> Archived Accounts</h3>
     <div id="archiveFolderGrid" class="archive-folder-grid"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="archiveTableBody"></tbody>
     </table>
 </div>
@@ -274,7 +275,7 @@
 <div id="deleteContainer" class="table-box archive-theme" style="display:none;">
     <h3 id="deleteTitle"><i class="fas fa-trash"></i> Trash</h3>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / User ID</th><th>Full Name</th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="deleteTableBody"></tbody>
     </table>
 </div>
@@ -282,7 +283,7 @@
   <div id="bulkRegisterModal" class="modal">
     <div class="modal-content bulk-register-content">
         <span class="close-modal" onclick="closeModal('bulkRegisterModal')">&times;</span>
-        <h2>Bulk Register Users</h2>
+        <h2>Bulk Register Student/Faculty</h2>
 
         <p class="bulk-register-intro">Upload Excel/CSV File:</p>
         <div class="form-group bulk-import-group" style="margin-bottom: 18px;">
@@ -391,7 +392,7 @@
         <div class="modal-header">
             <span class="close-modal" onclick="closeModal('bulkResultModal')">&times;</span>
             <h2>Registration Report</h2>
-            <p style="font-size: 0.9em; color: #666;">Total Users processed: <span id="totalBatchCount">0</span></p>
+            <p style="font-size: 0.9em; color: #666;">Total Student/Faculty processed: <span id="totalBatchCount">0</span></p>
             <p id="bulkSummaryText" style="font-size: 0.9em; color: #555; margin-top: 6px;">Created: 0 | Replaced: 0 | Ignored: 0</p>
             <p id="bulkFailureText" style="font-size: 0.85em; color: #b02a37; margin-top: 6px;"></p>
             <p id="bulkPreviewNote" style="font-size: 0.85em; color: #777; margin-top: 6px;"></p>
@@ -400,10 +401,10 @@
             <table class="report-table">
                 <thead>
                     <tr>
-                        <th>User ID</th>
+                        <th>Student/Faculty ID</th>
                         <th>Full Name</th>
                         <th>Batch ID</th>
-                        <th>User Email</th>
+                        <th>Email</th>
                         <th>Status</th>
                         <th>Temporary Password</th>
                     </tr>
@@ -490,7 +491,7 @@
 
         <div class="user-profile-grid">
             <div class="profile-info-item">
-                <span>User ID</span>
+                <span>Student/Faculty ID</span>
                 <strong id="profileViewUserId">N/A</strong>
             </div>
             <div class="profile-info-item">
@@ -531,6 +532,7 @@
 
         <div class="user-profile-actions">
             <button class="btn-secondary" onclick="closeModal('userProfileModal')">Close</button>
+            <button id="profileResetPasswordBtn" class="btn-secondary profile-reset-btn" onclick="resetSelectedProfilePassword()">Reset Password</button>
             <button id="profileManageAccessBtn" class="btn-primary" onclick="openProfileAccessEditor()">Manage Access</button>
         </div>
     </div>
@@ -834,13 +836,13 @@
     <div id="resetStudentPasswordModal" class="modal">
         <div class="modal-content reset-student-password-content">
             <span class="close-modal" onclick="closeModal('resetStudentPasswordModal')">&times;</span>
-            <h2>Reset Student Password</h2>
+            <h2>Reset Student/Faculty Password</h2>
             <p style="margin-bottom: 18px; color: #555; font-size: 13px;">
                 Enter the student's STI email and the system will generate a new temporary password.
             </p>
 
             <div class="form-group">
-                <label for="resetStudentEmail">Student Email</label>
+                <label for="resetStudentEmail">Student/Faculty Email</label>
                 <input type="email" id="resetStudentEmail" placeholder="student@novaliches.sti.edu.ph" class="admin-input">
             </div>
 
@@ -860,7 +862,7 @@
                 Share this temporary password with the student and ask them to change it after logging in.
             </p>
             <div class="form-group">
-                <label>Student Email</label>
+                <label>Student/Faculty Email</label>
                 <input type="text" id="resetResultEmail" class="admin-input" readonly>
             </div>
             <div class="form-group">
@@ -1275,7 +1277,7 @@ function getUserStatusLabel(user) {
 
 function getUserRoleLabel(user) {
     if (!user) return 'User';
-    if (user.is_admin) return 'Admin Staff';
+    if (user.is_admin) return 'Admin/Staff';
     return isFacultyUser(user) ? 'Faculty' : 'Student';
 }
 
@@ -1297,7 +1299,7 @@ function setProfileText(id, value) {
     if (element) element.textContent = value || 'N/A';
 }
 
-function openUserProfileModal(userId) {
+function openUserProfileModal(userId, mode = 'view') {
     const user = allUsers.find(item => Number(item.id) === Number(userId));
     if (!user) {
         showUserManagementAlert('error', 'Profile unavailable', 'Unable to find this user profile.');
@@ -1310,6 +1312,7 @@ function openUserProfileModal(userId) {
     const photo = document.getElementById('profileViewPhoto');
     const permissionsList = document.getElementById('profileViewPermissions');
     const manageBtn = document.getElementById('profileManageAccessBtn');
+    const resetBtn = document.getElementById('profileResetPasswordBtn');
     const fullName = user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'N/A';
     const courseSection = [user.course, user.section].filter(Boolean).join(' ').trim();
     const sectionLevel = [user.section, user.level].filter(Boolean).join(' / ').trim();
@@ -1359,6 +1362,7 @@ function openUserProfileModal(userId) {
 
     if (manageBtn) {
         const canManage = hasAccessPermission('User-Management-Edit')
+            && mode === 'edit'
             && Number(user.id) !== Number(currentAdminId)
             && !user.is_archived
             && !user.is_pending_delete;
@@ -1366,7 +1370,27 @@ function openUserProfileModal(userId) {
         manageBtn.textContent = user.is_admin ? 'Edit Permissions' : 'Manage Access';
     }
 
+    if (resetBtn) {
+        const canReset = mode === 'edit'
+            && hasAccessPermission('User-Management-Reset')
+            && !user.is_admin
+            && Number(user.id) !== Number(currentAdminId)
+            && !user.is_archived
+            && !user.is_pending_delete
+            && !!user.email;
+        resetBtn.style.display = canReset ? 'inline-flex' : 'none';
+    }
+
     openModal('userProfileModal');
+}
+
+async function resetSelectedProfilePassword() {
+    if (!selectedProfileUser?.email) {
+        await showUserManagementAlert('warning', 'Email unavailable', 'This account does not have an email address.');
+        return;
+    }
+
+    await resetSingle(selectedProfileUser.email);
 }
 
 function openProfileAccessEditor() {
@@ -1702,6 +1726,7 @@ async function saveUserPermissions(selectedPermissions) {
 
 
 let allUsers = []; // Global variable to store the fetched data
+let fullNameSortDirection = null;
 
 
 let currentAdminId = null; // Store your ID globally
@@ -1804,7 +1829,7 @@ function populateBatchFilterOptions() {
     };
 
     // MAIN FILTERS
-    appendOption('', 'All Users');
+    appendOption('', 'All Student/Faculty');
     appendOption('type:student', 'Students Only');
     appendOption('type:faculty', 'Faculty Only');
 
@@ -1948,7 +1973,7 @@ function applySemesterFilter(users) {
 }
 
 function getArchiveFolderYear(user) {
-    if (user?.is_admin) return 'Admin Staff';
+    if (user?.is_admin) return 'Admin/Staff';
     const batchInfo = parseBatchTerm(user?.batch_id);
     return batchInfo.yearEndTerm || 'No Year End Term';
 }
@@ -1983,7 +2008,7 @@ function getArchivedUserFolders() {
 
     const folderRank = year => {
         if (year === 'No Year End Term') return 2;
-        if (year === 'Admin Staff') return 1;
+        if (year === 'Admin/Staff') return 1;
         return 0;
     };
 
@@ -2084,6 +2109,35 @@ function getFilteredUsersForRole(role) {
 function getInitialUserManagementTab() {
     const tab = new URLSearchParams(window.location.search).get('tab');
     return ['admin', 'student', 'archive', 'delete'].includes(tab) ? tab : 'admin';
+}
+
+function sortUsersByFullName(users) {
+    const sortableUsers = Array.isArray(users) ? [...users] : [];
+    if (!fullNameSortDirection) return sortableUsers;
+
+    return sortableUsers.sort((a, b) => {
+        const nameA = String(a.full_name || a.email || '').trim();
+        const nameB = String(b.full_name || b.email || '').trim();
+        const comparison = nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+        return fullNameSortDirection === 'asc' ? comparison : -comparison;
+    });
+}
+
+function updateFullNameSortIndicators() {
+    const label = fullNameSortDirection === 'asc'
+        ? 'A-Z'
+        : fullNameSortDirection === 'desc'
+            ? 'Z-A'
+            : '';
+
+    document.querySelectorAll('[data-sort-indicator]').forEach(indicator => {
+        indicator.textContent = label;
+    });
+}
+
+function toggleFullNameSort() {
+    fullNameSortDirection = fullNameSortDirection === 'asc' ? 'desc' : 'asc';
+    searchUsers();
 }
 
 async function loadUsers(currentRole = getInitialUserManagementTab()) {
@@ -2223,10 +2277,11 @@ function filterTable(role = 'admin') {
             role === 'admin'
                 ? `Total Admins: ${filtered.length}`
                 : role === 'student'
-                    ? `Total Users: ${filtered.length}`
+                    ? `Total Student/Faculty: ${filtered.length}`
                     : `Total Records: ${filtered.length}`;
     }
 
+    filtered = sortUsersByFullName(filtered);
     renderTable(filtered, role, activeConfig.body);
 }
 function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody') {
@@ -2234,6 +2289,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
     if (!tableBody) return; // Safety check
     
     tableBody.innerHTML = '';
+    updateFullNameSortIndicators();
 
     data.forEach(user => {
         const isMe = user.id == currentAdminId; 
@@ -2260,7 +2316,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                     : ((user.course || user.section)
                     ? `${user.course || ''} ${user.section || ''}`.trim()
                     : 'STUDENT');
-            infoColumn = `<td>${user.is_admin ? 'Admin' : 'User'}${roleInfo ? ` - ${roleInfo}` : ''}</td>`;
+            infoColumn = `<td>${user.is_admin ? 'Admin' : getUserRoleLabel(user)}${roleInfo ? ` - ${roleInfo}` : ''}</td>`;
         } else {
             // Admin perspective
             infoColumn = `<td>${user.department || 'N/A'}</td>`;
@@ -2290,18 +2346,26 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                         : `<button class="action-btn locked-btn" disabled style="margin-left: 5px;">No Delete Access</button>`}
                 `;
             } else {
-                const profileViewButton = `<button class="action-btn edit-btn" onclick="openUserProfileModal(${user.id})">View</button>`;
+                const profileViewButton = `<button class="action-btn view-btn" onclick="openUserProfileModal(${user.id}, 'view')">View</button>`;
+                const profileEditButton = Number(user.id) === Number(currentAdminId) || user.is_archived || user.is_pending_delete
+                    ? ''
+                    : `<button class="action-btn edit-btn" onclick="openUserProfileModal(${user.id}, 'edit')">Edit</button>`;
+                const deleteButton = Number(user.id) === Number(currentAdminId) || !canDeleteUsers
+                    ? ''
+                    : `<button class="action-btn delete-perm-btn" onclick="moveToDelete(${user.id}, '${currentRole}')">Delete</button>`;
+                const archiveButton = Number(user.id) === Number(currentAdminId)
+                    ? ''
+                    : (canArchiveUsers
+                        ? `<button class="action-btn archive-btn" onclick="toggleArchive(${user.id}, true, '${currentRole}')">Archive</button>`
+                        : `<button class="action-btn locked-btn" disabled>No Archive Access</button>`);
 
                 actionButtons = isMe ? 
                     `${profileViewButton}` : 
                     `
                     ${profileViewButton}
-                    ${currentRole === 'student' && canDeleteUsers
-                        ? `<button class="action-btn delete-perm-btn" onclick="moveToDelete(${user.id}, '${currentRole}')" style="margin-left: 5px; background-color: #dc3545; color: white;">Delete</button>`
-                        : ''}
-                    ${canArchiveUsers
-                        ? `<button class="action-btn archive-btn" onclick="toggleArchive(${user.id}, true, '${currentRole}')" style="background-color: #6c757d; color: white; margin-left: 5px;">Archive</button>`
-                        : `<button class="action-btn locked-btn" disabled style="margin-left: 5px;">No Archive Access</button>`}
+                    ${profileEditButton}
+                    ${archiveButton}
+                    ${deleteButton}
                     `;
             }
 
@@ -2424,18 +2488,18 @@ async function archiveSelectedUsers() {
             'No users selected',
             currentView === 'admin'
                 ? 'Select at least one admin account first.'
-                : 'Select at least one active user first.'
+                : 'Select at least one active student first.'
         );
         return;
     }
-    const selectedLabel = currentView === 'admin' ? 'admin account(s)' : 'user account(s)';
+    const selectedLabel = currentView === 'admin' ? 'admin account(s)' : 'student account(s)';
     if (!(await confirmUserManagementAction('Archive selected users?', `Archive ${selected.length} selected ${selectedLabel}?`, 'Archive selected'))) return;
 
     const archiveBtn = document.getElementById('btnArchiveSelected');
     const originalArchiveBtnHtml = setBatchActionButtonLoading(
         'btnArchiveSelected',
         true,
-        `<i class="fas fa-spinner fa-spin"></i> Archiving ${selected.length} ${currentView === 'admin' ? 'Admins' : 'Users'}...`
+        `<i class="fas fa-spinner fa-spin"></i> Archiving ${selected.length} ${currentView === 'admin' ? 'Admins' : 'Student/Faculty'}...`
     );
 
     try {
@@ -2453,7 +2517,7 @@ async function archiveSelectedUsers() {
 
         selectedUserIds.clear();
         await loadUsers(currentView);
-        await showUserManagementAlert('success', 'Users archived', `${selected.length} selected ${selectedLabel} archived.`);
+        await showUserManagementAlert('success', 'Accounts archived', `${selected.length} selected ${selectedLabel} archived.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Archive failed', error.message || 'Failed to archive selected users.');
     } finally {
@@ -2469,7 +2533,7 @@ async function activateSelectedUsers() {
 
     const selected = allUsers.filter(user => selectedUserIds.has(user.id) && !user.is_admin && !user.is_archived && !user.is_student_active);
     if (selected.length === 0) {
-        await showUserManagementAlert('info', 'No users selected', 'Select at least one deactivated user first.');
+        await showUserManagementAlert('info', 'No accounts selected', 'Select at least one deactivated account first.');
         return;
     }
     if (!(await confirmUserManagementAction('Activate selected users?', `Activate ${selected.length} selected user account(s)?`, 'Activate selected'))) return;
@@ -2482,7 +2546,7 @@ async function activateSelectedUsers() {
             activateBtn.disabled = true;
             activateBtn.style.opacity = '0.7';
             activateBtn.style.cursor = 'wait';
-            activateBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Activating ${selected.length} Users...`;
+            activateBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Activating ${selected.length} Student/Faculty...`;
         }
 
         const response = await fetch('/admin/activate-students', {
@@ -2501,7 +2565,7 @@ async function activateSelectedUsers() {
 
         selectedUserIds.clear();
         await loadUsers('student');
-        await showUserManagementAlert('success', 'Users activated', result.message || `${selected.length} selected user account(s) activated.`);
+        await showUserManagementAlert('success', 'Student/Faculty activated', result.message || `${selected.length} selected student/faculty account(s) activated.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Activation failed', error.message || 'Failed to activate selected users.');
     } finally {
@@ -2535,7 +2599,7 @@ async function deactivateSelectedUsers() {
             deactivateBtn.disabled = true;
             deactivateBtn.style.opacity = '0.7';
             deactivateBtn.style.cursor = 'wait';
-            deactivateBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Deactivating ${selected.length} Users...`;
+            deactivateBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Deactivating ${selected.length} Student/Faculty...`;
         }
 
         const response = await fetch('/admin/deactivate-students', {
@@ -2554,7 +2618,7 @@ async function deactivateSelectedUsers() {
 
         selectedUserIds.clear();
         await loadUsers('student');
-        await showUserManagementAlert('success', 'Users deactivated', result.message || `${selected.length} selected user account(s) deactivated.`);
+        await showUserManagementAlert('success', 'Student/Faculty deactivated', result.message || `${selected.length} selected student/faculty account(s) deactivated.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Deactivation failed', error.message || 'Failed to deactivate selected users.');
     } finally {
@@ -2735,12 +2799,12 @@ async function recoverSelectedUsers() {
         await showUserManagementAlert('info', 'No users selected', 'Select at least one archived account first.');
         return;
     }
-    if (!(await confirmUserManagementAction('Recover selected users?', `Recover ${selected.length} selected account(s)?`, 'Recover selected'))) return;
+    if (!(await confirmUserManagementAction('Recover selected accounts?', `Recover ${selected.length} selected account(s)?`, 'Recover selected'))) return;
 
     const originalRecoverBtnHtml = setBatchActionButtonLoading(
         'btnRecoverSelected',
         true,
-        `<i class="fas fa-spinner fa-spin"></i> Recovering ${selected.length} Users...`
+        `<i class="fas fa-spinner fa-spin"></i> Recovering ${selected.length} Accounts...`
     );
 
     try {
@@ -2758,9 +2822,9 @@ async function recoverSelectedUsers() {
 
         selectedUserIds.clear();
         await loadUsers(currentView);
-        await showUserManagementAlert('success', 'Users recovered', `${selected.length} selected account(s) recovered.`);
+        await showUserManagementAlert('success', 'Accounts recovered', `${selected.length} selected account(s) recovered.`);
     } catch (error) {
-        await showUserManagementAlert('error', 'Recover failed', error.message || 'Failed to recover selected users.');
+        await showUserManagementAlert('error', 'Recover failed', error.message || 'Failed to recover selected accounts.');
     } finally {
         setBatchActionButtonLoading('btnRecoverSelected', false, '', originalRecoverBtnHtml);
     }
@@ -2773,17 +2837,17 @@ async function deleteSelectedUsers() {
     }
     const selected = allUsers.filter(user => selectedUserIds.has(user.id) && user.is_archived);
     if (selected.length === 0) {
-        await showUserManagementAlert('info', 'No users selected', 'Select at least one archived account first.');
+        await showUserManagementAlert('info', 'No accounts selected', 'Select at least one archived account first.');
         return;
     }
 
     if (currentView === 'archive') {
-        if (!(await confirmUserManagementAction('Move users to Trash?', `Move ${selected.length} selected account(s) to the Trash tab?`, 'Move to Trash'))) return;
+        if (!(await confirmUserManagementAction('Move accounts to Trash?', `Move ${selected.length} selected account(s) to the Trash tab?`, 'Move to Trash'))) return;
 
         const originalDeleteBtnHtml = setBatchActionButtonLoading(
             'btnDeleteSelected',
             true,
-            `<i class="fas fa-spinner fa-spin"></i> Moving ${selected.length} Users...`
+            `<i class="fas fa-spinner fa-spin"></i> Moving ${selected.length} Accounts...`
         );
 
         try {
@@ -2801,21 +2865,21 @@ async function deleteSelectedUsers() {
 
             selectedUserIds.clear();
             await loadUsers(currentView);
-            await showUserManagementAlert('success', 'Users moved', `${selected.length} selected account(s) moved to Trash.`);
+            await showUserManagementAlert('success', 'Accounts moved', `${selected.length} selected account(s) moved to Trash.`);
         } catch (error) {
-            await showUserManagementAlert('error', 'Move failed', error.message || 'Failed to move selected users to Trash.');
+            await showUserManagementAlert('error', 'Move failed', error.message || 'Failed to move selected accounts to Trash.');
         } finally {
             setBatchActionButtonLoading('btnDeleteSelected', false, '', originalDeleteBtnHtml);
         }
         return;
     }
 
-    if (!(await confirmUserManagementAction('Delete selected users permanently?', `Permanently delete ${selected.length} selected account(s)? This cannot be undone.`, 'Delete selected'))) return;
+    if (!(await confirmUserManagementAction('Delete selected accounts permanently?', `Permanently delete ${selected.length} selected account(s)? This cannot be undone.`, 'Delete selected'))) return;
 
     const originalDeleteBtnHtml = setBatchActionButtonLoading(
         'btnDeleteSelected',
         true,
-        `<i class="fas fa-spinner fa-spin"></i> Deleting ${selected.length} Users...`
+        `<i class="fas fa-spinner fa-spin"></i> Deleting ${selected.length} Accounts...`
     );
 
     try {
@@ -2833,9 +2897,9 @@ async function deleteSelectedUsers() {
 
         selectedUserIds.clear();
         await loadUsers(currentView);
-        await showUserManagementAlert('success', 'Users deleted', `${selected.length} selected account(s) deleted.`);
+        await showUserManagementAlert('success', 'Accounts deleted', `${selected.length} selected account(s) deleted.`);
     } catch (error) {
-        await showUserManagementAlert('error', 'Delete failed', error.message || 'Failed to delete selected users.');
+        await showUserManagementAlert('error', 'Delete failed', error.message || 'Failed to delete selected accounts.');
     } finally {
         setBatchActionButtonLoading('btnDeleteSelected', false, '', originalDeleteBtnHtml);
     }
@@ -2882,26 +2946,9 @@ async function moveToDelete(userId, currentRole, silent = false) {
         currentBatchFilter = newBatchFilter;
     }
     
-    // Determine which tab is currently active
     const activeTab = currentView;
-    
-    // Filter the global allUsers list
-    let filtered = allUsers.filter(user => {
-        let matchesRole = false;
-        let matchesArchive = false;
 
-        if (activeTab === 'admin') {
-            matchesRole = !!user.is_admin;
-            matchesArchive = !user.is_archived;
-        } else if (activeTab === 'student') {
-            matchesRole = !user.is_admin;
-            matchesArchive = !user.is_archived;
-        } else if (activeTab === 'archive' || activeTab === 'delete') {
-            matchesArchive = !!user.is_archived;
-            matchesRole = true;
-        }
-        
-        // Matches the search query (Name, ID, batch, course, department, email)
+    let visibleUsers = getFilteredUsersForRole(activeTab).filter(user => {
         const matchesQuery = 
             (user.full_name && user.full_name.toLowerCase().includes(query)) || 
             (user.email && user.email.toLowerCase().includes(query)) ||
@@ -2912,11 +2959,9 @@ async function moveToDelete(userId, currentRole, silent = false) {
             (user.department && user.department.toLowerCase().includes(query)) ||
             String(user.id || '').includes(query);
 
-        return matchesRole && matchesArchive && matchesQuery;
+        return matchesQuery;
     });
 
-    // Apply additional filters
-    let visibleUsers = applyBatchFilter(filtered);
     if (activeTab === 'archive') {
         visibleUsers = applyArchiveFolderFilter(visibleUsers);
     } else if (activeTab === 'student' || activeTab === 'delete') {
@@ -2929,7 +2974,7 @@ async function moveToDelete(userId, currentRole, silent = false) {
         userCountBadge.innerText = activeTab === 'admin'
             ? `Total Admins: ${visibleUsers.length}`
             : activeTab === 'student'
-                ? `Total Users: ${visibleUsers.length}`
+                ? `Total Student/Faculty: ${visibleUsers.length}`
                 : `Total Records: ${visibleUsers.length}`;
     }
 
@@ -2942,7 +2987,7 @@ async function moveToDelete(userId, currentRole, silent = false) {
                 ? 'archiveTableBody'
                 : 'deleteTableBody';
     
-    renderTable(visibleUsers, activeTab, bodyId);
+    renderTable(sortUsersByFullName(visibleUsers), activeTab, bodyId);
 }
 
      async function checkAccess(targetUrl, permission) {
@@ -3364,30 +3409,30 @@ async function submitBulk() {
         return;
     }
 
-    if (usersToRegister.length > 1200 && !(await confirmUserManagementAction('Large upload detected', `You are about to upload ${usersToRegister.length} users. Continue?`, 'Continue upload', 'warning'))) {
+    if (usersToRegister.length > 1200 && !(await confirmUserManagementAction('Large upload detected', `You are about to upload ${usersToRegister.length} student/faculty accounts. Continue?`, 'Continue upload', 'warning'))) {
         return;
     }
 
     const containsEmployeeRows = usersToRegister.some(user => user.source_type === 'employee');
     const duplicateMessage = duplicateAction === 'replace'
-        ? 'Existing users with the same User ID or email will be replaced.'
-        : 'Existing users with the same User ID or email will be ignored.';
+        ? 'Existing student/faculty accounts with the same ID or email will be replaced.'
+        : 'Existing student/faculty accounts with the same ID or email will be ignored.';
     const summaryLines = [
         duplicateMessage,
         containsEmployeeRows ? 'Import type: Faculty accounts (employee number suffix is ignored)' : 'Import type: Student accounts',
         `Batch: ${batchId}`,
         `Entry mode: ${entryMode === 'manual' ? 'Manual Entry' : 'Upload File'}`,
-        `Users to process: ${usersToRegister.length}`
+        `Student/Faculty to process: ${usersToRegister.length}`
     ];
     if (!(await confirmUserManagementAction('Confirm bulk registration', summaryLines.join(' '), 'Start bulk registration', 'info'))) {
         return;
     }
 
-    btn.innerText = `Starting ${usersToRegister.length} Users...`;
+    btn.innerText = `Starting ${usersToRegister.length} Student/Faculty...`;
     btn.disabled = true;
     setBulkLoadingOverlay(true, {
         title: 'Starting bulk registration',
-        message: `Preparing ${usersToRegister.length} user account${usersToRegister.length === 1 ? '' : 's'} for background processing...`,
+        message: `Preparing ${usersToRegister.length} student/faculty account${usersToRegister.length === 1 ? '' : 's'} for background processing...`,
         progress: '22%'
     });
 
@@ -3443,11 +3488,11 @@ function exportToExcelFromModal(results) {
     const workbook = XLSX.utils.book_new();
 
     // 2. Convert the results array to a Worksheet
-    // This will include: Email, User ID, Full Name, and Temp Password
+    // This will include: Email, Student/Faculty ID, Full Name, and Temp Password
     const worksheet = XLSX.utils.json_to_sheet(exportResults);
 
     // 3. Add the worksheet to the workbook
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Registered_Users");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Registered_Accounts");
 
     // 4. Define the filename with the current year
     // NEW (Fixed):
@@ -3459,7 +3504,7 @@ function exportToExcelFromModal(results) {
 function exportToExcel(results) {
     const worksheet = XLSX.utils.json_to_sheet(results.map(item => ({
         "Batch ID": item.batch_id,
-        "User ID": item.student_no,
+        "Student/Faculty ID": item.student_no,
         "Full Name": item.full_name,
         "Role / Department": item.department,
         "Program": item.course,    // Shows STEM, MAWD, etc.
@@ -3708,7 +3753,7 @@ function handleExcel(input) {
         }
 
         if (headerRowIndex === -1 || (detectedFormat === 'student' && colMap.student_id === -1) || (detectedFormat === 'employee' && colMap.emp_number === -1)) {
-            showUserManagementAlert('warning', 'Invalid file format', 'No valid users found. Please check your Excel headers. Supported formats: Student ID sheets or EMP NUMBER sheets.');
+            showUserManagementAlert('warning', 'Invalid file format', 'No valid accounts found. Please check your Excel headers. Supported formats: Student ID sheets or EMP NUMBER sheets.');
             return;
         }
 
@@ -3759,8 +3804,8 @@ function handleExcel(input) {
 
         window.bulkData = users;
 
-        const accountLabel = detectedFormat === 'employee' ? 'faculty accounts' : 'users';
-        showUserManagementAlert('success', 'Users detected', `Found ${users.length} ${accountLabel}.`);
+        const accountLabel = detectedFormat === 'employee' ? 'faculty accounts' : 'student accounts';
+        showUserManagementAlert('success', 'Student/Faculty detected', `Found ${users.length} ${accountLabel}.`);
     };
     reader.readAsArrayBuffer(file);
 }
@@ -4087,7 +4132,7 @@ window.addEventListener('pageshow', () => {
 
 <script src="/static/session-keepalive.js?v=5"></script>
 <script src="/static/admin-bulk-job-monitor.js"></script>
-<script src="/static/admin-notifications.js?v=4"></script>
+<script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 </body>
 </html>

@@ -236,6 +236,15 @@
             const profilePicUrl = normalizeProfilePicUrl(user.profile_pic);
 
             avatars.forEach((avatar) => {
+                avatar.style.width = "38px";
+                avatar.style.height = "38px";
+                avatar.style.minWidth = "38px";
+                avatar.style.maxWidth = "38px";
+                avatar.style.minHeight = "38px";
+                avatar.style.maxHeight = "38px";
+                avatar.style.borderRadius = "50%";
+                avatar.style.objectFit = "cover";
+                avatar.style.display = "block";
                 avatar.onerror = () => {
                     avatar.onerror = null;
                     avatar.src = "/static/photos/default-student-avatar.jpg";

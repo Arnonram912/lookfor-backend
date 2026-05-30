@@ -470,6 +470,35 @@ body.dark-theme #bulkEmails {
 .tab-btn:hover:not(.active) {
     background: #ccc;
 }
+
+.user-table th.sortable-th {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.18s ease;
+}
+
+.user-table th.sortable-th:hover {
+    background: #004b99;
+}
+
+.sort-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    margin-left: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.sort-indicator:empty {
+    display: none;
+}
+
 .table-header-actions {
     display: flex;
     flex-direction: column;
@@ -701,9 +730,57 @@ body.dark-theme #bulkEmails {
     display: flex;
     align-items: center;
     justify-content: flex-start;
+    gap: 8px;
     min-width: 300px;
-    max-width: 360px;
+    max-width: 470px;
     min-height: 42px;
+}
+
+.search-action-btn {
+    min-height: 42px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 5px;
+    background: #003366;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.search-action-btn:hover {
+    background: #004b99;
+    transform: translateY(-1px);
+}
+
+.user-table .action-btn {
+    margin: 2px 3px;
+}
+
+.view-btn {
+    background: #0d6efd;
+    color: #fff;
+}
+
+.archive-btn {
+    background: #6c757d;
+    color: #fff;
+}
+
+.delete-perm-btn {
+    background: #dc3545;
+    color: #fff;
+}
+
+.profile-reset-btn {
+    background: #f59f00;
+    color: #14213d;
+    font-weight: 800;
+}
+
+.profile-reset-btn:hover {
+    background: #fab005;
 }
 
 #batchFilterInput.Srch {
@@ -733,6 +810,31 @@ body.dark-theme #bulkEmails {
 .action-bar-below .upload-btn {
     margin-bottom: 0;
     margin-left: 0;
+    min-height: 42px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 5px;
+    background: #003366;
+    color: #fff;
+    box-shadow: none;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.action-bar-below .upload-btn:hover {
+    background: #004b99;
+    transform: translateY(-1px);
+}
+
+.action-bar-below .upload-btn:active {
+    transform: translateY(0);
 }
 
 .row-select {

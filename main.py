@@ -1515,6 +1515,67 @@ def get_conversation_partners(db: Session = Depends(get_db), current_user: model
         })
     return result
 
+@app.get("/api/messages/unread-count")
+def get_message_unread_count(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    unread_count = db.query(models.Message).filter(
+        models.Message.recipient_id == current_user.id,
+        func.trim(func.lower(models.Message.status)) == "unread"
+    ).count()
+
+    return {"unread_count": unread_count}
+
+@app.get("/api/messages/recent")
+def get_recent_message_interactions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    limit: int = 20,
+):
+    limit = max(1, min(limit, 50))
+    recent_messages = (
+        db.query(models.Message)
+        .options(joinedload(models.Message.sender), joinedload(models.Message.recipient))
+        .filter(
+            or_(
+                models.Message.sender_id == current_user.id,
+                models.Message.recipient_id == current_user.id,
+            )
+        )
+        .order_by(models.Message.created_at.desc(), models.Message.id.desc())
+        .limit(200)
+        .all()
+    )
+
+    interactions = []
+    seen_partner_ids = set()
+
+    for message in recent_messages:
+        partner = message.recipient if message.sender_id == current_user.id else message.sender
+        if not partner or partner.id in seen_partner_ids:
+            continue
+
+        seen_partner_ids.add(partner.id)
+        unread_count = db.query(models.Message).filter(
+            models.Message.sender_id == partner.id,
+            models.Message.recipient_id == current_user.id,
+            func.trim(func.lower(models.Message.status)) == "unread"
+        ).count()
+
+        interactions.append({
+            "partner_id": partner.id,
+            "partner_name": get_user_display_name(partner),
+            "partner_email": partner.email,
+            "role_label": get_user_role_label(partner),
+            "last_message": message.content or "",
+            "last_message_at": message.created_at,
+            "is_outgoing": message.sender_id == current_user.id,
+            "unread_count": unread_count,
+        })
+
+        if len(interactions) >= limit:
+            break
+
+    return interactions
+
 @app.post("/api/save-found-item")
 async def save_found_item(
     item_name: str = Form(...),

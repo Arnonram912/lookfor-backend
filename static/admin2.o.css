@@ -558,6 +558,76 @@ body {
 .notification-dropdown li.unread,
 .notification-dropdown .notif-item.unread,
 .notification-dropdown .notif-msg.unread { background: #edf2fa; font-weight: 600; }
+
+.message-dropdown {
+    min-width: 340px;
+}
+
+.message-dropdown .no-notif-msg {
+    padding: 34px 10px;
+    text-align: center;
+    color: #8a95a3;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.message-notification-item {
+    display: block;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.message-notification-item.unread {
+    background: #edf2fa;
+    font-weight: 600;
+}
+
+.message-notification-item:hover {
+    background: #f1f7ff;
+    transform: translateX(2px);
+}
+
+.message-notification-main {
+    min-width: 0;
+}
+
+.message-notification-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: #183a5b;
+}
+
+.message-notification-meta,
+.message-notification-preview {
+    margin-top: 4px;
+    color: #647386;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.message-notification-preview {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #39495b;
+}
+
+.message-count-pill {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #ff4d4d;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 800;
+    flex: 0 0 auto;
+}
+
 .notification-dropdown .notification-item {
     padding: 10px;
     border-bottom: 1px solid #f0f0f0;
@@ -745,6 +815,15 @@ h2 {
     position: relative;
     display: flex;
     align-items: center;
+}
+
+.message-icon {
+    transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.message-icon:hover {
+    transform: scale(1.1);
+    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.18));
 }
 
 .profile-dropdown {

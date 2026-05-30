@@ -195,10 +195,8 @@ async def get_student_notifications(
     current_user: models.User = Depends(get_active_student_user)
 ):
     notifications = db.query(models.Notification).filter(
-        or_(
-            and_(models.Notification.type == "chat", models.Notification.related_id == current_user.id),
-            and_(models.Notification.type.in_(["student_match", "student_update"]), models.Notification.related_id == current_user.id)
-        )
+        models.Notification.type.in_(["student_match", "student_update"]),
+        models.Notification.related_id == current_user.id
     ).order_by(models.Notification.created_at.desc()).all()
 
     return notifications
@@ -210,10 +208,8 @@ async def get_student_notification_unread_count(
     current_user: models.User = Depends(get_active_student_user)
 ):
     unread_count = db.query(models.Notification).filter(
-        or_(
-            and_(models.Notification.type == "chat", models.Notification.related_id == current_user.id),
-            and_(models.Notification.type.in_(["student_match", "student_update"]), models.Notification.related_id == current_user.id)
-        ),
+        models.Notification.type.in_(["student_match", "student_update"]),
+        models.Notification.related_id == current_user.id,
         models.Notification.is_read == False
     ).count()
 
@@ -230,7 +226,7 @@ async def mark_student_notification_read(
     if not notif:
         raise HTTPException(status_code=404, detail="Notification not found")
 
-    is_owned_student_notif = notif.related_id == current_user.id and notif.type in {"chat", "student_match", "student_update"}
+    is_owned_student_notif = notif.related_id == current_user.id and notif.type in {"student_match", "student_update"}
     if not is_owned_student_notif:
         raise HTTPException(status_code=403, detail="You do not have access to this notification")
 
@@ -245,10 +241,8 @@ async def mark_all_student_notifications_read(
     current_user: models.User = Depends(get_active_student_user)
 ):
     db.query(models.Notification).filter(
-        or_(
-            and_(models.Notification.type == "chat", models.Notification.related_id == current_user.id),
-            and_(models.Notification.type.in_(["student_match", "student_update"]), models.Notification.related_id == current_user.id)
-        ),
+        models.Notification.type.in_(["student_match", "student_update"]),
+        models.Notification.related_id == current_user.id,
         models.Notification.is_read == False
     ).update({models.Notification.is_read: True}, synchronize_session=False)
     db.commit()

@@ -3175,7 +3175,7 @@ def get_notifications(
     limit = max(1, min(limit, 100))
     notifications = db.query(models.Notification)\
         .filter(
-            ~models.Notification.type.in_(["student_match", "student_update"]),
+            ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
             or_(
                 models.Notification.created_by_admin_id == None,
                 models.Notification.created_by_admin_id == current_admin.id
@@ -3193,7 +3193,7 @@ def get_notification_unread_count(
     current_admin: models.User = Depends(get_current_admin)
 ):
     unread_count = db.query(models.Notification).filter(
-        ~models.Notification.type.in_(["student_match", "student_update"]),
+        ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
         or_(
             models.Notification.created_by_admin_id == None,
             models.Notification.created_by_admin_id == current_admin.id
@@ -3210,7 +3210,7 @@ def mark_read(
 ):
     notif = db.query(models.Notification).filter(
         models.Notification.id == notif_id,
-        ~models.Notification.type.in_(["student_match", "student_update"]),
+        ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
         or_(
             models.Notification.created_by_admin_id == None,
             models.Notification.created_by_admin_id == current_admin.id
@@ -3227,7 +3227,7 @@ def mark_all_notifications_read(
     current_admin: models.User = Depends(get_current_admin)
 ):
     db.query(models.Notification).filter(
-        ~models.Notification.type.in_(["student_match", "student_update"]),
+        ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
         or_(
             models.Notification.created_by_admin_id == None,
             models.Notification.created_by_admin_id == current_admin.id
