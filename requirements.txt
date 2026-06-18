@@ -9,7 +9,9 @@ bcrypt==4.0.1
 python-multipart
 jinja2
 pydantic[email]==1.10.15
+email-validator
 pillow
 numpy
 torch
 transformers
+cloudinary

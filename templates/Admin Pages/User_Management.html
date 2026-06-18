@@ -216,8 +216,8 @@
                     <input type="checkbox" id="selectAllRows" onchange="toggleSelectAllVisible(this.checked)">
                     <span>Select all visible</span>
                 </label>
-                <div id="userCountBadge" class="status-pill status-active" style="display: inline-flex;">Total: 0</div>
             </div>
+            <div id="userCountBadge" class="status-pill status-active" style="display: inline-flex;">Total: 0</div>
         </div>
     </div>
     <div class="action-bar action-bar-below">
@@ -278,6 +278,22 @@
         <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="deleteTableBody"></tbody>
     </table>
+</div>
+<div id="userPaginationControls" class="user-pagination-controls" style="display:none;">
+    <div class="pagination-page-size">
+        <label for="userPageSize">Rows per page</label>
+        <select id="userPageSize" onchange="changeUserPageSize()">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+        </select>
+    </div>
+    <div class="pagination-status" id="userPaginationStatus">Page 1 of 1</div>
+    <div class="pagination-buttons">
+        <button type="button" id="userPrevPageBtn" onclick="changeUserPage(-1)" aria-label="Previous page">&lt;</button>
+        <button type="button" id="userNextPageBtn" onclick="changeUserPage(1)" aria-label="Next page">&gt;</button>
+    </div>
 </div>
 </div>
   <div id="bulkRegisterModal" class="modal">
@@ -1736,6 +1752,42 @@ let currentArchiveFolderYear = '';
 let selectedYearEndTerms = new Set();
 let selectedSemesterTerms = new Set();
 let selectedUserIds = new Set();
+let currentUserPage = 1;
+let currentUserPageSize = 10;
+
+function getUserPageSize() {
+    const pageSizeInput = document.getElementById('userPageSize');
+    const parsed = Number(pageSizeInput?.value || currentUserPageSize || 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+}
+
+function updateUserPaginationControls(totalRows) {
+    const controls = document.getElementById('userPaginationControls');
+    const status = document.getElementById('userPaginationStatus');
+    const prevBtn = document.getElementById('userPrevPageBtn');
+    const nextBtn = document.getElementById('userNextPageBtn');
+    const pageSizeInput = document.getElementById('userPageSize');
+    const totalPages = Math.max(1, Math.ceil(totalRows / currentUserPageSize));
+
+    currentUserPage = Math.min(Math.max(currentUserPage, 1), totalPages);
+
+    if (controls) controls.style.display = totalRows > 0 ? 'flex' : 'none';
+    if (status) status.textContent = `Page ${currentUserPage} of ${totalPages}`;
+    if (prevBtn) prevBtn.disabled = currentUserPage <= 1;
+    if (nextBtn) nextBtn.disabled = currentUserPage >= totalPages;
+    if (pageSizeInput) pageSizeInput.value = String(currentUserPageSize);
+}
+
+function changeUserPage(direction) {
+    currentUserPage += direction;
+    searchUsers(false);
+}
+
+function changeUserPageSize() {
+    currentUserPageSize = getUserPageSize();
+    currentUserPage = 1;
+    searchUsers(false);
+}
 
 function isFacultyUser(user) {
     if (!user || user.is_admin) return false;
@@ -2179,6 +2231,7 @@ function filterTable(role = 'admin') {
     }
 
     currentView = role;
+    currentUserPage = 1;
     selectedUserIds.clear();
 
     const tabButtons = ['btnShowAdmin', 'btnShowStudent', 'btnShowArchive', 'btnShowDelete'];
@@ -2273,12 +2326,7 @@ function filterTable(role = 'admin') {
     }
 
     if (userCountBadge) {
-        userCountBadge.innerText =
-            role === 'admin'
-                ? `Total Admins: ${filtered.length}`
-                : role === 'student'
-                    ? `Total Student/Faculty: ${filtered.length}`
-                    : `Total Records: ${filtered.length}`;
+        userCountBadge.innerText = `Total: ${filtered.length}`;
     }
 
     filtered = sortUsersByFullName(filtered);
@@ -2290,8 +2338,24 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
     
     tableBody.innerHTML = '';
     updateFullNameSortIndicators();
+    currentUserPageSize = getUserPageSize();
+    const totalRows = data.length;
+    const totalPages = Math.max(1, Math.ceil(totalRows / currentUserPageSize));
+    currentUserPage = Math.min(Math.max(currentUserPage, 1), totalPages);
+    const pageStart = (currentUserPage - 1) * currentUserPageSize;
+    const pageRows = data.slice(pageStart, pageStart + currentUserPageSize);
 
-    data.forEach(user => {
+    if (!pageRows.length) {
+        const columnCount = currentRole === 'admin' || currentRole === 'student' || currentRole === 'archive' || currentRole === 'delete'
+            ? 7
+            : 6;
+        tableBody.innerHTML = `<tr><td colspan="${columnCount}" style="text-align:center; padding:18px; color:#5b6f86; font-weight:700;">No records found.</td></tr>`;
+        updateUserPaginationControls(totalRows);
+        updateSelectionActionButtons();
+        return;
+    }
+
+    pageRows.forEach(user => {
         const isMe = user.id == currentAdminId; 
         
         // 1. Handle Login Display
@@ -2394,6 +2458,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
         tableBody.insertAdjacentHTML('beforeend', row);
     });
 
+    updateUserPaginationControls(totalRows);
     updateSelectionActionButtons();
 }
 
@@ -2934,7 +2999,11 @@ async function moveToDelete(userId, currentRole, silent = false) {
     }
 }
 
-    function searchUsers() {
+    function searchUsers(resetPage = true) {
+    if (resetPage) {
+        currentUserPage = 1;
+    }
+
     const query = document.getElementById('userSearch').value.toLowerCase();
     
     // Fix: Properly get and update batch filter
@@ -2971,11 +3040,7 @@ async function moveToDelete(userId, currentRole, silent = false) {
     // Update user count badge
     const userCountBadge = document.getElementById('userCountBadge');
     if (userCountBadge) {
-        userCountBadge.innerText = activeTab === 'admin'
-            ? `Total Admins: ${visibleUsers.length}`
-            : activeTab === 'student'
-                ? `Total Student/Faculty: ${visibleUsers.length}`
-                : `Total Records: ${visibleUsers.length}`;
+        userCountBadge.innerText = `Total: ${visibleUsers.length}`;
     }
 
     // Re-render the table with the search results

@@ -1,6 +1,9 @@
 name: Deploy Azure Container
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:

@@ -123,7 +123,18 @@
     <script>
         function setImagePath(img, path) {
             if (!img || !path) return;
-            img.src = path.startsWith("/") ? path : `/${path}`;
+            const rawPath = String(path || "").trim();
+            if (/^(https?:)?\/\//i.test(rawPath) || rawPath.startsWith("/")) {
+                img.src = rawPath;
+            } else if (rawPath.startsWith("static/")) {
+                img.src = `/${rawPath}`;
+            } else {
+                img.src = `/${rawPath}`;
+            }
+            img.onerror = () => {
+                img.onerror = null;
+                img.src = "/static/images/stilogo.png";
+            };
         }
 
         async function loadExploreContent() {

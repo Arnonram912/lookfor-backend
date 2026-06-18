@@ -1,5 +1,6 @@
 import os
 import re
+import io
 from uuid import uuid4
 from urllib.parse import quote
 from sqlalchemy import func
@@ -48,21 +49,70 @@ def resolve_category_name(
 
 def save_file(file, category: str | None = None):
     category_folder = sanitize_upload_category(category)
-    target_folder = os.path.join(UPLOAD_FOLDER, category_folder)
-    os.makedirs(target_folder, exist_ok=True)
-
     original_name = os.path.basename(file.filename or "upload.bin")
     filename = f"{uuid4()}_{original_name}"
+    file_bytes = file.file.read()
+
+    cloudinary_url = upload_to_cloudinary_if_configured(
+        file_bytes=file_bytes,
+        filename=filename,
+        category_folder=category_folder,
+    )
+    if cloudinary_url:
+        return cloudinary_url
+
+    target_folder = os.path.join(UPLOAD_FOLDER, category_folder)
+    os.makedirs(target_folder, exist_ok=True)
 
     # This is the physical path on your computer/server
     file_path = os.path.join(target_folder, filename)
 
     with open(file_path, "wb") as buffer:
-        buffer.write(file.file.read())
+        buffer.write(file_bytes)
 
     # IMPORTANT: Return the path starting with 'static/' 
     # so the database stores a URL the browser can understand.
     return file_path.replace("\\", "/")
+
+
+def upload_to_cloudinary_if_configured(file_bytes: bytes, filename: str, category_folder: str) -> str | None:
+    storage_provider = os.getenv("IMAGE_STORAGE_PROVIDER", "").strip().lower()
+    has_cloudinary_credentials = bool(
+        os.getenv("CLOUDINARY_URL")
+        or (
+            os.getenv("CLOUDINARY_CLOUD_NAME")
+            and os.getenv("CLOUDINARY_API_KEY")
+            and os.getenv("CLOUDINARY_API_SECRET")
+        )
+    )
+
+    if storage_provider not in {"cloudinary", ""} or not has_cloudinary_credentials:
+        return None
+
+    try:
+        import cloudinary
+        import cloudinary.uploader
+    except ImportError as exc:
+        raise RuntimeError("Cloudinary storage is configured, but the cloudinary package is not installed.") from exc
+
+    if not os.getenv("CLOUDINARY_URL"):
+        cloudinary.config(
+            cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+            api_key=os.getenv("CLOUDINARY_API_KEY"),
+            api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+            secure=True,
+        )
+
+    public_id = os.path.splitext(filename)[0]
+    upload_result = cloudinary.uploader.upload(
+        io.BytesIO(file_bytes),
+        folder=f"lookfor/{category_folder}",
+        public_id=public_id,
+        resource_type="image",
+        overwrite=False,
+    )
+
+    return upload_result.get("secure_url") or upload_result.get("url")
 
 
 def public_file_url(path: str | None, fallback: str | None = None) -> str | None:

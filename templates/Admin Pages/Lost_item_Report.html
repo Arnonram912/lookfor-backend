@@ -461,6 +461,21 @@ function showAccessDeniedPopup(permName) {
 
     document.body.appendChild(overlay);
 }
+        const ITEM_IMAGE_FALLBACK = '/static/photos/placeholder.png';
+
+        function getItemImageUrl(imagePath) {
+            const cleanPath = String(imagePath || "").replace(/\\/g, '/').trim();
+            if (!cleanPath) return ITEM_IMAGE_FALLBACK;
+            if (/^(https?:)?\/\//i.test(cleanPath) || cleanPath.startsWith('/')) return cleanPath;
+            if (cleanPath.startsWith('static/')) return `/${cleanPath}`;
+            return `/${cleanPath}`;
+        }
+
+        function handleItemImageError(img) {
+            img.onerror = null;
+            img.src = ITEM_IMAGE_FALLBACK;
+        }
+
         async function loadLostItems() {
         const grid = document.getElementById("lostItemsGrid");
         const token = sessionStorage.getItem("admin_token");
@@ -480,8 +495,7 @@ function showAccessDeniedPopup(permName) {
             }
 
             grid.innerHTML = items.map(item => {
-                const cleanPath = (item.image_path || "").replace(/\\/g, '/');
-                const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+                const imageUrl = getItemImageUrl(item.image_path);
                 
                 // Escape single quotes in the JSON string for the onclick event
                 const itemData = JSON.stringify(item).replace(/'/g, "\\'");
@@ -489,7 +503,7 @@ function showAccessDeniedPopup(permName) {
                 return `
                     <div class="item-card">
                         <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
-                            <img src="${imageUrl}" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                            <img src="${imageUrl}" onerror="handleItemImageError(this)">
                             ${item.is_matched ? '<span class="match-tag" style="background:#005BAB;">Matched</span>' : ''}
                         </div>
                         <div class="card-body">
@@ -617,8 +631,7 @@ function showAccessDeniedPopup(permName) {
         }
 
         grid.innerHTML = filteredItems.map(item => {
-            const cleanPath = (item.image_path || "").replace(/\\/g, '/');
-            const imageUrl = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+            const imageUrl = getItemImageUrl(item.image_path);
             const itemData = JSON.stringify(item).replace(/'/g, "\\'");
             const statusTag = item.is_claimed
                 ? '<span class="inventory-state-tag matched">Claimed</span>'
@@ -629,7 +642,7 @@ function showAccessDeniedPopup(permName) {
             return `
                 <div class="item-card">
                     <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
-                        <img src="${imageUrl}" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">
+                        <img src="${imageUrl}" onerror="handleItemImageError(this)">
                         ${statusTag}
                     </div>
                     <div class="card-body">
@@ -759,8 +772,9 @@ function showAccessDeniedPopup(permName) {
 
         // --- VIEW DETAILS ---
        function viewItemDetails(item) {
-    const cleanPath = (item.image_path || "").replace(/\\/g, '/');
-    document.getElementById("modalImg").src = cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+    const modalImg = document.getElementById("modalImg");
+    modalImg.src = getItemImageUrl(item.image_path);
+    modalImg.onerror = () => handleItemImageError(modalImg);
     
     // Title & Core Info
     document.getElementById("modalTitle").innerText = item.item_name || item.category;
@@ -882,15 +896,11 @@ function showAccessDeniedPopup(permName) {
     }
 
     function getMatchImageUrl(match) {
-        const cleanPath = String(match?.image_path || '').replace(/\\/g, '/').trim();
-        if (!cleanPath) {
-            return 'https://via.placeholder.com/200?text=No+Image';
-        }
-        return cleanPath.startsWith('/') ? cleanPath : `/${cleanPath}`;
+        return getItemImageUrl(match?.image_path);
     }
 
     function renderMatchThumbnail(match, altText = 'Possible match image') {
-        return `<img src="${escapeModalHtml(getMatchImageUrl(match))}" alt="${escapeModalHtml(altText)}" style="width:68px; height:68px; object-fit:cover; border-radius:12px; border:1px solid #d9e4f2; background:#f4f7fb; flex-shrink:0;" onerror="this.src='https://via.placeholder.com/200?text=No+Image'">`;
+        return `<img src="${escapeModalHtml(getMatchImageUrl(match))}" alt="${escapeModalHtml(altText)}" style="width:68px; height:68px; object-fit:cover; border-radius:12px; border:1px solid #d9e4f2; background:#f4f7fb; flex-shrink:0;" onerror="handleItemImageError(this)">`;
     }
 
     function closeMatchResultsModal() {

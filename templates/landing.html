@@ -42,6 +42,23 @@
         const response = await fetch('/api/content/landing');
         const data = await response.json();
 
+        function normalizeImagePath(path, fallback = '/static/images/stilogo.png') {
+            const rawPath = String(path || '').trim();
+            if (!rawPath) return fallback;
+            if (/^(https?:)?\/\//i.test(rawPath) || rawPath.startsWith('/')) return rawPath;
+            if (rawPath.startsWith('static/')) return `/${rawPath}`;
+            return `/${rawPath}`;
+        }
+
+        function setImagePath(img, path, fallback = '/static/images/stilogo.png') {
+            if (!img) return;
+            img.src = normalizeImagePath(path, fallback);
+            img.onerror = () => {
+                img.onerror = null;
+                img.src = fallback;
+            };
+        }
+
         // --- LOAD HERO SECTION ---
         if (data.hero) {
             if (document.getElementById('cms-hero-title')) {
@@ -54,8 +71,7 @@
             if (data.hero.image_path) {
                 const heroSection = document.querySelector('.hero');
                 if (heroSection) {
-                    // Added leading / to ensure pathing is absolute
-                    const path = data.hero.image_path.startsWith('/') ? data.hero.image_path : '/' + data.hero.image_path;
+                    const path = normalizeImagePath(data.hero.image_path, '/static/images/novaliches.jpg');
                     heroSection.style.backgroundImage = `linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)), url('${path}')`;
                 }
             }
@@ -76,8 +92,7 @@
             if (data.why_choose_us.image_path) {
                 const whyImg = document.getElementById('cms-why-img');
                 if (whyImg) {
-                    // Added leading / to ensure pathing is absolute
-                    whyImg.src = data.why_choose_us.image_path.startsWith('/') ? data.why_choose_us.image_path : '/' + data.why_choose_us.image_path;
+                    setImagePath(whyImg, data.why_choose_us.image_path, '/static/images/stilogo.png');
                 }
             }
         }
@@ -92,8 +107,7 @@
             if (data.cta_feature.image_path) {
                 const ctaImg = document.getElementById('cms-cta-img');
                 if (ctaImg) {
-                    const path = data.cta_feature.image_path.startsWith('/') ? data.cta_feature.image_path : '/' + data.cta_feature.image_path;
-                    ctaImg.src = path;
+                    setImagePath(ctaImg, data.cta_feature.image_path, '/static/images/background.jpg');
                 }
             }
         }
@@ -154,8 +168,7 @@
                 if (titleEl) titleEl.innerText = card.title || fallbackTitles[index];
                 if (descEl) descEl.innerText = card.description || fallbackDescs[index];
                 if (imgEl && card.image_path) {
-                    const path = card.image_path.startsWith('/') ? card.image_path : '/' + card.image_path;
-                    imgEl.src = path;
+                    setImagePath(imgEl, card.image_path, '/static/images/stilogo.png');
                 }
             });
         }
@@ -184,7 +197,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
             </div>
         </div>
         <div class="feature-image animate__animated animate__fadeInRight animate__delay-1s">
-            <img id="cms-cta-img" src="C:/Users/Maeryll/Downloads/students.png" alt="Community illustration" class="floating-animation">
+            <img id="cms-cta-img" src="/static/images/background.jpg" alt="Community illustration" class="floating-animation">
         </div>
     </div>
 </section>
@@ -196,7 +209,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
         <div class="content-wrapper">
             <div class="icon-side" data-aos="zoom-in" data-aos-delay="200">
                 <div class="lost-box-icon">
-                    <img src="C:/Users/Maeryll/Downloads/things.png" 
+                    <img src="/static/images/stilogo.png"
                         alt="Lost Items Icon" 
                         id="cms-why-img" 
                         onclick="triggerFileWindow()" 
@@ -304,7 +317,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
 
         <div class="grid-container">
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-1-img" src="C:/Users/Maeryll/Downloads/ai.png" alt="AI Icon"></div>
+                <div class="icon-box"><img id="cms-feat-1-img" src="/static/images/stilogo.png" alt="AI Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-1-title">AI Image-Text Matching</h3>
                     <p id="cms-feat-1-desc">Get image-text matching to quickly match the lost and found item</p>
@@ -312,7 +325,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
             </div>
 
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-2-img" src="C:/Users/Maeryll/Downloads/glass.png" alt="Report Icon"></div>
+                <div class="icon-box"><img id="cms-feat-2-img" src="/static/images/stilogo.png" alt="Report Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-2-title">Lost and Found Report</h3>
                     <p id="cms-feat-2-desc">Report lost and found item to easily reunite the item with its owner</p>
@@ -320,7 +333,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
             </div>
 
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-3-img" src="C:/Users/Maeryll/Downloads/chat.png" alt="Chat Icon"></div>
+                <div class="icon-box"><img id="cms-feat-3-img" src="/static/images/stilogo.png" alt="Chat Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-3-title">Conversation Chatbox</h3>
                     <p id="cms-feat-3-desc">Connect with administrator to further discuss the surrendering and retrieving of lost and found item</p>
@@ -328,7 +341,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
             </div>
 
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-4-img" src="C:/Users/Maeryll/Downloads/notif.png" alt="Notification Icon"></div>
+                <div class="icon-box"><img id="cms-feat-4-img" src="/static/images/stilogo.png" alt="Notification Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-4-title">Instant Notification</h3>
                     <p id="cms-feat-4-desc">Receive notifications and alerts real-time to monitor the changes of item status</p>
@@ -401,11 +414,11 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
     <div class="footer-icons">
 
         <a href="https://www.facebook.com" target="_blank">
-            <img src="/static/icons/facebook.png">
+            <img src="/static/icons/Facebook.png">
         </a>
 
         <a href="https://www.instagram.com" target="_blank">
-            <img src="/static/icons/instagram.png">
+            <img src="/static/icons/Instagram.png">
         </a>
 
       

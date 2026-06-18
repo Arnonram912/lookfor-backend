@@ -807,7 +807,7 @@ async function loadAnnouncements() {
         }
 
         const anno = announcements[0];
-        const imageUrl = anno.image_url || '/static/photos/default_news.jpg';
+        const imageUrl = anno.image_url || '/static/photos/placeholder.png';
         const imgSrc = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
 
         container.innerHTML = `
@@ -815,7 +815,7 @@ async function loadAnnouncements() {
                 <img src="${imgSrc}" 
                      alt="${escapeHtml(anno.title)}" 
                      style="width:100%; height:300px; object-fit:cover; border-radius:10px;"
-                     onerror="this.src='/static/photos/default_news.jpg'">
+                     onerror="this.src='/static/photos/placeholder.png'">
                 <div style="background: rgba(0,0,0,0.6); padding: 15px; border-radius: 0 0 10px 10px; position:absolute; left:0; right:0; bottom:0;">
                     <h2 style="color: #ffc107; margin:0;">${escapeHtml(anno.title)}</h2>
                     <p style="color: white; margin: 5px 0 0 0;">${escapeHtml(anno.content)}</p>

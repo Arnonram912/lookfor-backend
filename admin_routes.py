@@ -2783,27 +2783,27 @@ async def reset_student_password(
     current_admin: models.User = Depends(check_permission("User-Management-Reset"))
 ):
     email = data.get("email")
-    student = db.query(models.User).filter(models.User.email == email).first()
+    user = db.query(models.User).filter(models.User.email == email).first()
     
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    # Match the temporary password format used by Generate Accounts.
-    student_no = str(student.student_no or "").strip()
+    # Keep student/faculty temp passwords predictable; admins without IDs get a secure random suffix.
+    student_no = str(user.student_no or "").strip()
     new_temp = f"STI{student_no}" if student_no else "STI-" + str(uuid.uuid4())[:8]
     
     # 2. Hash the new password using bcrypt for security
-    student.hashed_password = pwd_context.hash(new_temp)
+    user.hashed_password = pwd_context.hash(new_temp)
     
     # 3. FORCE PASSWORD CHANGE: Set flag back to True (1)
-    student.must_change_password = True 
+    user.must_change_password = True
     
     db.commit()
     create_admin_notification(
         db,
-        f"Password was reset for student {student.full_name or student.email}.",
+        f"Password was reset for user {user.full_name or user.email}.",
         "user_management_students",
-        student.id,
+        user.id,
         created_by_admin_id=current_admin.id
     )
     

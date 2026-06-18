@@ -2781,7 +2781,7 @@ async def get_announcements(db: Session = Depends(get_db)):
         "id": latest.id,
         "title": latest.title or "",
         "content": latest.content or "",
-        "image_url": public_file_url(latest.image_url, "/static/photos/default_news.jpg"),
+        "image_url": public_file_url(latest.image_url, "/static/photos/placeholder.png"),
         "created_at": latest.created_at.isoformat() if latest.created_at else None,
     }]
 
@@ -3189,22 +3189,22 @@ async def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": feature_1_data.title if feature_1_data else "AI Image-Text Matching",
             "description": feature_1_data.description if feature_1_data else "Get image-text matching to quickly match the lost and found item",
-            "image_path": public_file_url(feature_1_data.image_path, "/static/images/ai.png") if feature_1_data else "/static/images/ai.png",
+            "image_path": public_file_url(feature_1_data.image_path, "/static/images/stilogo.png") if feature_1_data else "/static/images/stilogo.png",
         },
         {
             "title": feature_2_data.title if feature_2_data else "Lost and Found Report",
             "description": feature_2_data.description if feature_2_data else "Report lost and found item to easily reunite the item with its owner",
-            "image_path": public_file_url(feature_2_data.image_path, "/static/images/glass.png") if feature_2_data else "/static/images/glass.png",
+            "image_path": public_file_url(feature_2_data.image_path, "/static/images/stilogo.png") if feature_2_data else "/static/images/stilogo.png",
         },
         {
             "title": feature_3_data.title if feature_3_data else "Conversation Chatbox",
             "description": feature_3_data.description if feature_3_data else "Connect with administrator to further discuss the surrendering and retrieving...",
-            "image_path": public_file_url(feature_3_data.image_path, "/static/images/chat.png") if feature_3_data else "/static/images/chat.png",
+            "image_path": public_file_url(feature_3_data.image_path, "/static/images/stilogo.png") if feature_3_data else "/static/images/stilogo.png",
         },
         {
             "title": feature_4_data.title if feature_4_data else "Instant Notification",
             "description": feature_4_data.description if feature_4_data else "Receive notifications and alerts real-time to monitor the changes of item status",
-            "image_path": public_file_url(feature_4_data.image_path, "/static/images/notif.png") if feature_4_data else "/static/images/notif.png",
+            "image_path": public_file_url(feature_4_data.image_path, "/static/images/stilogo.png") if feature_4_data else "/static/images/stilogo.png",
         },
     ]
     response["explore_hero"] = {

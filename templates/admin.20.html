@@ -953,7 +953,7 @@ async function processAction(itemId, actionType) {
             }
 
             container.innerHTML = announcements.map((announcement, index) => {
-                const imageUrl = announcement.image_url || '/static/photos/default_news.jpg';
+                const imageUrl = announcement.image_url || '/static/photos/placeholder.png';
                 const imgSrc = imageUrl.startsWith('/')
                     ? imageUrl
                     : `/${imageUrl}`;
@@ -962,7 +962,7 @@ async function processAction(itemId, actionType) {
                     <div class="carousel-slide ${index === 0 ? 'active' : ''}">
                         <img src="${imgSrc}"
                              alt="${escapeHtml(announcement.title || 'Announcement')}"
-                             onerror="this.src='/static/photos/default_news.jpg'">
+                             onerror="this.src='/static/photos/placeholder.png'">
                         <div class="carousel-caption" style="position:absolute; left:0; right:0; bottom:0; padding:20px 40px; background:linear-gradient(transparent, rgba(0,0,0,0.8)); color:#fff; z-index:2;">
                             <h2 style="margin:0 0 8px; color:#ffc107;">${escapeHtml(announcement.title || 'Current Announcement')}</h2>
                             <p style="margin:0; color:#fff; white-space:pre-wrap;">${escapeHtml(announcement.content || '')}</p>

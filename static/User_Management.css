@@ -522,8 +522,8 @@ body.dark-theme #bulkEmails {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 16px;
-    flex-wrap: nowrap;
+    gap: 12px 16px;
+    flex-wrap: wrap;
     width: 100%;
     margin-top: 12px;
 }
@@ -559,9 +559,10 @@ body.dark-theme #bulkEmails {
     gap: 8px 10px;
     flex-wrap: wrap;
     justify-content: flex-start;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     min-height: 42px;
+    order: 2;
 }
 
 .table-filter-row > * {
@@ -578,9 +579,9 @@ body.dark-theme #bulkEmails {
     flex-wrap: wrap;
     gap: 6px;
     min-height: 42px;
-    flex: 1 1 100%;
-    width: 100%;
-    order: 2;
+    flex: 0 1 auto;
+    width: auto;
+    order: 3;
 }
 
 .semester-filter-options {
@@ -703,6 +704,7 @@ body.dark-theme #bulkEmails {
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
+    order: 2;
 }
 
 .select-all-control input {
@@ -734,6 +736,7 @@ body.dark-theme #bulkEmails {
     min-width: 300px;
     max-width: 470px;
     min-height: 42px;
+    order: 1;
 }
 
 .search-action-btn {
@@ -787,13 +790,22 @@ body.dark-theme #bulkEmails {
     flex: 0 0 220px;
     width: 220px;
     max-width: 220px;
+    order: 1;
 }
 
 #userCountBadge {
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    flex: 0 0 auto;
     min-height: 42px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: #111827;
+    font-size: 16px;
+    font-weight: 500;
     white-space: nowrap;
+    order: 3;
 }
 
 .action-bar-below {
@@ -837,6 +849,61 @@ body.dark-theme #bulkEmails {
     transform: translateY(0);
 }
 
+.user-pagination-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid #e2e6ea;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.pagination-page-size,
+.pagination-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pagination-page-size label,
+.pagination-status {
+    color: #17324f;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.pagination-page-size select {
+    min-height: 36px;
+    padding: 6px 30px 6px 10px;
+    border: 1px solid #cfd8e3;
+    border-radius: 6px;
+    background: #fff;
+    color: #17324f;
+    font-weight: 700;
+}
+
+.pagination-buttons button {
+    width: 36px;
+    height: 36px;
+    border: 1px solid #003366;
+    border-radius: 6px;
+    background: #003366;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.pagination-buttons button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
 .row-select {
     width: 16px;
     height: 16px;
@@ -867,17 +934,22 @@ body.dark-theme #bulkEmails {
 }
 
 @media (max-width: 1200px) {
-    .table-filter-row {
-        flex-wrap: wrap;
-    }
-
     .search-container-wide {
-        flex: 1 1 100%;
+        flex: 1 1 360px;
         max-width: 100%;
     }
 
     .batch-filter-container {
         width: 100%;
+    }
+}
+
+@media (max-width: 760px) {
+    #batchFilterInput.Srch,
+    .select-all-control,
+    #userCountBadge {
+        flex: 1 1 100%;
+        max-width: 100%;
     }
 }
 

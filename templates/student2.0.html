@@ -264,7 +264,7 @@ async function loadAnnouncements() {
         // Map the data to HTML
         container.innerHTML = announcements.map((anno, index) => `
             <div class="carousel-slide ${index === 0 ? 'active' : ''}">
-                <img src="${String(anno.image_url || '').startsWith('/') ? anno.image_url : '/' + anno.image_url}" alt="${escapeHtml(anno.title)}" onerror="this.src='/static/photos/default_news.jpg'">
+                <img src="${String(anno.image_url || '').startsWith('/') ? anno.image_url : '/' + anno.image_url}" alt="${escapeHtml(anno.title)}" onerror="this.src='/static/photos/placeholder.png'">
                 <div class="carousel-caption">
                     <h2>${escapeHtml(anno.title)}</h2>
                     <p>${escapeHtml(anno.content)}</p>

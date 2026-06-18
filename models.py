@@ -238,7 +238,7 @@ class Announcement(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     content = Column(String, nullable=False)
-    image_url = Column(String, default="/static/photos/default_news.jpg")
+    image_url = Column(String, default="/static/photos/placeholder.png")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class ConfiscatedItem(Base):
