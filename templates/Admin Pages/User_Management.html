@@ -2976,7 +2976,7 @@ async function moveToDelete(userId, currentRole, silent = false) {
         return;
     }
 
-    if (!silent && !(await confirmUserManagementAction('Move user to Trash?', 'Move this archived user to the Trash tab?', 'Move to Trash'))) return;
+    if (!silent && !(await confirmUserManagementAction('Move this archived user?', 'Move this archived user to the Trash tab?', 'Move to Trash'))) return;
 
     try {
         const response = await fetch(`/admin/move-to-delete/${userId}`, {

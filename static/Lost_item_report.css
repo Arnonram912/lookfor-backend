@@ -197,6 +197,107 @@ body {
   color: var(--white);
 }
 
+.profile-page-card .inventory-actions {
+  flex-wrap: wrap !important;
+}
+
+.profile-page-card .inventory-actions .upload-btn {
+  min-height: 42px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 5px;
+  background: #003366;
+  color: #fff;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.profile-page-card .inventory-actions .upload-btn:hover {
+  background: #004b99;
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.profile-page-card .inventory-actions .archive-toggle-btn.active-archive-view {
+  background: #005BAB;
+  color: #fff;
+}
+
+.profile-page-card .inventory-filter {
+  min-width: 170px;
+  min-height: 42px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  padding: 8px 32px 8px 12px;
+  background: #fff;
+  color: #17324f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.lost-pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pagination-page-size,
+.pagination-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-page-size label,
+.pagination-status {
+  color: #17324f;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pagination-page-size select {
+  min-height: 36px;
+  padding: 6px 30px 6px 10px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: #fff;
+  color: #17324f;
+  font-weight: 700;
+}
+
+.pagination-buttons button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #003366;
+  border-radius: 6px;
+  background: #003366;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pagination-buttons button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .lost-submit-btn {
   box-shadow: 0 8px 18px rgba(0, 91, 171, 0.18);
 }
@@ -752,4 +853,55 @@ body {
     padding: 28px;
     box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
     border: 1px solid #dbe5f0;
+}
+
+.profile-page-card .inventory-actions {
+  flex-wrap: wrap !important;
+}
+
+.profile-page-card .inventory-actions .upload-btn {
+  min-height: 42px;
+  margin-left: 0;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 5px;
+  background: #003366;
+  color: #fff;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.profile-page-card .inventory-actions button:first-of-type {
+  margin-left: auto;
+}
+
+.profile-page-card .inventory-actions .upload-btn:hover {
+  background: #004b99;
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.profile-page-card .inventory-actions .archive-toggle-btn.active-archive-view {
+  background: #005BAB;
+  color: #fff;
+}
+
+.profile-page-card .inventory-filter {
+  min-width: 170px;
+  min-height: 42px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  padding: 8px 32px 8px 12px;
+  background: #fff;
+  color: #17324f;
+  font-size: 13px;
+  font-weight: 700;
 }

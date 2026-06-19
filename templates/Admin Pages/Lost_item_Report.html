@@ -5,7 +5,7 @@
     <title>Admin Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
     
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=15"> 
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=16">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head> 
@@ -151,11 +151,14 @@
                 <div class="action-bar">
                     <h1 class="section-title">Lost Items <span></span></h1>
                     <div class="inventory-actions">
-                        <select id="lostStatusFilter" class="inventory-filter" onchange="renderLostItems()">
+                        <select id="lostStatusFilter" class="inventory-filter" onchange="resetLostPaginationAndRender()">
                             <option value="all">All Items</option>
                             <option value="pending">Pending</option>
                             <option value="matched">Matched</option>
                             <option value="claimed">Claimed</option>
+                        </select>
+                        <select id="lostCategoryFilter" class="inventory-filter" onchange="resetLostPaginationAndRender()">
+                            <option value="all">All Categories</option>
                         </select>
 
                         <button class="upload-btn" id="analyzeMatchesBtn" onclick="analyzeItemMatches()">
@@ -172,6 +175,23 @@
 
                 <div class="items-grid" id="lostItemsGrid">
                     <p style="text-align:center; grid-column: 1/-1;">Loading lost reports...</p>
+                </div>
+
+                <div id="lostPaginationControls" class="lost-pagination-controls" style="display:none;">
+                    <div class="pagination-page-size">
+                        <label for="lostPageSize">Items per page</label>
+                        <select id="lostPageSize" onchange="changeLostPageSize()">
+                            <option value="8">8</option>
+                            <option value="12" selected>12</option>
+                            <option value="16">16</option>
+                            <option value="24">24</option>
+                        </select>
+                    </div>
+                    <div class="pagination-status" id="lostPaginationStatus">Page 1 of 1</div>
+                    <div class="pagination-buttons">
+                        <button type="button" id="lostPrevPageBtn" onclick="changeLostPage(-1)" aria-label="Previous page">&lt;</button>
+                        <button type="button" id="lostNextPageBtn" onclick="changeLostPage(1)" aria-label="Next page">&gt;</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -521,6 +541,8 @@ function showAccessDeniedPopup(permName) {
     }
         let lostItemsCache = [];
         let showingLostArchived = false;
+        let currentLostPage = 1;
+        let currentLostPageSize = 12;
 
         async function loadLostItems() {
         const grid = document.getElementById("lostItemsGrid");
@@ -533,6 +555,8 @@ function showAccessDeniedPopup(permName) {
             const items = await response.json();
             lostItemsCache = Array.isArray(items) ? items : [];
             updateLostArchiveButton();
+            populateLostCategoryFilter();
+            currentLostPage = 1;
             renderLostItems();
         } catch (err) {
             console.error("Load Error:", err);
@@ -613,24 +637,107 @@ function showAccessDeniedPopup(permName) {
         return filter ? filter.value : "all";
     }
 
+    function getLostCategoryFilterValue() {
+        const filter = document.getElementById("lostCategoryFilter");
+        return filter ? filter.value : "all";
+    }
+
+    function normalizeLostCategory(value) {
+        return String(value || '').trim();
+    }
+
+    function populateLostCategoryFilter() {
+        const filter = document.getElementById("lostCategoryFilter");
+        if (!filter) return;
+
+        const currentValue = filter.value || "all";
+        const categories = [...new Set(
+            lostItemsCache
+                .map(item => normalizeLostCategory(item.category))
+                .filter(Boolean)
+        )].sort((a, b) => a.localeCompare(b));
+
+        filter.innerHTML = '<option value="all">All Categories</option>';
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            filter.appendChild(option);
+        });
+
+        filter.value = categories.includes(currentValue) ? currentValue : "all";
+    }
+
+    function getFilteredLostItems() {
+        const activeFilter = getLostFilterValue();
+        const activeCategory = getLostCategoryFilterValue();
+
+        return lostItemsCache.filter(item => {
+            const matchesStatus =
+                activeFilter === "matched" ? Boolean(item.is_matched)
+                : activeFilter === "claimed" ? Boolean(item.is_claimed)
+                : activeFilter === "pending" ? !item.is_matched && !item.is_claimed
+                : true;
+            const matchesCategory =
+                activeCategory === "all" || normalizeLostCategory(item.category) === activeCategory;
+
+            return matchesStatus && matchesCategory;
+        });
+    }
+
+    function resetLostPaginationAndRender() {
+        currentLostPage = 1;
+        renderLostItems();
+    }
+
+    function changeLostPageSize() {
+        const pageSizeInput = document.getElementById("lostPageSize");
+        const parsed = Number(pageSizeInput?.value || currentLostPageSize || 12);
+        currentLostPageSize = Number.isFinite(parsed) && parsed > 0 ? parsed : 12;
+        currentLostPage = 1;
+        renderLostItems();
+    }
+
+    function changeLostPage(direction) {
+        const totalPages = Math.max(1, Math.ceil(getFilteredLostItems().length / currentLostPageSize));
+        currentLostPage = Math.min(totalPages, Math.max(1, currentLostPage + direction));
+        renderLostItems();
+    }
+
+    function updateLostPaginationControls(totalItems) {
+        const controls = document.getElementById("lostPaginationControls");
+        const status = document.getElementById("lostPaginationStatus");
+        const prevBtn = document.getElementById("lostPrevPageBtn");
+        const nextBtn = document.getElementById("lostNextPageBtn");
+        const pageSizeInput = document.getElementById("lostPageSize");
+        const totalPages = Math.max(1, Math.ceil(totalItems / currentLostPageSize));
+
+        currentLostPage = Math.min(totalPages, Math.max(1, currentLostPage));
+
+        if (controls) controls.style.display = totalItems > 0 ? "flex" : "none";
+        if (status) status.textContent = `Page ${currentLostPage} of ${totalPages}`;
+        if (prevBtn) prevBtn.disabled = currentLostPage <= 1;
+        if (nextBtn) nextBtn.disabled = currentLostPage >= totalPages;
+        if (pageSizeInput) pageSizeInput.value = String(currentLostPageSize);
+    }
+
     function renderLostItems() {
         const grid = document.getElementById("lostItemsGrid");
-        const activeFilter = getLostFilterValue();
-        const filteredItems = lostItemsCache.filter(item => {
-            if (activeFilter === "matched") return Boolean(item.is_matched);
-            if (activeFilter === "claimed") return Boolean(item.is_claimed);
-            if (activeFilter === "pending") return !item.is_matched && !item.is_claimed;
-            return true;
-        });
+        const filteredItems = getFilteredLostItems();
 
         grid.innerHTML = "";
 
         if (filteredItems.length === 0) {
+            updateLostPaginationControls(0);
             grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${showingLostArchived ? 'archived' : 'lost'} reports found for this filter.</p>`;
             return;
         }
 
-        grid.innerHTML = filteredItems.map(item => {
+        updateLostPaginationControls(filteredItems.length);
+        const pageStart = (currentLostPage - 1) * currentLostPageSize;
+        const pageItems = filteredItems.slice(pageStart, pageStart + currentLostPageSize);
+
+        grid.innerHTML = pageItems.map(item => {
             const imageUrl = getItemImageUrl(item.image_path);
             const itemData = JSON.stringify(item).replace(/'/g, "\\'");
             const statusTag = item.is_claimed

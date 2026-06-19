@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=15"> 
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=16">
 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -164,13 +164,16 @@
                 <div class="action-bar">
                     <h2 class="section-title">Surrendered Items <span></span></h2>
                     <div class="inventory-actions">
-                        <select id="foundStatusFilter" class="inventory-filter" onchange="renderFoundItems()">
+                        <select id="foundStatusFilter" class="inventory-filter" onchange="resetFoundPaginationAndRender()">
                             <option value="all">All Items</option>
                             <option value="pending">Pending</option>
                             <option value="approved">Approved</option>
                             <option value="matched">Matched</option>
                             <option value="claimed">Claimed</option>
                             <option value="user-gave">User Gave Item</option>
+                        </select>
+                        <select id="foundCategoryFilter" class="inventory-filter" onchange="resetFoundPaginationAndRender()">
+                            <option value="all">All Categories</option>
                         </select>
                         <button class="upload-btn" id="analyzeMatchesBtn" onclick="analyzeItemMatches()">
                             Analyze Matches
@@ -186,6 +189,23 @@
 
                 <div class="items-grid" id="lostItemsGrid">
                     <p style="text-align:center; grid-column: 1/-1;">Loading lost reports...</p>
+                </div>
+
+                <div id="foundPaginationControls" class="found-pagination-controls" style="display:none;">
+                    <div class="pagination-page-size">
+                        <label for="foundPageSize">Items per page</label>
+                        <select id="foundPageSize" onchange="changeFoundPageSize()">
+                            <option value="8">8</option>
+                            <option value="12" selected>12</option>
+                            <option value="16">16</option>
+                            <option value="24">24</option>
+                        </select>
+                    </div>
+                    <div class="pagination-status" id="foundPaginationStatus">Page 1 of 1</div>
+                    <div class="pagination-buttons">
+                        <button type="button" id="foundPrevPageBtn" onclick="changeFoundPage(-1)" aria-label="Previous page">&lt;</button>
+                        <button type="button" id="foundNextPageBtn" onclick="changeFoundPage(1)" aria-label="Next page">&gt;</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -541,6 +561,8 @@ function showAccessDeniedPopup(permName) {
     }
         let foundItemsCache = [];
         let showingFoundArchived = false;
+        let currentFoundPage = 1;
+        let currentFoundPageSize = 12;
         let activeFoundItemForManualClaim = null;
         let activeDetailFoundItem = null;
         let directClaimUsersCache = [];
@@ -602,6 +624,8 @@ function showAccessDeniedPopup(permName) {
                 ];
             }
             updateFoundArchiveButton();
+            populateFoundCategoryFilter();
+            currentFoundPage = 1;
             renderFoundItems();
         } catch (err) {
             console.error("Load Error:", err);
@@ -708,6 +732,37 @@ function showAccessDeniedPopup(permName) {
         return filter ? filter.value : "all";
     }
 
+    function getFoundCategoryFilterValue() {
+        const filter = document.getElementById("foundCategoryFilter");
+        return filter ? filter.value : "all";
+    }
+
+    function normalizeFoundCategory(value) {
+        return String(value || '').trim();
+    }
+
+    function populateFoundCategoryFilter() {
+        const filter = document.getElementById("foundCategoryFilter");
+        if (!filter) return;
+
+        const currentValue = filter.value || "all";
+        const categories = [...new Set(
+            foundItemsCache
+                .map(item => normalizeFoundCategory(item.category))
+                .filter(Boolean)
+        )].sort((a, b) => a.localeCompare(b));
+
+        filter.innerHTML = '<option value="all">All Categories</option>';
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            filter.appendChild(option);
+        });
+
+        filter.value = categories.includes(currentValue) ? currentValue : "all";
+    }
+
     function getFoundCardStatus(item) {
         if (item.is_pending) {
             return { label: "Pending", className: "pending" };
@@ -724,26 +779,78 @@ function showAccessDeniedPopup(permName) {
         return { label: "Approved", className: "pending" };
     }
 
+    function getFilteredFoundItems() {
+        const activeFilter = getFoundItemFilterValue();
+        const activeCategory = getFoundCategoryFilterValue();
+
+        return foundItemsCache.filter(item => {
+            const matchesStatus =
+                activeFilter === "pending" ? Boolean(item.is_pending)
+                : activeFilter === "approved" ? !item.is_pending && !item.is_matched
+                : activeFilter === "matched" ? Boolean(item.is_matched)
+                : activeFilter === "claimed" ? Boolean(item.is_claimed)
+                : activeFilter === "user-gave" ? Boolean(item.is_surrendered)
+                : true;
+            const matchesCategory =
+                activeCategory === "all" || normalizeFoundCategory(item.category) === activeCategory;
+
+            return matchesStatus && matchesCategory;
+        });
+    }
+
+    function resetFoundPaginationAndRender() {
+        currentFoundPage = 1;
+        renderFoundItems();
+    }
+
+    function changeFoundPageSize() {
+        const pageSizeInput = document.getElementById("foundPageSize");
+        const parsed = Number(pageSizeInput?.value || currentFoundPageSize || 12);
+        currentFoundPageSize = Number.isFinite(parsed) && parsed > 0 ? parsed : 12;
+        currentFoundPage = 1;
+        renderFoundItems();
+    }
+
+    function changeFoundPage(direction) {
+        const totalPages = Math.max(1, Math.ceil(getFilteredFoundItems().length / currentFoundPageSize));
+        currentFoundPage = Math.min(totalPages, Math.max(1, currentFoundPage + direction));
+        renderFoundItems();
+    }
+
+    function updateFoundPaginationControls(totalItems) {
+        const controls = document.getElementById("foundPaginationControls");
+        const status = document.getElementById("foundPaginationStatus");
+        const prevBtn = document.getElementById("foundPrevPageBtn");
+        const nextBtn = document.getElementById("foundNextPageBtn");
+        const pageSizeInput = document.getElementById("foundPageSize");
+        const totalPages = Math.max(1, Math.ceil(totalItems / currentFoundPageSize));
+
+        currentFoundPage = Math.min(totalPages, Math.max(1, currentFoundPage));
+
+        if (controls) controls.style.display = totalItems > 0 ? "flex" : "none";
+        if (status) status.textContent = `Page ${currentFoundPage} of ${totalPages}`;
+        if (prevBtn) prevBtn.disabled = currentFoundPage <= 1;
+        if (nextBtn) nextBtn.disabled = currentFoundPage >= totalPages;
+        if (pageSizeInput) pageSizeInput.value = String(currentFoundPageSize);
+    }
+
     function renderFoundItems() {
         const grid = document.getElementById("lostItemsGrid");
-        const activeFilter = getFoundItemFilterValue();
-        const filteredItems = foundItemsCache.filter(item => {
-            if (activeFilter === "pending") return Boolean(item.is_pending);
-            if (activeFilter === "approved") return !item.is_pending && !item.is_matched;
-            if (activeFilter === "matched") return Boolean(item.is_matched);
-            if (activeFilter === "claimed") return Boolean(item.is_claimed);
-            if (activeFilter === "user-gave") return Boolean(item.is_surrendered);
-            return true;
-        });
+        const filteredItems = getFilteredFoundItems();
 
         grid.innerHTML = "";
 
         if (filteredItems.length === 0) {
+            updateFoundPaginationControls(0);
             grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${showingFoundArchived ? 'archived' : 'surrendered'} items found for this filter.</p>`;
             return;
         }
 
-        grid.innerHTML = filteredItems.map(item => {
+        updateFoundPaginationControls(filteredItems.length);
+        const pageStart = (currentFoundPage - 1) * currentFoundPageSize;
+        const pageItems = filteredItems.slice(pageStart, pageStart + currentFoundPageSize);
+
+        grid.innerHTML = pageItems.map(item => {
             const imageUrl = getItemImageUrl(item.image_path);
             const itemData = JSON.stringify(item).replace(/'/g, "\\'");
             const statusInfo = getFoundCardStatus(item);
