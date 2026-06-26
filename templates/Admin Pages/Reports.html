@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Admin Panel | LookFor STI</title>
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15">
     <link rel="stylesheet" href="/static/report.css?v=3">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
@@ -14,8 +14,8 @@
             <li><a href="/admin/dashboard" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/homew.png" class="side-icon"> Home</a></li>
             <li data-permission="Messages"><a href="#" onclick="checkAccess('/admin/Messages', 'Messages'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/msg.png" class="side-icon"> Messages</a></li>
             <li data-permission="User-Management"><a href="#" onclick="checkAccess('/admin/User-Management', 'User-Management'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/userw.png" class="side-icon"> User Management</a></li>
-            <li data-permission="Lost-Reports"><a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/boxw.png" class="side-icon"> Lost Item</a></li>
-            <li><a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/foundw.png" class="side-icon"> Surrendered Item</a></li>
+            <li data-permission="Lost-Reports"><a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/boxw.png" class="side-icon"> Lost Items</a></li>
+            <li><a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/foundw.png" class="side-icon"> Found Items</a></li>
             <li><a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/handw.png" class="side-icon"> Claim Management</a></li>
             <li><a href="#" onclick="checkAccess('/admin/Confiscated-items', 'Confiscated-items'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/handw.png" class="side-icon"> Confiscated Items</a></li>
             <li class="active"><a href="#" onclick="checkAccess('/admin/Reports', 'Reports'); return false;" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;"><img src="/static/photos/folderw.png" class="side-icon"> Reports</a></li>
@@ -847,8 +847,8 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=5"></script>
-<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 </body>

@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15">
     <link rel="stylesheet" href="/static/Claim.css?v=1"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -51,14 +51,14 @@
                 <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
                 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Items
                 </a>
             </li>
 
             <li >
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Items
                 </a>
             </li>
 
@@ -344,6 +344,15 @@ let claimsCache = [];
 let activeDecisionClaim = null;
 let activeDecisionAction = null;
 
+function getClaimImageUrl(path, fallback = 'https://via.placeholder.com/50?text=None') {
+    const rawPath = String(path || '').trim();
+    if (!rawPath) return fallback;
+    if (rawPath.startsWith('http://') || rawPath.startsWith('https://') || rawPath.startsWith('//')) {
+        return rawPath;
+    }
+    return rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+}
+
 function getClaimStatusLabel(status) {
     const normalized = String(status || 'pending').toLowerCase();
     if (normalized === 'approved') return 'Claimed';
@@ -367,8 +376,8 @@ async function loadClaims() {
         }
 
         tableBody.innerHTML = claims.map(claim => {
-            const lostImage = claim.lost_item?.image ? `/${claim.lost_item.image}` : 'https://via.placeholder.com/50?text=None';
-            const foundImage = claim.found_item?.image ? `/${claim.found_item.image}` : 'https://via.placeholder.com/50?text=None';
+            const lostImage = getClaimImageUrl(claim.lost_item?.image);
+            const foundImage = getClaimImageUrl(claim.found_item?.image);
             const claimStatus = String(claim.status || 'pending').toLowerCase();
             const actionContent = claimStatus === 'pending'
                 ? `
@@ -381,13 +390,13 @@ async function loadClaims() {
                     <td><span class="badge badge-similarity">${claim.similarity}</span></td>
                     <td>
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <img src="${lostImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;"> 
+                            <img src="${lostImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;" onerror="this.onerror=null;this.src='https://via.placeholder.com/50?text=None';"> 
                             <span>${claim.lost_item?.category || 'No lost report'}</span>
                         </div>
                     </td>
                     <td>
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <img src="${foundImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;"> 
+                            <img src="${foundImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;" onerror="this.onerror=null;this.src='https://via.placeholder.com/50?text=None';"> 
                             <span>${claim.found_item?.category || 'Unknown item'}</span>
                         </div>
                     </td>
@@ -443,7 +452,7 @@ function openDecisionModal(claimId, action) {
     const empty = document.getElementById('decisionReportEmpty');
     document.getElementById('decisionReportImage').value = '';
     if (savedReportImage) {
-        preview.src = savedReportImage.startsWith('/') ? savedReportImage : `/${savedReportImage}`;
+        preview.src = getClaimImageUrl(savedReportImage, '');
         preview.style.display = 'block';
         empty.style.display = 'none';
     } else {
@@ -575,7 +584,7 @@ function renderSavedReport(report) {
 
     const claimant = report.claimant || {};
     const item = report.item_description || {};
-    const reportImage = report.report_image ? `<img src="${report.report_image.startsWith('/') ? report.report_image : `/${report.report_image}`}" style="width:100%; max-height:240px; object-fit:contain; border:1px solid #ddd; border-radius:8px;">` : '<div style="padding:20px; border:1px solid #ddd; border-radius:8px; color:#666;">No report image uploaded.</div>';
+    const reportImage = report.report_image ? `<img src="${getClaimImageUrl(report.report_image, '')}" style="width:100%; max-height:240px; object-fit:contain; border:1px solid #ddd; border-radius:8px;">` : '<div style="padding:20px; border:1px solid #ddd; border-radius:8px; color:#666;">No report image uploaded.</div>';
 
     const printableHtml = `
         <!DOCTYPE html>
@@ -664,8 +673,8 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=5"></script>
-<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 </body>

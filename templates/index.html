@@ -400,6 +400,7 @@
 
         document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
+        localStorage.setItem("lookfor_last_activity_at", String(Date.now()));
         localStorage.setItem("is_admin", payload.is_admin);
         localStorage.setItem("user_email", payload.sub);
         localStorage.removeItem("pending_login_email");

@@ -8,8 +8,8 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=16">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=18">
 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -52,14 +52,14 @@
                 <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
                 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Items
                 </a>
             </li>
 
             <li  class="active">
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Items
                 </a>
             </li>
 
@@ -162,7 +162,7 @@
         <section class="content-body">
             <div class="profile-page-card">
                 <div class="action-bar">
-                    <h2 class="section-title">Surrendered Items <span></span></h2>
+                    <h2 class="section-title">Found Items <span></span></h2>
                     <div class="inventory-actions">
                         <select id="foundStatusFilter" class="inventory-filter" onchange="resetFoundPaginationAndRender()">
                             <option value="all">All Items</option>
@@ -175,11 +175,8 @@
                         <select id="foundCategoryFilter" class="inventory-filter" onchange="resetFoundPaginationAndRender()">
                             <option value="all">All Categories</option>
                         </select>
-                        <button class="upload-btn" id="analyzeMatchesBtn" onclick="analyzeItemMatches()">
-                            Analyze Matches
-                        </button>
                         <button class="upload-btn archive-toggle-btn" id="foundArchiveToggleBtn" onclick="toggleFoundArchiveView()"> 
-                            Archived Items
+                            Deleted Items
                         </button>
                         <button class="upload-btn surrender-upload-btn" onclick="openModal('reportModal')"> 
                             <span class="plus">+ Upload Found Item</span>
@@ -195,10 +192,11 @@
                     <div class="pagination-page-size">
                         <label for="foundPageSize">Items per page</label>
                         <select id="foundPageSize" onchange="changeFoundPageSize()">
-                            <option value="8">8</option>
-                            <option value="12" selected>12</option>
-                            <option value="16">16</option>
-                            <option value="24">24</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                            <option value="40">40</option>
+                            <option value="50">50</option>
                         </select>
                     </div>
                     <div class="pagination-status" id="foundPaginationStatus">Page 1 of 1</div>
@@ -234,6 +232,7 @@
 
                         <p><strong>Location:</strong> <span id="modalLocation"></span></p>
                         <p><strong>Date:</strong> <span id="modalDate"></span></p>
+                        <p><strong>Found ID:</strong> <span id="modalItemCode"></span></p>
                         
                         <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
 
@@ -243,10 +242,11 @@
                         <div class="modal-actions">
                             <button type="button" class="btn-archive-big" id="approveBtn" style="display:none; background:#198754;">Approve Item</button>
                             <button type="button" class="btn-dispose-big" id="rejectBtn" style="display:none; background:#dc3545;">Reject Item</button>
-                            <button type="button" class="btn-archive-big" id="archiveBtn">Archive Report</button>
+                            <button type="button" class="btn-archive-big" id="archiveBtn">Move to Deleted Items</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
                             <button type="button" class="btn-archive-big" id="manualClaimBtn" onclick="handleManualClaimButtonClick()" style="display:none; background:#0d6efd;">Create Manual Claim</button>
-                            <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">Dispose Item</button>
+                            <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
+                            <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">Delete Item</button>
                         </div>
                     </div>
                 </div>
@@ -286,7 +286,7 @@
         <div id="reportModal" class="modal-overlay">
                 <div class="modal-content report-upload-modal">
                     <span class="close-btn" onclick="handleCloseReport()">&times;</span>
-                    <h1 class="form-title">Surrender <span>Item</span></h1>
+                    <h1 class="form-title">Found <span>Item</span></h1>
 
                     <div class="form-container">
                     <div class="image-upload-section">
@@ -299,7 +299,7 @@
                             
                             <input type="file" id="itemImage" hidden accept="image/*"> 
                             
-                            <button class="btn-upload-img" id="itemImageTrigger" onclick="document.getElementById('itemImage').click()">+ Upload Main Image</button>
+                            <button class="btn-upload-img" id="itemImageTrigger" onclick="document.getElementById('itemImage').click()">+ Upload Main Image <span class="required-asterisk">*</span></button>
                             <p class="supporting-image-note">Add up to 2 more photos to help the AI build a more accurate embedding. The first image stays as the main display photo.</p>
                             <div class="supporting-image-grid">
                                 <div class="supporting-image-card">
@@ -318,11 +318,11 @@
                         <div class="details-column item-details">
                             <h3>ITEM DETAILS</h3>
                             <div class="input-group">
-                                <label>What is the item?</label>
+                                <label>What is the item? <span class="required-asterisk">*</span></label>
                                 <input type="text" id="itemName" placeholder="Item Name:">
                             </div>
                            <div class="input-group">
-                                <label for="itemCategory">Item Category</label>
+                                <label for="itemCategory">Item Category <span class="required-asterisk">*</span></label>
                                 <select id="itemCategory">
                                     <option value="">-- Loading Categories... --</option>
                                 </select>
@@ -342,27 +342,28 @@
                         <div class="details-column other-details">
                             <h3>OTHER DETAILS</h3>
                             <div class="input-group">
-                                <label>Holding Department</label>
+                                <label>Holding Department <span class="required-asterisk">*</span></label>
                                 <select id="itemDepartment" class="form-control">
                                     <option value="">-- Select Office --</option>
                                     </select>
                             </div>
                             <div class="input-group">
-                                <label>When was the item found?</label>
+                                <label>When was the item found? <span class="required-asterisk">*</span></label>
                                 <div class="datetime-row">
                                     <input type="date" id="reportDate">
                                     <input type="time" id="reportTime">
                                 </div>
                             </div>
                             <div class="input-group">
-                                <label>Where was the item found?</label>
+                                <label>Where was the item found? <span class="required-asterisk">*</span></label>
                                 <textarea id="reportLocation" rows="3" placeholder="Last location located:"></textarea>
                             </div>
                         </div>
                     </div>
 
-                    <div class="modal-footer" style="display: flex; justify-content: center;">
-                    <button class="btn-found lost-submit-btn surrender-submit-btn" onclick="submitReport()">Submit</button>
+                    <div class="modal-footer found-upload-footer">
+                        <button type="button" class="found-cancel-btn" onclick="handleCloseReport()">Cancel</button>
+                        <button type="button" class="btn-found lost-submit-btn surrender-submit-btn" onclick="submitReport()">Submit</button>
                     </div>
                 </div>
             </div>
@@ -384,7 +385,7 @@
                     </p>
                     
                     <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
-                        <button class="btn-found lost-submit-btn surrender-submit-btn" id="finalConfirmBtn" onclick="executeSubmit()" style="width: 100%; margin: 0;">Confirm & Surrender</button>
+                        <button class="btn-found lost-submit-btn surrender-submit-btn" id="finalConfirmBtn" onclick="executeSubmit()" style="width: 100%; margin: 0;">Confirm & Save</button>
                         
                         <div style="display: flex; gap: 10px; width: 100%;">
                             <button class="btn-upload-img" onclick="backToEdit()" style="flex: 1; background: #f0ad4e; color: white; margin: 0; border: none;">
@@ -548,7 +549,7 @@ function showAccessDeniedPopup(permName) {
                         <div class="card-body">
                             <h3>${item.item_name || item.category}</h3>
                             <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
-                            <p><strong>Found ID:</strong> ${item.found_id || 'N/A'}</p>
+                            <p><strong>Found ID:</strong> ${item.found_id || item.item_code || 'N/A'}</p>
                             <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details</span>
                         </div>
                     </div>
@@ -562,7 +563,7 @@ function showAccessDeniedPopup(permName) {
         let foundItemsCache = [];
         let showingFoundArchived = false;
         let currentFoundPage = 1;
-        let currentFoundPageSize = 12;
+        let currentFoundPageSize = 10;
         let activeFoundItemForManualClaim = null;
         let activeDetailFoundItem = null;
         let directClaimUsersCache = [];
@@ -636,12 +637,17 @@ function showAccessDeniedPopup(permName) {
     function updateFoundArchiveButton() {
         const btn = document.getElementById("foundArchiveToggleBtn");
         if (!btn) return;
-        btn.textContent = showingFoundArchived ? "Show Active Items" : "Archived Items";
+        btn.textContent = showingFoundArchived ? "Show Active Items" : "Deleted Items";
         btn.classList.toggle("active-archive-view", showingFoundArchived);
     }
 
     function toggleFoundArchiveView() {
         showingFoundArchived = !showingFoundArchived;
+        const statusFilter = document.getElementById("foundStatusFilter");
+        const categoryFilter = document.getElementById("foundCategoryFilter");
+        if (statusFilter) statusFilter.value = "all";
+        if (categoryFilter) categoryFilter.value = "all";
+        currentFoundPage = 1;
         loadLostItems();
     }
 
@@ -683,48 +689,6 @@ function showAccessDeniedPopup(permName) {
         });
 
         return result.isConfirmed;
-    }
-
-    async function analyzeItemMatches() {
-        const token = sessionStorage.getItem("admin_token");
-        const button = document.getElementById("analyzeMatchesBtn");
-        if (!token) {
-            window.location.href = "/login";
-            return;
-        }
-
-        if (!(await confirmFoundReportAction("Analyze matches now?", "Analyze all active unmatched lost and found items now?", "Analyze now"))) {
-            return;
-        }
-
-        const originalText = button ? button.textContent : "Analyze Matches";
-        if (button) {
-            button.disabled = true;
-            button.textContent = "Analyzing...";
-        }
-
-        try {
-            const response = await fetch('/admin/items/analyze-matches', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.detail || result.message || "Analysis failed.");
-            }
-
-            await loadLostItems();
-            await showFoundReportAlert('success', 'Analysis complete', `Scanned lost items: ${result.scanned_lost}. Scanned found items: ${result.scanned_found}. New matches: ${result.matched_count}.`);
-        } catch (error) {
-            console.error("Analyze matches failed:", error);
-            await showFoundReportAlert('error', 'Analysis failed', error.message || "Failed to analyze lost and found items.");
-        } finally {
-            if (button) {
-                button.disabled = false;
-                button.textContent = originalText;
-            }
-        }
     }
 
     function getFoundItemFilterValue() {
@@ -786,8 +750,8 @@ function showAccessDeniedPopup(permName) {
         return foundItemsCache.filter(item => {
             const matchesStatus =
                 activeFilter === "pending" ? Boolean(item.is_pending)
-                : activeFilter === "approved" ? !item.is_pending && !item.is_matched
-                : activeFilter === "matched" ? Boolean(item.is_matched)
+                : activeFilter === "approved" ? !item.is_pending && !item.is_matched && !item.is_claimed
+                : activeFilter === "matched" ? Boolean(item.is_matched) && !item.is_claimed
                 : activeFilter === "claimed" ? Boolean(item.is_claimed)
                 : activeFilter === "user-gave" ? Boolean(item.is_surrendered)
                 : true;
@@ -805,8 +769,8 @@ function showAccessDeniedPopup(permName) {
 
     function changeFoundPageSize() {
         const pageSizeInput = document.getElementById("foundPageSize");
-        const parsed = Number(pageSizeInput?.value || currentFoundPageSize || 12);
-        currentFoundPageSize = Number.isFinite(parsed) && parsed > 0 ? parsed : 12;
+        const parsed = Number(pageSizeInput?.value || currentFoundPageSize || 10);
+        currentFoundPageSize = Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
         currentFoundPage = 1;
         renderFoundItems();
     }
@@ -842,7 +806,7 @@ function showAccessDeniedPopup(permName) {
 
         if (filteredItems.length === 0) {
             updateFoundPaginationControls(0);
-            grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${showingFoundArchived ? 'archived' : 'surrendered'} items found for this filter.</p>`;
+                grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${showingFoundArchived ? 'deleted' : 'found'} items found for this filter.</p>`;
             return;
         }
 
@@ -867,7 +831,7 @@ function showAccessDeniedPopup(permName) {
                     <div class="card-body">
                         <h3>${item.item_name || item.category}</h3>
                         <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
-                        <p><strong>Found ID:</strong> ${item.found_id || 'N/A'}</p>
+                        <p><strong>Found ID:</strong> ${item.found_id || item.item_code || 'N/A'}</p>
                         <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details</span>
                     </div>
                 </div>
@@ -888,12 +852,15 @@ function showAccessDeniedPopup(permName) {
     document.getElementById("modalCategory").innerText = item.category;
     document.getElementById("modalLocation").innerText = item.location || 'Not Specified';
     document.getElementById("modalDate").innerText = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
+    if (document.getElementById("modalItemCode")) {
+        document.getElementById("modalItemCode").innerText = item.found_id || item.item_code || 'N/A';
+    }
     
     // --- ADDED MISSING COLUMNS ---
     
     // 1. Uploader Info (Shows who reported it)
     if (document.getElementById("modalUploader")) {
-        document.getElementById("modalUploader").innerText = item.uploader_name || `User ID: ${item.user_id}`;
+        document.getElementById("modalUploader").innerText = item.uploader_name || 'Unknown User';
     }
 
     // 2. Physical Traits (Brand/Color)
@@ -924,10 +891,15 @@ function showAccessDeniedPopup(permName) {
     
     const disposeBtn = document.getElementById("disposeBtn");
     const archiveBtn = document.getElementById("archiveBtn");
+    const deleteBtn = document.getElementById("deleteBtn");
     const recoverBtn = document.getElementById("recoverBtn");
     const approveBtn = document.getElementById("approveBtn");
     const rejectBtn = document.getElementById("rejectBtn");
     const manualClaimBtn = document.getElementById("manualClaimBtn");
+    if (deleteBtn) {
+        deleteBtn.style.display = "inline-flex";
+        deleteBtn.onclick = () => disposeItem(item.id);
+    }
     if (showingFoundArchived) {
         if (approveBtn) {
             approveBtn.style.display = "none";
@@ -947,9 +919,8 @@ function showAccessDeniedPopup(permName) {
             manualClaimBtn.style.display = "none";
             manualClaimBtn.disabled = true;
         }
-        disposeBtn.style.display = "inline-flex";
-        disposeBtn.onclick = () => disposeItem(item.id);
-        disposeBtn.textContent = "Dispose Item";
+        disposeBtn.style.display = "none";
+        disposeBtn.onclick = null;
     } else {
         if (item.is_pending) {
             if (approveBtn) {
@@ -971,7 +942,7 @@ function showAccessDeniedPopup(permName) {
                 rejectBtn.onclick = null;
             }
             archiveBtn.style.display = "inline-flex";
-            archiveBtn.textContent = "Archive Report";
+            archiveBtn.textContent = "Move to Deleted Items";
             archiveBtn.onclick = () => archiveLostItem(item.id);
         }
         if (recoverBtn) {
@@ -1189,7 +1160,7 @@ async function submitDirectClaim() {
         }
 
         async function archiveLostItem(itemId) {
-        const confirmArchive = await confirmFoundReportAction("Archive item?", "This item will be moved to the System Archive.", "Archive item");
+        const confirmArchive = await confirmFoundReportAction("Move to Deleted Items?", "This item will be moved to Deleted Items.", "Move item");
         if (!confirmArchive) return;
 
         try {
@@ -1201,13 +1172,13 @@ async function submitDirectClaim() {
             });
 
             if (response.ok) {
-                await showFoundReportAlert('success', 'Item archived', 'Item archived successfully!');
+                await showFoundReportAlert('success', 'Item moved', 'Item moved to Deleted Items successfully.');
                 closeModal('itemDetailModal');
                 // Refresh the current list to remove the archived item
                 location.reload(); 
             } else {
                 const error = await response.json();
-                await showFoundReportAlert('error', 'Archive failed', error.detail || 'Failed to archive item.');
+                await showFoundReportAlert('error', 'Move failed', error.detail || 'Failed to move item to Deleted Items.');
             }
         } catch (err) {
             console.error("Archive Error:", err);
@@ -1216,7 +1187,7 @@ async function submitDirectClaim() {
 }
 
         async function approvePendingFoundItem(itemId) {
-        const confirmed = await confirmFoundReportAction("Approve pending item?", "Approve this pending surrendered item and move it to active inventory?", "Approve item");
+        const confirmed = await confirmFoundReportAction("Approve pending item?", "Approve this pending found item and move it to active inventory?", "Approve item");
         if (!confirmed) return;
 
         try {
@@ -1242,7 +1213,7 @@ async function submitDirectClaim() {
     }
 
         async function rejectPendingFoundItem(itemId) {
-        const confirmed = await confirmFoundReportAction("Reject pending item?", "Reject this pending surrendered item? It will be moved to archived pending items.", "Reject item");
+        const confirmed = await confirmFoundReportAction("Reject pending item?", "Reject this pending found item? It will be moved to archived pending items.", "Reject item");
         if (!confirmed) return;
 
         try {
@@ -1333,10 +1304,15 @@ async function submitDirectClaim() {
         // --- 3. SUBMISSION LOGIC ---
         function submitReport() {
             const itemImage = document.getElementById('itemImage').files[0];
-            const itemName = document.getElementById('itemName').value;
+            const itemName = document.getElementById('itemName').value.trim();
+            const category = document.getElementById('itemCategory').value;
+            const department = document.getElementById('itemDepartment').value;
+            const reportDate = document.getElementById('reportDate').value;
+            const reportTime = document.getElementById('reportTime').value;
+            const reportLocation = document.getElementById('reportLocation').value.trim();
             
-            if (!itemImage || !itemName) {
-                showFoundReportAlert('warning', 'Missing required details', 'Please upload an image and provide an item name.');
+            if (!itemImage || !itemName || !category || !department || !reportDate || !reportTime || !reportLocation) {
+                showFoundReportAlert('warning', 'Missing required details', 'Please complete all required fields marked with *.');
                 return;
             }
 
@@ -1348,16 +1324,14 @@ async function submitDirectClaim() {
             const brand = document.getElementById('itemBrand').value || "N/A";
             document.getElementById('sumColorBrand').innerText = `${color} / ${brand}`;
             
-            document.getElementById('sumLocation').innerText = document.getElementById('reportLocation').value || "Not specified";
+            document.getElementById('sumLocation').innerText = reportLocation;
             
             // Get the TEXT of the selected department for the summary
             const deptDropdown = document.getElementById('itemDepartment');
             const deptName = deptDropdown.options[deptDropdown.selectedIndex].text;
             document.getElementById('sumReporter').innerText = `Holding Office: ${deptName}`;
             
-            const date = document.getElementById('reportDate').value || "N/A";
-            const time = document.getElementById('reportTime').value || "";
-            document.getElementById('sumDate').innerText = `${date} ${time}`;
+            document.getElementById('sumDate').innerText = `${reportDate} ${reportTime}`;
 
             openModal('confirmModal');
             closeModal('reportModal');
@@ -1491,7 +1465,7 @@ async function executeSubmit() {
             'Please select both a valid Category and a Department/Office.'
         );
         confirmBtn.disabled = false;
-        confirmBtn.innerText = "Confirm & Surrender";
+        confirmBtn.innerText = "Confirm & Save";
         return;
     }
 
@@ -1505,8 +1479,6 @@ async function executeSubmit() {
         compareData.append("brand", document.getElementById('itemBrand').value || "");
         compareData.append("color", document.getElementById('itemColor').value || "");
         compareData.append("status", "found");
-        appendOptionalImages(compareData);
-
         const compareRes = await fetch('/api/compare-text-details', {
             method: 'POST',
             body: compareData
@@ -1516,9 +1488,7 @@ async function executeSubmit() {
 
         const aiResult = await compareRes.json();
         const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
-        const selectedMatch = aiResult?.matched_item?.id
-            ? aiResult.matched_item
-            : (matchedItems[0]?.score >= 0.55 ? matchedItems[0] : null);
+        const selectedMatch = aiResult?.matched_item?.id ? aiResult.matched_item : null;
 
         await showFoundReportAlert(
             selectedMatch ? 'success' : 'info',
@@ -1543,6 +1513,7 @@ async function executeSubmit() {
         saveData.append("category", catName);
         saveData.append("department", deptName);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
+        saveData.append("possible_matches", JSON.stringify(matchedItems));
         if (selectedMatch?.id) {
             saveData.append("matched_item_id", selectedMatch.id);
             saveData.append("ai_score", selectedMatch.score || aiResult.highest_score || 0);
@@ -1559,7 +1530,7 @@ async function executeSubmit() {
             await showFoundReportAlert(
                 'success',
                 'Report submitted',
-                `Surrendered item registered in ${deptName}.`
+                `Found item registered in ${deptName}.`
             );
             location.reload();
         } else {
@@ -1570,7 +1541,7 @@ async function executeSubmit() {
         await showFoundReportAlert('error', 'Submission failed', err.message);
     } finally {
         confirmBtn.disabled = false;
-        confirmBtn.innerText = "Confirm & Surrender";
+        confirmBtn.innerText = "Confirm & Save";
     }
 }
 
@@ -1579,7 +1550,7 @@ async function disposeItem(itemId) {
     const disposeUrl = targetItem?.is_pending
         ? `/admin/pending-items/${itemId}/dispose`
         : `/admin/items/${itemId}/dispose`;
-    const confirmed = await confirmFoundReportAction("Dispose item permanently?", "This action cannot be undone.", "Dispose item");
+    const confirmed = await confirmFoundReportAction("Delete item permanently?", "This action cannot be undone.", "Delete item");
     if (!confirmed) return;
 
     try {
@@ -1591,12 +1562,12 @@ async function disposeItem(itemId) {
         });
 
         if (response.ok) {
-            await showFoundReportAlert('success', 'Item disposed', 'Item disposed permanently.');
+            await showFoundReportAlert('success', 'Item deleted', 'Item deleted permanently.');
             closeModal('itemDetailModal');
             loadLostItems();
         } else {
             const error = await response.json();
-            await showFoundReportAlert('error', 'Dispose failed', error.detail || "Failed to dispose item.");
+            await showFoundReportAlert('error', 'Delete failed', error.detail || "Failed to delete item.");
         }
     } catch (err) {
         console.error("Dispose Error:", err);
@@ -1654,7 +1625,7 @@ async function disposeItem(itemId) {
             document.getElementById('itemImageExtra2').value = "";
             uploadPreviewSlides = [null, null, null];
             currentPreviewSlideIndex = 0;
-            document.getElementById('itemImageTrigger').textContent = '+ Upload Main Image';
+            document.getElementById('itemImageTrigger').innerHTML = '+ Upload Main Image <span class="required-asterisk">*</span>';
             document.getElementById('itemImageExtra1Trigger').textContent = '+ Add Optional Image 2';
             document.getElementById('itemImageExtra2Trigger').textContent = '+ Add Optional Image 3';
             renderPreviewCarousel();
@@ -1686,8 +1657,8 @@ async function disposeItem(itemId) {
     </script>
       </div>
 </main>
-<script src="/static/session-keepalive.js?v=5"></script>
-<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 </body>

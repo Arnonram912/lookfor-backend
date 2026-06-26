@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Response, UploadFile, File, Form, Depends
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 import models
 from database import get_db
 from security import get_current_user
@@ -15,7 +15,16 @@ from clip_test import get_clip_components
 from PIL import Image
 import numpy as np
 import json
-from utils import public_file_url, save_file, resolve_category_name, validate_upload_file_size
+from utils import (
+    public_file_url,
+    save_file,
+    resolve_category_name,
+    validate_upload_file_size,
+    format_user_display_name,
+    format_item_code,
+    item_display_id,
+    item_display_code,
+)
 from clip_test import get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
 
@@ -107,6 +116,9 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             "brand": match.get("brand"),
             "color": match.get("color"),
             "description": match.get("description"),
+            "source": match.get("source", "found"),
+            "cross_category": bool(match.get("cross_category")),
+            "warning": match.get("warning"),
         })
 
     return json.dumps(cleaned_matches) if cleaned_matches else None
@@ -140,7 +152,7 @@ def serialize_found_item_match(found_item: models.Item, score: float | None = No
     }
 
 
-def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> None:
+def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> int:
     existing_matches = []
     if lost_item.possible_matches:
         try:
@@ -159,7 +171,9 @@ def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> 
             and match.get("source", "found") == match_source
         )
     ]
-    lost_item.possible_matches = json.dumps([match_payload, *deduped_matches][:3])
+    updated_matches = [match_payload, *deduped_matches][:3]
+    lost_item.possible_matches = json.dumps(updated_matches)
+    return len(updated_matches)
 
 
 def ensure_student_claim_for_pair(
@@ -187,6 +201,59 @@ def ensure_student_claim_for_pair(
     db.add(new_claim)
     db.flush()
     return new_claim
+
+
+def serialize_student_item(item: models.Item, owner: models.User | None) -> dict:
+    report_item_id = item_display_id(item)
+    report_item_code = item_display_code(item)
+    report_owner_name = str(getattr(item, "report_owner_name", "") or "").strip()
+    report_owner_group = str(getattr(item, "report_owner_group", "") or "").strip()
+    return {
+        "id": item.id,
+        "item_id": report_item_id,
+        "item_code": report_item_code,
+        "lost_id": report_item_code if item.status == "lost" else None,
+        "found_id": report_item_code if item.status == "found" else None,
+        "status": item.status,
+        "category_id": item.category_id,
+        "category": item.category,
+        "item_name": item.category,
+        "brand": item.brand,
+        "color": item.color,
+        "description": item.description,
+        "location": item.location,
+        "image_path": public_file_url(item.image_path),
+        "date": item.date.isoformat() if item.date else None,
+        "time_found": item.time_found,
+        "is_matched": bool(item.is_matched),
+        "archived": bool(item.archived),
+        "user_id": item.user_id,
+        "report_owner_user_id": getattr(item, "report_owner_user_id", None),
+        "uploader_name": report_owner_name or format_user_display_name(owner, "Self"),
+        "report_owner_name": report_owner_name,
+        "report_owner_group": report_owner_group,
+    }
+
+
+def serialize_student_pending_found(item: models.PendingItem, owner: models.User | None) -> dict:
+    pending_code = format_item_code("pending_found", item.id)
+    return {
+        "id": item.id,
+        "item_id": item.id,
+        "item_code": pending_code,
+        "found_id": pending_code,
+        "status": "pending_found",
+        "item_name": item.item_name,
+        "category": item.category,
+        "brand": item.brand,
+        "color": item.color,
+        "location": item.location,
+        "image_path": public_file_url(item.image_path),
+        "description": item.description,
+        "date": item.date.isoformat() if item.date else None,
+        "time_found": item.time_found,
+        "uploader_name": format_user_display_name(owner, "Self"),
+    }
 
 
 @router.get("/notifications")
@@ -354,7 +421,7 @@ async def report_found_item(
             admin_match_score = f"{ai_score * 100:.1f}%"
             pending_item.matched_item_id = matched_lost_item.id
             matched_lost_item.is_matched = True
-            prepend_lost_possible_match(
+            possible_match_count = prepend_lost_possible_match(
                 matched_lost_item,
                 serialize_pending_found_match(pending_item, match_score)
             )
@@ -372,7 +439,7 @@ async def report_found_item(
                 create_student_notification(
                     db,
                     matched_lost_item.user_id,
-                    f"Possible match found: {reporter_name} submitted a found {category} that may match your lost item.",
+                    f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
                     "student_match",
                     f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1"
                 )
@@ -572,39 +639,14 @@ async def get_my_found_items(
     for p in pending:
         results.append({
             "display_status": "Pending Approval",
-            "data": {
-                "id": p.id,
-                "item_name": p.item_name,
-                "category": p.category,
-                "brand": p.brand,
-                "color": p.color,
-                "location": p.location,
-                "image_path": public_file_url(p.image_path),
-                "description": p.description,
-                "date": p.date,
-                "time_found": p.time_found,
-                "uploader_name": current_user.full_name
-            }
+            "data": serialize_student_pending_found(p, current_user)
         })
         
     for a in approved:
         display_status = "Matched" if a.is_matched else "Approved"
         results.append({
             "display_status": display_status,
-            "data": {
-                "id": a.id,
-                "item_name": a.category,
-                "category": a.category,
-                "brand": a.brand,
-                "color": a.color,
-                "location": a.location,
-                "image_path": public_file_url(a.image_path),
-                "description": a.description,
-                "date": a.date,
-                "time_found": a.time_found,
-                "uploader_name": current_user.full_name,
-                "is_matched": bool(a.is_matched)
-            }
+            "data": serialize_student_item(a, current_user)
         })
         
     return results
@@ -785,14 +827,22 @@ async def get_my_lost_reports(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
+    current_user_name = format_user_display_name(current_user, "").strip().lower()
     # Change 'LostItem' to 'Item' to match your models.py
     reports = db.query(models.Item).filter(
-        models.Item.user_id == current_user.id,
+        or_(
+            models.Item.user_id == current_user.id,
+            models.Item.report_owner_user_id == current_user.id,
+            and_(
+                models.Item.report_owner_user_id.is_(None),
+                func.lower(models.Item.report_owner_name) == current_user_name,
+            ) if current_user_name else False,
+        ),
         models.Item.status == "lost",
         models.Item.archived == 0
     ).all()
     
-    return reports
+    return [serialize_student_item(report, current_user) for report in reports]
 
 # --- Your existing page routes below ---
 

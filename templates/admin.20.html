@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
@@ -49,14 +49,14 @@
                 <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
                 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Items 
                 </a>
             </li>
 
             <li class="#">
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Items
                  </a>
             </li>
 
@@ -178,7 +178,7 @@
                     <div class="stats-grid dashboard-stats-grid"> 
                         <div class="card" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;">
                             <h3 id="foundCount">0</h3>
-                            <p>Surrendered Items</p>
+                            <p>Found Items</p>
                         </div>
 
                         <div class="card" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;"> 
@@ -188,7 +188,7 @@
 
                         <div class="card" onclick="openPendingSurrenderWithAccess(); return false;">
                             <h3 id="pendingCount">0</h3>
-                            <p>Pending Surrendered Items</p> 
+                            <p>Pending Found Items</p> 
                         </div>
 
                         <div class="card" onclick="openClaimedItemsWithAccess(); return false;"> 
@@ -240,7 +240,7 @@
         <div id="adminActionModal" class="modal">
             <div class="modal-content" style="max-width: 760px; width: min(760px, 92vw);">
                 <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
-                    <h2 id="adminModalTitle">Pending Surrender Items</h2>
+                    <h2 id="adminModalTitle">Pending Found Items</h2>
                     <span class="close-modal" onclick="closeModal('adminActionModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
                 </div>
                 <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
@@ -608,7 +608,7 @@ async function handleNotifClick(notifId) {
     const token = sessionStorage.getItem("admin_token");
 
     // 1. Set UI to loading state and show modal
-    title.innerText = "Pending Surrender Items";
+    title.innerText = "Pending Found Items";
     container.innerHTML = `<div style="text-align:center; padding:30px;">
         <p>Fetching pending items...</p>
     </div>`;
@@ -1008,8 +1008,8 @@ async function processAction(itemId, actionType) {
     };
 </script>
 
-<script src="/static/session-keepalive.js?v=5"></script>
-<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 </body> 

@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LookFor - Lost and Found</title>
-    <link rel="stylesheet" href="/static/landing.css?v=5.0">
+    <link rel="stylesheet" href="/static/landing.css?v=5.2">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -202,8 +202,6 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
     </div>
 </section>
 
-<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
-
 <section class="why-choose-us" data-aos="fade-up">
     <div class="container">
         <div class="content-wrapper">
@@ -239,11 +237,6 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
         </div>
     </div>
 </section>
-
-<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-<script>
-  AOS.init({ duration: 1000, once: true });
-</script>
 
 <section id="particles-js" class="final-features">
     <div class="content-container" data-aos="zoom-in">
@@ -289,23 +282,6 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
     </div>
 </section>
 
-<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
-<script>
-    particlesJS('particles-js', {
-        "particles": {
-            "number": { "value": 80 },
-            "color": { "value": "#005BAB" },
-            "shape": { "type": "circle" },
-            "opacity": { "value": 0.2 },
-            "size": { "value": 3 },
-            "line_linked": { "enable": true, "distance": 150, "color": "#005BAB", "opacity": 0.2, "width": 1 },
-            "move": { "enable": true, "speed": 2 }
-        },
-        "interactivity": {
-            "events": { "onhover": { "enable": true, "mode": "repulse" } }
-        }
-    });
-</script>
 <div id="canvas-container"></div>
 
 <section class="features-grid-section" data-aos="fade-up">
@@ -351,42 +327,6 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
     </div>
 </section>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-    const geometry = new THREE.BufferGeometry();
-    const vertices = [];
-    for (let i = 0; i < 5000; i++) {
-        vertices.push(THREE.MathUtils.randFloatSpread(2000)); // x
-        vertices.push(THREE.MathUtils.randFloatSpread(2000)); // y
-        vertices.push(THREE.MathUtils.randFloatSpread(2000)); // z
-    }
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    const material = new THREE.PointsMaterial({ color: 0x005BAB, size: 2 });
-    const points = new THREE.Points(geometry, material);
-    scene.add(points);
-
-    camera.position.z = 1000;
-
-    function animate() {
-        requestAnimationFrame(animate);
-        points.rotation.x += 0.0005;
-        points.rotation.y += 0.0005;
-        renderer.render(scene, camera);
-    }
-    animate();
-
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-</script>
 <section class="faq-section" data-aos="fade-up">
     <div class="container">
         <h2 class="section-title">Frequently asked questions</h2>
@@ -426,15 +366,6 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
     </div>
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/typed.js@2.0.12"></script>
-<script>
-  var typed = new Typed('.section-title', {
-    strings: ['Frequently asked questions', 'Got questions?', 'We have answers.'],
-    typeSpeed: 50,
-    backSpeed: 30,
-    loop: true
-  });
-</script>
 <script>// Simple scroll observer to trigger transitions
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {

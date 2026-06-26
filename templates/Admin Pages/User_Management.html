@@ -8,8 +8,8 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
-    <link rel="stylesheet" href="/static/User_Management.css?v=14"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
+    <link rel="stylesheet" href="/static/User_Management.css?v=17"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
@@ -51,14 +51,14 @@
                 <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
                 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Items
                 </a>
             </li>
 
             <li class="#">
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Items
                 </a>
             </li>
 
@@ -174,7 +174,7 @@
         </div>
     </div>
     <div style="margin-top:12px; width:100%; height:10px; border-radius:999px; background:rgba(255,255,255,0.18); overflow:hidden; box-shadow:inset 0 1px 2px rgba(0,0,0,0.15);">
-        <div id="bulkJobProgressBar" style="width:0%; height:100%; background:linear-gradient(90deg, #f7b500, #ffd95a); transition: width 0.35s ease; box-shadow:0 0 14px rgba(255,217,90,0.35);"></div>
+            <div id="bulkJobProgressBar" class="bulk-progress-moving" style="width:0%; height:100%; background:linear-gradient(90deg, #f7b500 0%, #ffd95a 35%, #fff3b0 55%, #ffd95a 75%, #f7b500 100%); transition: width 0.35s ease; box-shadow:0 0 14px rgba(255,217,90,0.35);"></div>
     </div>
     <div id="bulkJobMeta" style="margin-top:10px; font-size:13px; opacity:0.95;">No active background job.</div>
     <div id="bulkJobActions" style="display:none; margin-top:14px; gap:10px; flex-wrap:wrap;">
@@ -243,7 +243,7 @@
             <i class="fas fa-rotate-left"></i> Recover All
         </button>
         <button id="btnDeleteSelected" class="tab-btn archive-style batch-action-btn" style="color: #dc3545; border-color: #dc3545; display: none;" onclick="deleteSelectedUsers()">
-            <i class="fas fa-trash"></i> Delete Permanently
+            <i class="fas fa-trash"></i> Delete
         </button>
     </div>
 </div>
@@ -255,10 +255,10 @@
     </table>
 </div>
 
-<div id="studentContainer" class="table-box">
+<div id="studentContainer" class="table-box" style="display:none;">
     <div id="studentYearEndTermLabel" class="student-year-term-label" style="display:none;"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course/Section/Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course/Strand/Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="studentTableBody"></tbody>
     </table>
 </div>
@@ -287,6 +287,7 @@
             <option value="25">25</option>
             <option value="50">50</option>
             <option value="100">100</option>
+            <option value="all">All</option>
         </select>
     </div>
     <div class="pagination-status" id="userPaginationStatus">Page 1 of 1</div>
@@ -299,13 +300,14 @@
   <div id="bulkRegisterModal" class="modal">
     <div class="modal-content bulk-register-content">
         <span class="close-modal" onclick="closeModal('bulkRegisterModal')">&times;</span>
-        <h2>Bulk Register Student/Faculty</h2>
+        <h2 id="bulkRegisterTitle">Register Student/Faculty</h2>
 
-        <p class="bulk-register-intro">Upload Excel/CSV File:</p>
+        <p id="bulkRegisterIntro" class="bulk-register-intro">Upload Excel/CSV File:</p>
         <div class="form-group bulk-import-group" style="margin-bottom: 18px;">
-            <label for="bulkImportType">Import Type</label>
+            <label for="bulkImportType">Import Type <span class="required-asterisk">*</span></label>
             <select id="bulkImportType" class="admin-input" onchange="handleBulkImportTypeChange()">
-                <option value="student">Student</option>
+                <option value="college">College</option>
+                <option value="senior_highschool">Senior High School</option>
                 <option value="employee">Faculty</option>
             </select>
             <p id="bulkImportHint" style="margin-top: 6px; font-size: 13px; color: #555;">
@@ -313,7 +315,7 @@
             </p>
         </div>
         <div class="form-group bulk-entry-group" style="margin-bottom: 18px;">
-            <label for="bulkEntryMode">Entry Mode</label>
+            <label for="bulkEntryMode">Entry Mode <span class="required-asterisk">*</span></label>
             <select id="bulkEntryMode" class="admin-input" onchange="handleBulkEntryModeChange()">
                 <option value="upload">Upload File</option>
                 <option value="manual">Manual Entry</option>
@@ -321,18 +323,18 @@
         </div>
         <div class="bulk-settings-grid">
             <div class="form-group" style="margin-bottom: 18px;">
-                <label for="batchYear">Batch Year</label>
+                <label for="batchYear">Batch Year <span class="required-asterisk">*</span></label>
                 <select id="batchYear" class="admin-input" onchange="updateBatchPreview()"></select>
             </div>
             <div class="form-group" style="margin-bottom: 18px;">
-                <label for="batchTerm">Term / Semester</label>
+                <label for="batchTerm">Term / Semester <span class="required-asterisk">*</span></label>
                 <select id="batchTerm" class="admin-input" onchange="updateBatchPreview()">
-                    <option value="1st Semester">1st Semester</option>
                     <option value="2nd Semester">2nd Semester</option>
+                    <option value="1st Semester">1st Semester</option>
                 </select>
             </div>
             <div class="form-group" style="margin-bottom: 18px;">
-                <label for="duplicateAction">If duplicate user exists</label>
+                <label for="duplicateAction">If duplicate user exists <span class="required-asterisk">*</span></label>
                 <select id="duplicateAction" class="admin-input">
                     <option value="ignore">Ignore duplicate user</option>
                     <option value="replace">Replace existing user record</option>
@@ -356,15 +358,15 @@
                 <p>Fill in the account details first, then review the batch settings below.</p>
             </div>
             <div class="form-group" style="margin-bottom: 14px;">
-                <label for="manualUserId">Student ID / Employee No.</label>
+                <label for="manualUserId">Student ID / Employee No. <span class="required-asterisk">*</span></label>
                 <input type="text" id="manualUserId" class="admin-input" placeholder="Enter the ID number">
             </div>
             <div class="form-group" style="margin-bottom: 14px;">
-                <label for="manualLastName">Last Name</label>
+                <label for="manualLastName">Last Name <span class="required-asterisk">*</span></label>
                 <input type="text" id="manualLastName" class="admin-input" placeholder="Enter last name">
             </div>
             <div class="form-group" style="margin-bottom: 14px;">
-                <label for="manualFirstName">First Name</label>
+                <label for="manualFirstName">First Name <span class="required-asterisk">*</span></label>
                 <input type="text" id="manualFirstName" class="admin-input" placeholder="Enter first name">
             </div>
             <div class="form-group" style="margin-bottom: 14px;">
@@ -373,12 +375,12 @@
             </div>
             <div id="manualStudentFields">
                 <div class="form-group" style="margin-bottom: 14px;">
-                    <label for="manualProgram">Program / Course</label>
+                    <label for="manualProgram">Program <span class="required-asterisk">*</span></label>
                     <input type="text" id="manualProgram" class="admin-input" placeholder="Example: BSIT">
                 </div>
                 <div class="form-group" style="margin-bottom: 14px;">
-                    <label for="manualLevel">Level</label>
-                    <input type="text" id="manualLevel" class="admin-input" placeholder="Example: 1Y1 or G12">
+                    <label for="manualLevel">Level <span class="required-asterisk">*</span></label>
+                    <input type="text" id="manualLevel" class="admin-input" placeholder="Example: 1Y1">
                 </div>
             </div>
             <div id="manualFacultyFields" style="display:none;">
@@ -523,11 +525,11 @@
                 <strong id="profileViewDepartment">N/A</strong>
             </div>
             <div class="profile-info-item">
-                <span>Course / Program</span>
+                <span>Course / Strand</span>
                 <strong id="profileViewCourse">N/A</strong>
             </div>
             <div class="profile-info-item">
-                <span>Section / Level</span>
+                <span>Strand / Grade Level</span>
                 <strong id="profileViewSection">N/A</strong>
             </div>
             <div class="profile-info-item">
@@ -637,8 +639,8 @@
                 <label class="perm-item professional">
                     <input type="checkbox" class="edit-perm" value="Found-Reports" onchange="updatePermissionSummary()">
                     <span class="perm-copy">
-                        <span class="perm-title">Surrendered Item Reports</span>
-                        <span class="perm-desc">Handle found or surrendered item submissions.</span>
+                        <span class="perm-title">Found Item Reports</span>
+                        <span class="perm-desc">Handle found item submissions.</span>
                     </span>
                 </label>
                 <label class="perm-item professional">
@@ -759,8 +761,8 @@
                     <label class="perm-item professional">
                         <input type="checkbox" class="perm-check" value="Found-Reports">
                         <span class="perm-copy">
-                            <span class="perm-title">Surrendered Item Reports</span>
-                            <span class="perm-desc">Handle found or surrendered item submissions.</span>
+                            <span class="perm-title">Found Item Reports</span>
+                            <span class="perm-desc">Handle found item submissions.</span>
                         </span>
                     </label>
                     <label class="perm-item professional">
@@ -894,7 +896,7 @@
     <div class="loader"></div> <h2 style="margin-top:20px;"></h2>
     <p>Please wait, generating secure accounts and STI emails.</p>
     <div id="progressBarContainer" style="width:300px; height:10px; background:#444; border-radius:5px; margin-top:10px; overflow:hidden;">
-        <div id="progressBar" style="width:0%; height:100%; background:var(--sti-yellow); transition: width 0.3s;"></div>
+        <div id="progressBar" style="width:0%; height:100%; background:linear-gradient(90deg, var(--sti-yellow) 0%, #fff2a6 45%, var(--sti-yellow) 70%); background-size:220% 100%; transition: width 0.55s ease;"></div>
     </div>
 </div>
 
@@ -909,7 +911,7 @@ const PERMISSION_LABELS = {
     "User-Management-Archive": "User Management Archive",
     "User-Management-Delete": "User Management Delete",
     "Lost-Reports": "Lost Item Reports",
-    "Found-Reports": "Surrendered Item Reports",
+    "Found-Reports": "Found Item Reports",
     "Claim-Management": "Claim Management",
     "Reports": "Reports",
     "Confiscated-items": "Confiscated Items",
@@ -986,15 +988,22 @@ function setBulkLoadingOverlay(isVisible, options = {}) {
         if (progressBar) {
             let progressValue = Number.parseInt(options.progress || '18', 10);
             if (Number.isNaN(progressValue)) progressValue = 18;
+            const maxFakeProgress = Math.max(progressValue, Math.min(Number(options.maxProgress || 88), 95));
             progressBar.style.width = `${progressValue}%`;
+            progressBar.style.backgroundPosition = '0% 0';
+            let shimmerPosition = 0;
 
             bulkLoadingOverlayTimer = setInterval(() => {
-                progressValue += Math.random() < 0.5 ? 7 : 11;
-                if (progressValue >= 86) {
-                    progressValue = 18;
+                const remaining = maxFakeProgress - progressValue;
+                if (remaining > 0.25) {
+                    const step = Math.max(0.35, remaining * 0.08);
+                    progressValue = Math.min(maxFakeProgress, progressValue + step);
+                    progressBar.style.width = `${progressValue.toFixed(1)}%`;
                 }
-                progressBar.style.width = `${progressValue}%`;
-            }, 380);
+
+                shimmerPosition = (shimmerPosition + 14) % 220;
+                progressBar.style.backgroundPosition = `${shimmerPosition}% 0`;
+            }, 320);
         }
         return;
     }
@@ -1046,10 +1055,13 @@ function renderBulkJobCard(job, options = {}) {
     percentBadge.innerText = `${visibleProgress}%`;
 
     if (job.status === 'completed') {
+        progressBar.classList.remove('bulk-progress-moving');
         progressBar.style.width = '100%';
+        progressBar.style.background = 'linear-gradient(90deg, #16a34a, #22c55e)';
+        progressBar.style.boxShadow = '0 0 14px rgba(34,197,94,0.38)';
         percentBadge.innerText = '100%';
         lastCompletedBulkJob = job;
-        title.innerText = 'Background registration completed';
+        title.innerText = 'Registration completed';
         message.innerText = 'The upload finished and the report is ready.';
         meta.innerText = `Processed ${processed}/${total} users. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
         dismissBtn.style.display = 'inline-flex';
@@ -1074,7 +1086,10 @@ function renderBulkJobCard(job, options = {}) {
     }
 
     if (job.status === 'failed') {
+        progressBar.classList.remove('bulk-progress-moving');
         progressBar.style.width = `${fillWidth}%`;
+        progressBar.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
+        progressBar.style.boxShadow = '0 0 14px rgba(220,53,69,0.3)';
         title.innerText = 'Background registration failed';
         message.innerText = job.error || job.message || 'The upload failed before completion.';
         meta.innerText = `Processed ${processed}/${total} students before the job stopped.`;
@@ -1086,7 +1101,10 @@ function renderBulkJobCard(job, options = {}) {
         }
         return;
     }
+    progressBar.classList.add('bulk-progress-moving');
     progressBar.style.width = `${fillWidth}%`;
+    progressBar.style.background = 'linear-gradient(90deg, #f7b500 0%, #ffd95a 35%, #fff3b0 55%, #ffd95a 75%, #f7b500 100%)';
+    progressBar.style.boxShadow = '0 0 14px rgba(255,217,90,0.35)';
 
     title.innerText = job.status === 'queued' ? 'Background registration queued' : 'Background registration in progress';
     message.innerText = job.message || 'The user upload is running in the background. You can keep using the system.';
@@ -1539,11 +1557,8 @@ function confirmSavePermissions() {
         confirmButtonText: 'Yes, save changes',
         cancelButtonText: 'Cancel',
         reverseButtons: true,
-        customClass: {
-            popup: 'swal-wide',
-            confirmButton: 'swal-confirm-btn',
-            cancelButton: 'swal-cancel-btn'
-        }
+        customClass: swalClassMap(),
+        buttonsStyling: false
     }).then((result) => {
         if (result.isConfirmed) {
             saveUserPermissions(selected);
@@ -1552,7 +1567,9 @@ function confirmSavePermissions() {
                 text: 'Permissions have been updated successfully.',
                 icon: 'success',
                 timer: 2000,
-                showConfirmButton: false
+                showConfirmButton: false,
+                customClass: swalClassMap(),
+                buttonsStyling: false
             });
         }
     });
@@ -1561,6 +1578,10 @@ function confirmSavePermissions() {
 function swalClassMap() {
     return {
         popup: 'swal-wide',
+        icon: 'swal-icon',
+        title: 'swal-title',
+        htmlContainer: 'swal-text',
+        actions: 'swal-footer',
         confirmButton: 'swal-confirm-btn',
         cancelButton: 'swal-cancel-btn'
     };
@@ -1571,7 +1592,8 @@ async function showUserManagementAlert(icon, title, text) {
         icon,
         title,
         text,
-        customClass: swalClassMap()
+        customClass: swalClassMap(),
+        buttonsStyling: false
     });
 }
 
@@ -1584,7 +1606,8 @@ async function confirmUserManagementAction(title, text, confirmButtonText = 'Con
         confirmButtonText,
         cancelButtonText: 'Cancel',
         reverseButtons: true,
-        customClass: swalClassMap()
+        customClass: swalClassMap(),
+        buttonsStyling: false
     });
 
     return result.isConfirmed;
@@ -1757,6 +1780,7 @@ let currentUserPageSize = 10;
 
 function getUserPageSize() {
     const pageSizeInput = document.getElementById('userPageSize');
+    if (pageSizeInput?.value === 'all' || (!pageSizeInput && currentUserPageSize === 'all')) return 'all';
     const parsed = Number(pageSizeInput?.value || currentUserPageSize || 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
 }
@@ -1767,12 +1791,13 @@ function updateUserPaginationControls(totalRows) {
     const prevBtn = document.getElementById('userPrevPageBtn');
     const nextBtn = document.getElementById('userNextPageBtn');
     const pageSizeInput = document.getElementById('userPageSize');
-    const totalPages = Math.max(1, Math.ceil(totalRows / currentUserPageSize));
+    const isShowingAll = currentUserPageSize === 'all';
+    const totalPages = isShowingAll ? 1 : Math.max(1, Math.ceil(totalRows / currentUserPageSize));
 
     currentUserPage = Math.min(Math.max(currentUserPage, 1), totalPages);
 
     if (controls) controls.style.display = totalRows > 0 ? 'flex' : 'none';
-    if (status) status.textContent = `Page ${currentUserPage} of ${totalPages}`;
+    if (status) status.textContent = isShowingAll ? `Showing all ${totalRows} rows` : `Page ${currentUserPage} of ${totalPages}`;
     if (prevBtn) prevBtn.disabled = currentUserPage <= 1;
     if (nextBtn) nextBtn.disabled = currentUserPage >= totalPages;
     if (pageSizeInput) pageSizeInput.value = String(currentUserPageSize);
@@ -2030,11 +2055,23 @@ function getArchiveFolderYear(user) {
     return batchInfo.yearEndTerm || 'No Year End Term';
 }
 
+function isTruthyFlag(value) {
+    return value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
+}
+
+function isArchiveTabUser(user) {
+    return isTruthyFlag(user?.is_archived) && !isTruthyFlag(user?.is_pending_delete);
+}
+
+function isTrashTabUser(user) {
+    return isTruthyFlag(user?.is_archived) && isTruthyFlag(user?.is_pending_delete);
+}
+
 function getArchivedUserFolders() {
     const folderMap = new Map();
 
     allUsers
-        .filter(user => user.is_archived)
+        .filter(isArchiveTabUser)
         .forEach(user => {
             const year = getArchiveFolderYear(user);
             if (!folderMap.has(year)) {
@@ -2125,36 +2162,29 @@ function selectArchiveFolder(year) {
 
 function applyArchiveFolderFilter(users) {
     if (!currentArchiveFolderYear) return [];
-    return users.filter(user => getArchiveFolderYear(user) === currentArchiveFolderYear);
+    return users.filter(user => isArchiveTabUser(user) && getArchiveFolderYear(user) === currentArchiveFolderYear);
+}
+
+function syncArchiveFolderSelectionForUsers(users) {
+    if (!Array.isArray(users) || users.length === 0) return;
+    const activeFolderHasMatch = users.some(user => getArchiveFolderYear(user) === currentArchiveFolderYear);
+    if (!activeFolderHasMatch) {
+        currentArchiveFolderYear = getArchiveFolderYear(users[0]);
+        renderArchiveFolders();
+    }
 }
 
 function getFilteredUsersForRole(role) {
     let filtered = allUsers.filter(user => {
-        const isAdmin = !!user.is_admin;
-        const isArchived = !!user.is_archived;
+        const isAdmin = isTruthyFlag(user.is_admin);
 
-        if (role === 'admin') return isAdmin && !isArchived;
-        if (role === 'student') return !isAdmin && !isArchived;
-        if (role === 'archive') return isArchived && !user.is_pending_delete;
-        if (role === 'delete') return isArchived && !!user.is_pending_delete;
+        if (role === 'admin') return isAdmin && !isTruthyFlag(user.is_archived);
+        if (role === 'student') return !isAdmin && !isTruthyFlag(user.is_archived);
+        if (role === 'archive') return isArchiveTabUser(user);
+        if (role === 'delete') return isTrashTabUser(user);
         return false;
     });
 
-    const query = String(document.getElementById('userSearch')?.value || '').toLowerCase().trim();
-    if (query) {
-        filtered = filtered.filter(user =>
-            (user.full_name && user.full_name.toLowerCase().includes(query)) ||
-            (user.email && user.email.toLowerCase().includes(query)) ||
-            (user.student_no && user.student_no.toLowerCase().includes(query)) ||
-            (user.batch_id && user.batch_id.toLowerCase().includes(query)) ||
-            (user.course && user.course.toLowerCase().includes(query)) ||
-            (user.section && user.section.toLowerCase().includes(query)) ||
-            (user.department && user.department.toLowerCase().includes(query)) ||
-            String(user.id || '').includes(query)
-        );
-    }
-
-    filtered = applyBatchFilter(filtered);
     return filtered;
 }
 
@@ -2228,6 +2258,11 @@ function filterTable(role = 'admin') {
 
     if (!config[role]) {
         role = 'admin';
+    }
+
+    const previousView = currentView;
+    if (previousView && previousView !== role) {
+        clearUserSearchInput();
     }
 
     currentView = role;
@@ -2319,7 +2354,11 @@ function filterTable(role = 'admin') {
     if (deleteSelectedBtn) deleteSelectedBtn.style.display = 'none';
 
     let filtered = getFilteredUsersForRole(role);
+    if (role === 'student') {
+        filtered = applyBatchFilter(filtered);
+    }
     if (role === 'archive') {
+        syncArchiveFolderSelectionForUsers(filtered);
         filtered = applyArchiveFolderFilter(filtered);
     } else if (role === 'student' || role === 'delete') {
         filtered = applySemesterFilter(filtered);
@@ -2332,6 +2371,14 @@ function filterTable(role = 'admin') {
     filtered = sortUsersByFullName(filtered);
     renderTable(filtered, role, activeConfig.body);
 }
+
+function clearUserSearchInput() {
+    const searchInput = document.getElementById('userSearch');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+}
+
 function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody') {
     const tableBody = document.getElementById(targetBodyId);
     if (!tableBody) return; // Safety check
@@ -2340,10 +2387,11 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
     updateFullNameSortIndicators();
     currentUserPageSize = getUserPageSize();
     const totalRows = data.length;
-    const totalPages = Math.max(1, Math.ceil(totalRows / currentUserPageSize));
+    const isShowingAll = currentUserPageSize === 'all';
+    const totalPages = isShowingAll ? 1 : Math.max(1, Math.ceil(totalRows / currentUserPageSize));
     currentUserPage = Math.min(Math.max(currentUserPage, 1), totalPages);
-    const pageStart = (currentUserPage - 1) * currentUserPageSize;
-    const pageRows = data.slice(pageStart, pageStart + currentUserPageSize);
+    const pageStart = isShowingAll ? 0 : (currentUserPage - 1) * currentUserPageSize;
+    const pageRows = isShowingAll ? data : data.slice(pageStart, pageStart + currentUserPageSize);
 
     if (!pageRows.length) {
         const columnCount = currentRole === 'admin' || currentRole === 'student' || currentRole === 'archive' || currentRole === 'delete'
@@ -2355,7 +2403,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
         return;
     }
 
-    pageRows.forEach(user => {
+    const tableRows = pageRows.map(user => {
         const isMe = user.id == currentAdminId; 
         
         // 1. Handle Login Display
@@ -2416,7 +2464,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                     : `<button class="action-btn edit-btn" onclick="openUserProfileModal(${user.id}, 'edit')">Edit</button>`;
                 const deleteButton = Number(user.id) === Number(currentAdminId) || !canDeleteUsers
                     ? ''
-                    : `<button class="action-btn delete-perm-btn" onclick="moveToDelete(${user.id}, '${currentRole}')">Delete</button>`;
+                    : `<button class="action-btn delete-perm-btn" onclick="${currentRole === 'student' ? 'moveToDelete' : 'permanentDelete'}(${user.id}, '${currentRole}')">Delete</button>`;
                 const archiveButton = Number(user.id) === Number(currentAdminId)
                     ? ''
                     : (canArchiveUsers
@@ -2438,7 +2486,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
             ? `<td><input type="checkbox" class="row-select" ${isMe ? 'disabled title="You cannot select your own account."' : ''} ${selectedUserIds.has(user.id) ? 'checked' : ''} onchange="toggleUserSelection(${user.id}, this.checked)"></td>`
             : '';
 
-        const row = `
+        return `
             <tr data-user-id="${user.id}" class="${isMe ? 'self-row' : ''} ${user.is_archived ? 'archived-row' : ''}">
                 ${selectColumn}
                 <td><strong>${user.student_no || user.id}</strong></td>
@@ -2455,8 +2503,9 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                 </td>
             </tr>
         `;
-        tableBody.insertAdjacentHTML('beforeend', row);
     });
+
+    tableBody.innerHTML = tableRows.join('');
 
     updateUserPaginationControls(totalRows);
     updateSelectionActionButtons();
@@ -2529,9 +2578,9 @@ function updateSelectionActionButtons() {
         recoverSelectedBtn.style.display = (currentView === 'archive' || currentView === 'delete') && selectedVisibleUsers.length > 0 && hasAccessPermission('User-Management-Archive') ? 'inline-flex' : 'none';
     }
     if (deleteSelectedBtn) {
-        deleteSelectedBtn.style.display = (currentView === 'archive' || currentView === 'delete') && selectedVisibleUsers.length > 0 && hasAccessPermission('User-Management-Delete') ? 'inline-flex' : 'none';
-        deleteSelectedBtn.innerHTML = currentView === 'archive'
-            ? '<i class="fas fa-share"></i> Move to Trash'
+        deleteSelectedBtn.style.display = selectedVisibleUsers.length > 0 && hasAccessPermission('User-Management-Delete') ? 'inline-flex' : 'none';
+        deleteSelectedBtn.innerHTML = currentView === 'student'
+            ? '<i class="fas fa-trash"></i> Delete'
             : '<i class="fas fa-trash"></i> Delete Permanently';
     }
 }
@@ -2568,21 +2617,22 @@ async function archiveSelectedUsers() {
     );
 
     try {
-        await runUserBatchRequests(selected, async (user) => {
-            const response = await fetch(`/admin/toggle-archive/${user.id}?archive=true`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(result.detail || `Failed to archive ${user.full_name || 'user'}.`);
-            }
-            return result;
+        const response = await fetch('/admin/bulk-toggle-archive?archive=true', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
+            },
+            body: JSON.stringify({ user_ids: selected.map(user => user.id) })
         });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to archive selected users.');
+        }
 
         selectedUserIds.clear();
-        await loadUsers(currentView);
-        await showUserManagementAlert('success', 'Accounts archived', `${selected.length} selected ${selectedLabel} archived.`);
+        await loadUsers('archive');
+        await showUserManagementAlert('success', 'Accounts archived', result.message || `${selected.length} selected ${selectedLabel} archived.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Archive failed', error.message || 'Failed to archive selected users.');
     } finally {
@@ -2859,7 +2909,10 @@ async function recoverSelectedUsers() {
         showAccessDeniedPopup('User Management Archive');
         return;
     }
-    const selected = allUsers.filter(user => selectedUserIds.has(user.id) && user.is_archived);
+    const selected = allUsers.filter(user =>
+        selectedUserIds.has(user.id) &&
+        (currentView === 'delete' ? isTrashTabUser(user) : isArchiveTabUser(user))
+    );
     if (selected.length === 0) {
         await showUserManagementAlert('info', 'No users selected', 'Select at least one archived account first.');
         return;
@@ -2873,21 +2926,22 @@ async function recoverSelectedUsers() {
     );
 
     try {
-        await runUserBatchRequests(selected, async (user) => {
-            const response = await fetch(`/admin/toggle-archive/${user.id}?archive=false`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(result.detail || `Failed to recover ${user.full_name || 'user'}.`);
-            }
-            return result;
+        const response = await fetch('/admin/bulk-toggle-archive?archive=false', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
+            },
+            body: JSON.stringify({ user_ids: selected.map(user => user.id) })
         });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to recover selected users.');
+        }
 
         selectedUserIds.clear();
         await loadUsers(currentView);
-        await showUserManagementAlert('success', 'Accounts recovered', `${selected.length} selected account(s) recovered.`);
+        await showUserManagementAlert('success', 'Accounts recovered', result.message || `${selected.length} selected account(s) recovered.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Recover failed', error.message || 'Failed to recover selected accounts.');
     } finally {
@@ -2900,37 +2954,27 @@ async function deleteSelectedUsers() {
         showAccessDeniedPopup('User Management Delete');
         return;
     }
-    const selected = allUsers.filter(user => selectedUserIds.has(user.id) && user.is_archived);
+    const selected = allUsers.filter(user => selectedUserIds.has(user.id) && user.id !== currentAdminId);
     if (selected.length === 0) {
-        await showUserManagementAlert('info', 'No accounts selected', 'Select at least one archived account first.');
+        await showUserManagementAlert('info', 'No accounts selected', 'Select at least one account first.');
         return;
     }
 
-    if (currentView === 'archive') {
-        if (!(await confirmUserManagementAction('Move accounts to Trash?', `Move ${selected.length} selected account(s) to the Trash tab?`, 'Move to Trash'))) return;
+    if (currentView === 'student') {
+        if (!(await confirmUserManagementAction('Move selected accounts to Trash?', `Move ${selected.length} selected student/faculty account(s) to Trash?`, 'Move to Trash'))) return;
 
         const originalDeleteBtnHtml = setBatchActionButtonLoading(
             'btnDeleteSelected',
             true,
-            `<i class="fas fa-spinner fa-spin"></i> Moving ${selected.length} Accounts...`
+            `<i class="fas fa-spinner fa-spin"></i> Moving ${selected.length} Account${selected.length === 1 ? '' : 's'}...`
         );
 
         try {
-            await runUserBatchRequests(selected, async (user) => {
-                const response = await fetch(`/admin/move-to-delete/${user.id}`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
-                });
-                const result = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(result.detail || `Failed to move ${user.full_name || 'user'} to Trash.`);
-                }
-                return result;
-            });
+            const result = await moveSelectedUsersToTrash(selected);
 
             selectedUserIds.clear();
-            await loadUsers(currentView);
-            await showUserManagementAlert('success', 'Accounts moved', `${selected.length} selected account(s) moved to Trash.`);
+            await loadUsers('delete');
+            await showUserManagementAlert('success', 'Accounts moved', result.message || `${selected.length} selected account(s) moved to Trash.`);
         } catch (error) {
             await showUserManagementAlert('error', 'Move failed', error.message || 'Failed to move selected accounts to Trash.');
         } finally {
@@ -2970,32 +3014,112 @@ async function deleteSelectedUsers() {
     }
 }
 
+async function moveSelectedUsersToTrash(selectedUsers) {
+    const token = sessionStorage.getItem("admin_token");
+    const userIds = selectedUsers.map(user => user.id);
+    const requestBody = JSON.stringify({ user_ids: userIds });
+
+    async function postBulkMove() {
+        const response = await fetch('/admin/bulk-move-to-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: requestBody
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const detail = result.detail || 'Failed to move selected users to Trash.';
+            const error = new Error(detail);
+            error.detail = detail;
+            throw error;
+        }
+        return result;
+    }
+
+    try {
+        return await postBulkMove();
+    } catch (error) {
+        const detail = String(error.detail || error.message || '').toLowerCase();
+        if (!detail.includes('archived')) {
+            throw error;
+        }
+
+        const archiveResponse = await fetch('/admin/bulk-toggle-archive?archive=true', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: requestBody
+        });
+        const archiveResult = await archiveResponse.json().catch(() => ({}));
+        if (!archiveResponse.ok) {
+            throw new Error(archiveResult.detail || 'Failed to archive selected users before moving to Trash.');
+        }
+
+        return await postBulkMove();
+    }
+}
+
 async function moveToDelete(userId, currentRole, silent = false) {
     if (!hasAccessPermission('User-Management-Delete')) {
         showAccessDeniedPopup('User Management Delete');
         return;
     }
 
-    if (!silent && !(await confirmUserManagementAction('Move this archived user?', 'Move this archived user to the Trash tab?', 'Move to Trash'))) return;
+    if (!silent && !(await confirmUserManagementAction('Move this user to Trash?', 'Move this user to the Trash tab?', 'Move to Trash'))) return;
 
     try {
-        const response = await fetch(`/admin/move-to-delete/${userId}`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
-        });
-
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.detail || 'Failed to move user to Trash.');
-        }
+        const result = await moveSingleUserToTrash(userId);
 
         if (!silent) {
             await showUserManagementAlert('success', 'User moved', result.message);
-            loadUsers(currentRole);
+            loadUsers(currentRole === 'student' ? 'delete' : currentRole);
         }
     } catch (error) {
         console.error("Move to delete failed:", error);
         if (!silent) await showUserManagementAlert('error', 'Move failed', error.message || 'Failed to move user to Trash.');
+    }
+}
+
+async function moveSingleUserToTrash(userId) {
+    const token = sessionStorage.getItem("admin_token");
+
+    async function postMove() {
+        const response = await fetch(`/admin/move-to-delete/${userId}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const detail = result.detail || 'Failed to move user to Trash.';
+            const error = new Error(detail);
+            error.detail = detail;
+            throw error;
+        }
+        return result;
+    }
+
+    try {
+        return await postMove();
+    } catch (error) {
+        const detail = String(error.detail || error.message || '').toLowerCase();
+        if (!detail.includes('archived')) {
+            throw error;
+        }
+
+        const archiveResponse = await fetch(`/admin/toggle-archive/${userId}?archive=true`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const archiveResult = await archiveResponse.json().catch(() => ({}));
+        if (!archiveResponse.ok) {
+            throw new Error(archiveResult.detail || 'Failed to archive user before moving to Trash.');
+        }
+
+        return await postMove();
     }
 }
 
@@ -3017,7 +3141,12 @@ async function moveToDelete(userId, currentRole, silent = false) {
     
     const activeTab = currentView;
 
-    let visibleUsers = getFilteredUsersForRole(activeTab).filter(user => {
+    let visibleUsers = getFilteredUsersForRole(activeTab);
+    if (activeTab === 'student') {
+        visibleUsers = applyBatchFilter(visibleUsers);
+    }
+
+    visibleUsers = visibleUsers.filter(user => {
         const matchesQuery = 
             (user.full_name && user.full_name.toLowerCase().includes(query)) || 
             (user.email && user.email.toLowerCase().includes(query)) ||
@@ -3032,6 +3161,7 @@ async function moveToDelete(userId, currentRole, silent = false) {
     });
 
     if (activeTab === 'archive') {
+        syncArchiveFolderSelectionForUsers(visibleUsers);
         visibleUsers = applyArchiveFolderFilter(visibleUsers);
     } else if (activeTab === 'student' || activeTab === 'delete') {
         visibleUsers = applySemesterFilter(visibleUsers);
@@ -3199,6 +3329,7 @@ function openModal(id) {
         const modal = document.getElementById(id);
         if (modal) modal.style.display = "flex";
         if (id === 'bulkRegisterModal') {
+            handleBulkEntryModeChange();
             syncSemesterSequenceOptions();
             updateBatchPreview();
         } else if (id === 'createAdminModal') {
@@ -3220,7 +3351,7 @@ function openModal(id) {
         const fileInput = document.getElementById('excelFile');
         if (fileInput) fileInput.value = ""; // Clears the actual file selection
         document.getElementById('fileNameDisplay').innerText = "No file chosen";
-        document.getElementById('bulkImportType').value = 'student';
+        document.getElementById('bulkImportType').value = 'college';
         document.getElementById('bulkEntryMode').value = 'upload';
         syncBatchYearOptions(getDefaultAcademicYearRange());
         ['manualUserId', 'manualLastName', 'manualFirstName', 'manualMiddleName', 'manualProgram', 'manualLevel', 'manualDisplayName', 'manualDepartment']
@@ -3303,10 +3434,10 @@ function syncBatchYearOptions(preferredYear = '') {
     const batchYearSelect = document.getElementById('batchYear');
     if (!batchYearSelect) return;
 
-    const importType = document.getElementById('bulkImportType')?.value || 'student';
+    const importType = document.getElementById('bulkImportType')?.value || 'college';
     const normalizedPreferredYear = normalizeBatchYearRange(preferredYear || batchYearSelect.value);
     const defaultYear = getDefaultAcademicYearRange();
-    const options = getBatchYearOptions(importType === 'student');
+    const options = getBatchYearOptions(isLearnerImportType(importType));
     const selectedYear = options.includes(normalizedPreferredYear)
         ? normalizedPreferredYear
         : (options.includes(defaultYear) ? defaultYear : options[0]);
@@ -3357,18 +3488,18 @@ function syncSemesterSequenceOptions() {
     if (!batchYearSelect || !batchTermSelect) return;
 
     const currentValue = normalizeSemesterTerm(batchTermSelect.value);
-    const importType = document.getElementById('bulkImportType')?.value || 'student';
+    const importType = document.getElementById('bulkImportType')?.value || 'college';
     const selectedYear = normalizeBatchYearRange(batchYearSelect.value);
-    const usedTerms = importType === 'student' ? getUsedStudentBatchTerms(selectedYear) : new Set();
+    const usedTerms = isLearnerImportType(importType) ? getUsedStudentBatchTerms(selectedYear) : new Set();
     const termOptions = ['1st Semester', '2nd Semester'];
     const availableTerms = termOptions.filter(term => !usedTerms.has(term));
 
-    const visibleTerms = importType === 'student' ? availableTerms : termOptions;
+    const visibleTerms = isLearnerImportType(importType) ? availableTerms : termOptions;
     batchTermSelect.innerHTML = visibleTerms.length
         ? visibleTerms.map(term => `<option value="${term}">${term}</option>`).join('')
         : '<option value="">No available semesters</option>';
 
-    const defaultTerm = new Date().getMonth() >= 6 ? '1st Semester' : '2nd Semester';
+    const defaultTerm = '2nd Semester';
     if (visibleTerms.includes(currentValue)) {
         batchTermSelect.value = currentValue;
     } else if (visibleTerms.includes(defaultTerm)) {
@@ -3407,7 +3538,7 @@ async function submitBulk() {
         return;
     }
     
-    const importType = document.getElementById('bulkImportType')?.value || 'student';
+    const importType = document.getElementById('bulkImportType')?.value || 'college';
     const batchId = getSelectedBatchId();
 
     if (!batchId) {
@@ -3417,7 +3548,7 @@ async function submitBulk() {
 
     const batchInfo = parseBatchTerm(batchId);
     if (
-        importType === 'student'
+        isLearnerImportType(importType)
         && batchInfo.yearEndTerm
         && batchInfo.semester
         && getUsedStudentBatchTerms(batchInfo.yearEndTerm).has(batchInfo.semester)
@@ -3474,7 +3605,17 @@ async function submitBulk() {
         return;
     }
 
-    if (usersToRegister.length > 1200 && !(await confirmUserManagementAction('Large upload detected', `You are about to upload ${usersToRegister.length} student/faculty accounts. Continue?`, 'Continue upload', 'warning'))) {
+    const maxBulkRegistrationRows = 5000;
+    if (usersToRegister.length > maxBulkRegistrationRows) {
+        await showUserManagementAlert(
+            'warning',
+            'Upload too large',
+            `One bulk registration request can process up to ${maxBulkRegistrationRows.toLocaleString()} users. Please split this upload.`
+        );
+        return;
+    }
+
+    if (usersToRegister.length > 3000 && !(await confirmUserManagementAction('Large upload detected', `You are about to register ${usersToRegister.length.toLocaleString()} student/faculty accounts in one background request. Continue?`, 'Continue upload', 'warning'))) {
         return;
     }
 
@@ -3482,22 +3623,25 @@ async function submitBulk() {
     const duplicateMessage = duplicateAction === 'replace'
         ? 'Existing student/faculty accounts with the same ID or email will be replaced.'
         : 'Existing student/faculty accounts with the same ID or email will be ignored.';
+    const registrationLabel = entryMode === 'manual'
+        ? `${usersToRegister.length === 1 ? 'manual registration' : 'manual registrations'}`
+        : `${usersToRegister.length === 1 ? 'uploaded registration' : 'uploaded registrations'}`;
     const summaryLines = [
         duplicateMessage,
-        containsEmployeeRows ? 'Import type: Faculty accounts (employee number suffix is ignored)' : 'Import type: Student accounts',
+        containsEmployeeRows ? 'Import type: Faculty accounts (employee number suffix is ignored)' : `Import type: ${getLearnerImportLabel(importType)} accounts`,
         `Batch: ${batchId}`,
         `Entry mode: ${entryMode === 'manual' ? 'Manual Entry' : 'Upload File'}`,
-        `Student/Faculty to process: ${usersToRegister.length}`
+        `Accounts to process: ${usersToRegister.length.toLocaleString()}`
     ];
-    if (!(await confirmUserManagementAction('Confirm bulk registration', summaryLines.join(' '), 'Start bulk registration', 'info'))) {
+    if (!(await confirmUserManagementAction(`Confirm ${registrationLabel}`, summaryLines.join(' '), 'Start registration', 'info'))) {
         return;
     }
 
-    btn.innerText = `Starting ${usersToRegister.length} Student/Faculty...`;
+    btn.innerText = `Starting ${usersToRegister.length} Account${usersToRegister.length === 1 ? '' : 's'}...`;
     btn.disabled = true;
     setBulkLoadingOverlay(true, {
         title: 'Starting bulk registration',
-        message: `Preparing ${usersToRegister.length} student/faculty account${usersToRegister.length === 1 ? '' : 's'} for background processing...`,
+        message: `Preparing ${usersToRegister.length.toLocaleString()} student/faculty account${usersToRegister.length === 1 ? '' : 's'} in one background request...`,
         progress: '22%'
     });
 
@@ -3572,8 +3716,8 @@ function exportToExcel(results) {
         "Student/Faculty ID": item.student_no,
         "Full Name": item.full_name,
         "Role / Department": item.department,
-        "Program": item.course,    // Shows STEM, MAWD, etc.
-        "Level": item.level,       // Shows G11, G12
+        "Strand": item.course,    // Shows STEM, MAWD, etc.
+        "Grade Level": item.level,       // Shows Grade 11, Grade 12
         "STI Email": item.email,
         "Status": item.status,
         "Temporary Password": item.temp_password
@@ -3774,7 +3918,8 @@ function handleExcel(input) {
         console.log("--- RAW EXCEL DATA PREVIEW ---");
         console.table(rows.slice(0, 10)); 
 
-        const selectedImportType = document.getElementById('bulkImportType')?.value || 'student';
+        const selectedImportType = document.getElementById('bulkImportType')?.value || 'college';
+        const expectedDetectedFormat = isLearnerImportType(selectedImportType) ? 'student' : selectedImportType;
         let headerRowIndex = -1;
         let detectedFormat = null;
         let colMap = {
@@ -3810,8 +3955,8 @@ function handleExcel(input) {
                     if (clean.includes("firstname")) colMap.first_name = idx;
                     if (clean.includes("middlename")) colMap.middle_name = idx;
                     if (clean.includes("displayname")) colMap.display_name = idx;
-                    if (clean.includes("program")) colMap.program = idx;
-                    if (clean.includes("level")) colMap.level = idx;
+                    if (clean.includes("program") || clean.includes("strand")) colMap.program = idx;
+                    if (clean.includes("level") || clean.includes("gradelevel")) colMap.level = idx;
                 });
                 break;
             }
@@ -3822,10 +3967,10 @@ function handleExcel(input) {
             return;
         }
 
-        if (selectedImportType !== detectedFormat) {
+        if (expectedDetectedFormat !== detectedFormat) {
             const expectedMessage = selectedImportType === 'employee'
                 ? 'Expected a faculty file with EMP NUMBER.'
-                : 'Expected a student file with Student ID.';
+                : `Expected a ${getLearnerImportLabel(selectedImportType).toLowerCase()} file with Student ID.`;
             showUserManagementAlert('warning', 'Import type mismatch', `The selected import type does not match this file. ${expectedMessage}`);
             window.bulkData = null;
             return;
@@ -3869,8 +4014,8 @@ function handleExcel(input) {
 
         window.bulkData = users;
 
-        const accountLabel = detectedFormat === 'employee' ? 'faculty accounts' : 'student accounts';
-        showUserManagementAlert('success', 'Student/Faculty detected', `Found ${users.length} ${accountLabel}.`);
+        const accountLabel = detectedFormat === 'employee' ? 'faculty accounts' : `${getLearnerImportLabel(selectedImportType).toLowerCase()} accounts`;
+        showUserManagementAlert('success', 'Accounts detected', `Found ${users.length} ${accountLabel}.`);
     };
     reader.readAsArrayBuffer(file);
 }
@@ -3878,6 +4023,37 @@ function handleExcel(input) {
 function getSpreadsheetFileFromSelection(fileList) {
     const files = Array.from(fileList || []);
     return files.find(file => /\.(xlsx|xls|csv)$/i.test(file.name || '')) || null;
+}
+
+function isLearnerImportType(importType) {
+    return importType === 'college' || importType === 'senior_highschool' || importType === 'student';
+}
+
+function getLearnerImportLabel(importType) {
+    if (importType === 'senior_highschool') return 'Senior High School';
+    return 'College';
+}
+
+function getLearnerFieldLabels(importType) {
+    if (importType === 'senior_highschool') {
+        return {
+            programLabel: 'Strand',
+            levelLabel: 'Grade Level',
+            programPlaceholder: 'Example: STEM',
+            levelPlaceholder: 'Example: Grade 11 or Grade 12',
+            fileFormat: 'Expected file format: Student ID, Last Name, First Name, Middle Name, Strand, Grade Level',
+            manualHint: 'Fill in Student ID, last name, first name, strand, and grade level for senior high school registration.'
+        };
+    }
+
+    return {
+        programLabel: 'Program',
+        levelLabel: 'Level',
+        programPlaceholder: 'Example: BSIT',
+        levelPlaceholder: 'Example: 1Y1',
+        fileFormat: 'Expected file format: Student ID, Last Name, First Name, Middle Name, Program, Level',
+        manualHint: 'Fill in Student ID, last name, first name, program, and level for college registration.'
+    };
 }
 
 function getManualBulkEntries(importType) {
@@ -3920,7 +4096,7 @@ function getManualBulkEntries(importType) {
 }
 
 function handleBulkImportTypeChange() {
-    const importType = document.getElementById('bulkImportType')?.value || 'student';
+    const importType = document.getElementById('bulkImportType')?.value || 'college';
     const batchYearGroup = document.getElementById('batchYear')?.closest('.form-group');
     const batchTermGroup = document.getElementById('batchTerm')?.closest('.form-group');
     const batchPreview = document.getElementById('batchPreview')?.parentElement;
@@ -3929,26 +4105,35 @@ function handleBulkImportTypeChange() {
     const manualUserIdLabel = document.querySelector('label[for="manualUserId"]');
     const manualStudentFields = document.getElementById('manualStudentFields');
     const manualFacultyFields = document.getElementById('manualFacultyFields');
+    const manualProgramLabel = document.querySelector('label[for="manualProgram"]');
+    const manualLevelLabel = document.querySelector('label[for="manualLevel"]');
+    const manualProgramInput = document.getElementById('manualProgram');
+    const manualLevelInput = document.getElementById('manualLevel');
     const fileInput = document.getElementById('excelFile');
     const fileNameDisplay = document.getElementById('fileNameDisplay');
 
-    const isStudentImport = importType === 'student';
+    const isStudentImport = isLearnerImportType(importType);
+    const learnerFields = getLearnerFieldLabels(importType);
 
     if (batchYearGroup) batchYearGroup.style.display = '';
     if (batchTermGroup) batchTermGroup.style.display = '';
     if (batchPreview) batchPreview.style.display = '';
     if (importHint) {
         importHint.innerText = isStudentImport
-            ? 'Expected file format: Student ID, Last Name, First Name, Middle Name, Program, Level'
+            ? learnerFields.fileFormat
             : 'Expected faculty file format: EMP NUMBER, LAST NAME, FIRST NAME, MIDDLE NAME, DISPLAY NAME';
     }
     if (manualHint) {
         manualHint.innerText = isStudentImport
-            ? 'Fill in Student ID, last name, first name, program, and level for manual registration.'
+            ? learnerFields.manualHint
             : 'Fill in Employee No., last name, first name, and optional faculty details for manual registration. The selected batch will also be applied.';
     }
+    if (manualProgramLabel) manualProgramLabel.innerHTML = `${learnerFields.programLabel} <span class="required-asterisk">*</span>`;
+    if (manualLevelLabel) manualLevelLabel.innerHTML = `${learnerFields.levelLabel} <span class="required-asterisk">*</span>`;
+    if (manualProgramInput) manualProgramInput.placeholder = learnerFields.programPlaceholder;
+    if (manualLevelInput) manualLevelInput.placeholder = learnerFields.levelPlaceholder;
     if (manualUserIdLabel) {
-        manualUserIdLabel.innerText = isStudentImport ? 'Student ID' : 'Employee No.';
+        manualUserIdLabel.innerHTML = `${isStudentImport ? 'Student ID' : 'Employee No.'} <span class="required-asterisk">*</span>`;
     }
     if (manualStudentFields) manualStudentFields.style.display = isStudentImport ? '' : 'none';
     if (manualFacultyFields) manualFacultyFields.style.display = isStudentImport ? 'none' : '';
@@ -3964,10 +4149,16 @@ function handleBulkEntryModeChange() {
     const uploadSection = document.getElementById('bulkUploadSection');
     const manualSection = document.getElementById('bulkManualSection');
     const modalContent = document.querySelector('#bulkRegisterModal .bulk-register-content');
+    const title = document.getElementById('bulkRegisterTitle');
+    const intro = document.getElementById('bulkRegisterIntro');
+    const submitBtn = document.querySelector('#bulkRegisterModal .success-btn');
 
     if (uploadSection) uploadSection.style.display = entryMode === 'upload' ? '' : 'none';
     if (manualSection) manualSection.style.display = entryMode === 'manual' ? '' : 'none';
     if (modalContent) modalContent.classList.toggle('manual-entry-active', entryMode === 'manual');
+    if (title) title.innerText = entryMode === 'manual' ? 'Register Student/Faculty' : 'Bulk Register Student/Faculty';
+    if (intro) intro.innerText = entryMode === 'manual' ? 'Manual account registration:' : 'Upload Excel/CSV File:';
+    if (submitBtn) submitBtn.innerText = entryMode === 'manual' ? 'Register Account' : 'Generate Accounts';
 
     window.bulkData = null;
     handleBulkImportTypeChange();
@@ -4195,8 +4386,8 @@ window.addEventListener('pageshow', () => {
 });
 </script>
 
-<script src="/static/session-keepalive.js?v=5"></script>
-<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 </body>

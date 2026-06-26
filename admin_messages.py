@@ -145,17 +145,17 @@ def send_bulk_message(
     content = (data.content or "").strip()
 
     if not recipient_ids:
-        raise HTTPException(status_code=400, detail="Please select at least one student.")
+        raise HTTPException(status_code=400, detail="Please select at least one user.")
     if not content:
         raise HTTPException(status_code=400, detail="Message content is required.")
 
     recipients = db.query(models.User).filter(
         models.User.id.in_(recipient_ids),
-        models.User.is_admin == False
+        models.User.id != current_user.id
     ).all()
 
     if not recipients:
-        raise HTTPException(status_code=404, detail="No valid student recipients found.")
+        raise HTTPException(status_code=404, detail="No valid recipients found.")
 
     sent_count = 0
     admin_name = current_user.full_name or current_user.email or "LookFor Admin"
@@ -171,7 +171,7 @@ def send_bulk_message(
             message=f"{admin_name} sent you a message.",
             type="chat",
             related_id=recipient.id,
-            target_url="/student/Messages",
+            target_url="/admin/Messages" if recipient.is_admin else "/student/Messages",
             is_read=False,
             created_at=datetime.utcnow()
         ))

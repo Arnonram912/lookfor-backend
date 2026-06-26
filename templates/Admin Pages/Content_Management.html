@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <style>
@@ -174,22 +174,29 @@
         }
 
         .upload-btn {
-  
-        background-color: var(--sti-yellow);
-        border: 2px solid var(--dark-blue);
-        padding: 12px 25px;
-        border-radius: 12px;
-        font-weight: bold;
-        cursor: pointer;
-        box-shadow: 3px 3px 0px var(--dark-blue);
-        transition: 0.2s;
-  
+            min-height: 42px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 5px;
+            background: #003366;
+            color: #fff !important;
+            box-shadow: none;
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
         }
 
         .upload-btn:hover {
-        transform: translate(-2px, -2px);
-        box-shadow: 5px 5px 0px var(--dark-blue);
-
+            background: #004b99;
+            color: #fff !important;
+            transform: translateY(-1px);
         }
 
         .action-bar {
@@ -241,14 +248,14 @@
                 <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
                 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Items
                 </a>
             </li>
 
             <li >
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Items
                 </a>
             </li>
 
@@ -353,8 +360,8 @@
         
         <button class="upload-btn" onclick="openModal('announcementModal')">
             <span class="plus"></span> Replace Announcement
-        </button upload-btn >
-        <a class="upload-btn" href="/admin/Content-Editor"  style="color: black; text-decoration: none; display: inline-flex; align-items: center;">
+        </button>
+        <a class="upload-btn" href="/admin/Content-Editor" style="text-decoration: none;">
             <span class="plus"></span> Update Landing Page
         </a>
     </div>
@@ -912,8 +919,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </script>
 
-<script src="/static/session-keepalive.js?v=5"></script>
-<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 </body>

@@ -346,7 +346,12 @@ body {
 }
 
 .detail-modal {
-  max-width: 650px !important;
+  width: min(760px, 92vw);
+  max-width: min(760px, 92vw) !important;
+  max-height: min(92vh, 720px);
+  overflow: hidden;
+  padding: 16px 20px;
+  border-radius: 14px;
 }
 
 .form-title {
@@ -515,7 +520,42 @@ body {
 .report-upload-modal {
   width: min(960px, 92vw);
   max-width: min(960px, 92vw);
-  overflow-x: hidden;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  padding: 20px 28px;
+}
+
+.report-upload-modal .form-title {
+  margin-bottom: 14px;
+  font-size: 28px;
+}
+
+.report-upload-modal .form-container {
+  gap: 18px;
+}
+
+.report-upload-modal .image-upload-section {
+  gap: 10px;
+}
+
+.report-upload-modal .image-placeholder {
+  height: 185px;
+}
+
+.report-upload-modal .supporting-image-note {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.report-upload-modal .supporting-image-card {
+  padding: 8px;
+  gap: 8px;
+}
+
+.report-upload-modal textarea {
+  min-height: 72px;
+  max-height: 86px;
+  resize: vertical;
 }
 
 .details-column {
@@ -576,6 +616,44 @@ body {
   color: #fff;
 }
 
+.required-asterisk {
+  color: #dc3545;
+  font-weight: 800;
+}
+
+.found-upload-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 91, 171, 0.12);
+}
+
+.found-upload-footer .surrender-submit-btn,
+.found-upload-footer .found-cancel-btn {
+  min-width: 110px;
+  margin: 0;
+  padding: 11px 22px;
+}
+
+.found-cancel-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 25px;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.found-cancel-btn:hover {
+  background: #e9eef5;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
 .input-group {
   display: flex;
   flex-direction: column;
@@ -611,16 +689,16 @@ body {
 /* Detail Layout Overrides */
 .detail-layout {
   display: flex;
-  gap: 22px;
+  gap: 14px;
   align-items: stretch;
-  margin-top: 15px;
+  margin-top: 8px;
 }
 
 .detail-image {
   flex: 1;
   min-width: 0;
-  height: 350px;
-  border-radius: 14px;
+  height: min(54vh, 390px);
+  border-radius: 10px;
   overflow: hidden;
   background: #f1f3f5;
   border: 1px solid #ddd;
@@ -641,7 +719,7 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 
 .modal-header-flex {
@@ -654,7 +732,7 @@ body {
 
 #modalTitle {
   margin: 0;
-  font-size: 1.55rem;
+  font-size: 1.2rem;
   line-height: 1.15;
   color: var(--dark-blue);
 }
@@ -663,12 +741,12 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
-  padding: 6px 14px;
+  min-height: 26px;
+  padding: 4px 10px;
   border-radius: 999px;
   background: #eef4ff;
   border: 1px solid #c7d9f4;
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
 
@@ -677,18 +755,19 @@ body {
 .trait-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 14px;
+  gap: 7px;
 }
 
 .trait-grid p,
 .detail-info > p {
   margin: 0;
-  padding: 10px 12px;
+  padding: 7px 9px;
   background: #f8fafc;
   border: 1px solid #e3e8ef;
   border-radius: 10px;
   color: #364152;
-  line-height: 1.45;
+  line-height: 1.25;
+  font-size: 0.78rem;
 }
 
 .detail-info > p strong,
@@ -701,52 +780,62 @@ body {
   align-self: flex-start;
   background: #fff9db;
   color: #856404;
-  padding: 6px 15px;
+  padding: 4px 10px;
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   font-weight: 700;
   border: 1px solid var(--sti-yellow);
 }
 
 .description-text {
   background: #f8f9fa;
-  padding: 15px;
-  border-radius: 10px;
-  border-left: 5px solid var(--sti-yellow);
-  font-size: 0.95rem;
-  line-height: 1.6;
-  max-height: 132px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 4px solid var(--sti-yellow);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-height: 58px;
   overflow-y: auto;
 }
 
-.btn-archive-big {
+.btn-archive-big,
+.btn-delete-big {
   background: #e03131;
   color: white;
   border: none;
-  padding: 15px;
-  border-radius: 10px;
-  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  flex: 1 1 140px;
   font-weight: 700;
   cursor: pointer;
-  margin-top: 20px;
+  margin-top: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-delete-big {
+  background: #dc3545;
 }
 
 .btn-dispose-big {
   background: #495057;
   color: white;
   border: none;
-  padding: 15px;
-  border-radius: 10px;
-  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  flex: 1 1 140px;
   font-weight: 700;
   cursor: pointer;
-  margin-top: 20px;
+  margin-top: 0;
   align-items: center;
   justify-content: center;
 }
 
 .modal-actions {
-  margin-top: auto;
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* Responsive */
@@ -770,6 +859,10 @@ body {
     width: 100%;
   }
   .modal-content { width: 95%; padding: 20px; }
+  .report-upload-modal {
+    max-height: 92vh;
+    overflow-y: auto;
+  }
   .detail-image {
     height: 250px;
   }
@@ -900,4 +993,16 @@ body {
 .pagination-buttons button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+#reportModal .report-upload-modal {
+  overflow: hidden;
+  max-height: calc(100vh - 48px);
+}
+
+@media (max-width: 768px) {
+  #reportModal .report-upload-modal {
+    max-height: 92vh;
+    overflow-y: auto;
+  }
 }

@@ -12,6 +12,13 @@
     }
 
     function ensureBanner() {
+        if (!document.getElementById("adminBulkJobProgressStyle")) {
+            const style = document.createElement("style");
+            style.id = "adminBulkJobProgressStyle";
+            style.textContent = "@keyframes bulkProgressFlow{from{background-position:0 0}to{background-position:220% 0}}";
+            document.head.appendChild(style);
+        }
+
         let banner = document.getElementById("adminBulkJobBanner");
         if (banner) return banner;
 
@@ -35,13 +42,13 @@
         banner.innerHTML = `
             <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
                 <div>
-                    <div id="adminBulkJobBannerTitle" style="font-size:15px; font-weight:700;">Student upload in progress</div>
-                    <div id="adminBulkJobBannerMessage" style="margin-top:4px; font-size:12px; opacity:.92;">Processing students in the background.</div>
+                    <div id="adminBulkJobBannerTitle" style="font-size:15px; font-weight:700;">Registration in progress</div>
+                    <div id="adminBulkJobBannerMessage" style="margin-top:4px; font-size:12px; opacity:.92;">Processing users in the background.</div>
                 </div>
                 <button id="adminBulkJobBannerDismiss" type="button" style="background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; line-height:1;">×</button>
             </div>
             <div style="margin-top:12px; height:10px; border-radius:999px; background:rgba(255,255,255,.18); overflow:hidden;">
-                <div id="adminBulkJobBannerProgress" style="width:0%; height:100%; background:linear-gradient(90deg,#f7b500,#ffd95a); transition:width .25s ease;"></div>
+                <div id="adminBulkJobBannerProgress" style="width:0%; height:100%; background:linear-gradient(90deg,#f7b500 0%,#ffd95a 35%,#fff3b0 55%,#ffd95a 75%,#f7b500 100%); background-size:220% 100%; animation:bulkProgressFlow 1.05s linear infinite; transition:width .6s ease;"></div>
             </div>
             <div id="adminBulkJobBannerMeta" style="margin-top:10px; font-size:12px; opacity:.92;">Preparing background registration...</div>
             <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
@@ -93,9 +100,11 @@
     progress.style.width = `${visibleProgress}%`;
 
     if (job.status === "completed") {
-        title.innerText = "Student upload completed";
+        title.innerText = "Registration completed";
         message.innerText = "The background registration finished successfully.";
         meta.innerText = `Processed ${processed}/${total}. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
+        progress.style.background = "linear-gradient(90deg,#16a34a,#22c55e)";
+        progress.style.animation = "none";
         openBtn.style.display = "inline-flex";
         stopPolling();
 
@@ -106,22 +115,24 @@
     }
 
     if (job.status === "failed") {
-        title.innerText = "Student upload failed";
+        title.innerText = "Registration failed";
         message.innerText = job.error || job.message || "The background registration stopped before finishing.";
         meta.innerText = `Processed ${processed}/${total} students before it stopped.`;
+        progress.style.animation = "none";
         openBtn.style.display = "inline-flex";
         stopPolling();
         return;
     }
 
     title.innerText = job.status === "queued"
-        ? "Student upload queued"
-        : "Student upload in progress";
+        ? "Registration queued"
+        : "Registration in progress";
+    progress.style.animation = "bulkProgressFlow 1.05s linear infinite";
 
     if (processed < 10) {
         message.innerText = "Preparing users and securing passwords. Please wait...";
     } else {
-        message.innerText = job.message || "Processing students in the background while you keep using the system.";
+        message.innerText = job.message || "Processing users in the background while you keep using the system.";
     }
 
     meta.innerText = `Processed ${processed}/${total}. Created: ${summary.created || 0} | Replaced: ${summary.replaced || 0} | Ignored: ${summary.ignored || 0}`;
@@ -188,7 +199,7 @@
     const openBtn = document.getElementById("adminBulkJobBannerOpen");
 
     if (banner) banner.style.display = "block";
-    if (title) title.innerText = "Student upload starting...";
+    if (title) title.innerText = "Registration starting...";
     if (message) message.innerText = "Preparing background registration...";
     if (meta) meta.innerText = "Connecting to upload service...";
     if (progress) progress.style.width = "1%";

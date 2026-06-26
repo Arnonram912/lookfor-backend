@@ -130,6 +130,57 @@ def public_file_url(path: str | None, fallback: str | None = None) -> str | None
     return "/" + quote(normalized_path, safe="/%")
 
 
+def format_user_display_name(user: models.User | None, fallback: str = "Unknown User") -> str:
+    if not user:
+        return fallback
+
+    full_name = str(getattr(user, "full_name", "") or "").strip()
+    if full_name:
+        return full_name
+
+    name_parts = [
+        getattr(user, "first_name", None),
+        getattr(user, "middle_name", None),
+        getattr(user, "last_name", None),
+    ]
+    built_name = " ".join(str(part).strip() for part in name_parts if part and str(part).strip())
+    if built_name:
+        return built_name
+
+    return fallback
+
+
+def format_item_code(status: str | None, item_id: int | None, existing_code: str | None = None) -> str | None:
+    if existing_code:
+        return existing_code
+    if item_id is None:
+        return None
+
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status == "lost":
+        prefix = "LOST"
+    elif normalized_status == "found":
+        prefix = "FOUND"
+    elif normalized_status in {"pending_found", "pending"}:
+        prefix = "PENDING-FOUND"
+    else:
+        prefix = "ITEM"
+
+    return f"{prefix}-{int(item_id):06d}"
+
+
+def item_display_id(item: models.Item) -> int | None:
+    return getattr(item, "item_id", None) or getattr(item, "id", None)
+
+
+def item_display_code(item: models.Item) -> str | None:
+    return format_item_code(
+        getattr(item, "status", None),
+        item_display_id(item),
+        getattr(item, "item_code", None),
+    )
+
+
 def validate_upload_file_size(file, max_bytes: int = MAX_REPORT_IMAGE_BYTES, label: str = "Image"):
     if not file or not getattr(file, "filename", None):
         return

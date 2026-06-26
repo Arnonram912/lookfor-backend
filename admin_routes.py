@@ -24,7 +24,16 @@ from models import SettingsUpdate
 from security import get_current_user
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
-from utils import public_file_url, save_file, resolve_category_name, validate_upload_file_size
+from utils import (
+    public_file_url,
+    save_file,
+    resolve_category_name,
+    validate_upload_file_size,
+    format_user_display_name,
+    format_item_code,
+    item_display_id,
+    item_display_code,
+)
 from sqlalchemy import or_
 from concurrent.futures import ThreadPoolExecutor
 
@@ -204,6 +213,9 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             "brand": match.get("brand"),
             "color": match.get("color"),
             "description": match.get("description"),
+            "source": match.get("source", "found"),
+            "cross_category": bool(match.get("cross_category")),
+            "warning": match.get("warning"),
         })
 
     return json.dumps(cleaned_matches) if cleaned_matches else None
@@ -244,24 +256,19 @@ def item_has_approved_claim(db: Session, item: models.Item) -> bool:
 
 
 def serialize_inventory_item(db: Session, item: models.Item) -> dict:
-    uploader_name = None
-    if item.owner:
-        uploader_name = (
-            item.owner.full_name
-            or " ".join(
-                part for part in [
-                    item.owner.first_name,
-                    item.owner.middle_name,
-                    item.owner.last_name,
-                ] if part
-            ).strip()
-            or None
-        )
+    report_item_id = item_display_id(item)
+    report_item_code = item_display_code(item)
+    entered_by_name = format_user_display_name(item.owner, "Unknown User")
+    reported_person_name = str(getattr(item, "report_owner_name", "") or "").strip()
+    reported_person_group = str(getattr(item, "report_owner_group", "") or "").strip()
+    uploader_name = reported_person_name or entered_by_name
 
     return {
         "id": item.id,
-        "item_id": getattr(item, "item_id", None) or item.id,
-        "item_code": getattr(item, "item_code", None),
+        "item_id": report_item_id,
+        "item_code": report_item_code,
+        "lost_id": report_item_code if item.status == "lost" else None,
+        "found_id": report_item_code if item.status == "found" else None,
         "status": item.status,
         "category_id": item.category_id,
         "category": item.category,
@@ -281,7 +288,41 @@ def serialize_inventory_item(db: Session, item: models.Item) -> dict:
         "time_found": item.time_found,
         "user_id": item.user_id,
         "uploader_name": uploader_name,
+        "entered_by_name": entered_by_name,
+        "report_owner_user_id": getattr(item, "report_owner_user_id", None),
+        "report_owner_name": reported_person_name,
+        "report_owner_group": reported_person_group,
         "is_claimed": item_has_approved_claim(db, item),
+    }
+
+
+def serialize_pending_item(db: Session, item: models.PendingItem) -> dict:
+    submitter = item.submitter
+    pending_code = format_item_code("pending_found", item.id)
+    return {
+        "id": item.id,
+        "item_id": item.id,
+        "item_code": pending_code,
+        "found_id": pending_code,
+        "status": "pending_found",
+        "category": item.category,
+        "item_name": item.item_name,
+        "description": item.description,
+        "location": item.location,
+        "date": item.date.isoformat() if item.date else None,
+        "time_found": item.time_found,
+        "image_path": public_file_url(item.image_path),
+        "image_embedding": item.image_embedding,
+        "brand": item.brand,
+        "color": item.color,
+        "matched_item_id": item.matched_item_id,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "archived": item.archived,
+        "user_id": item.user_id,
+        "uploader_name": format_user_display_name(
+            submitter,
+            "Unknown User"
+        ),
     }
 
 
@@ -491,6 +532,9 @@ def store_item_as_reference(
         status=item.status,
         category=item.category,
         department=item.department,
+        report_owner_user_id=item.report_owner_user_id,
+        report_owner_name=item.report_owner_name,
+        report_owner_group=item.report_owner_group,
         description=item.description,
         image_path=item.image_path,
         image_embedding=item.image_embedding,
@@ -562,6 +606,8 @@ def compute_item_match_score(lost_item: models.Item, found_item: models.Item) ->
 
 print("Admin routes loaded")
 
+MAX_BULK_REGISTRATION_ROWS = 5000
+
 
 def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate_action: str):
     db = SessionLocal()
@@ -575,8 +621,8 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
     total_students = len(users_list)
 
     # Tuning knobs
-    lookup_chunk_size = 150      # SQL Server safe lookup chunk
-    commit_chunk_size = 100      # update progress after each 100-row commit
+    lookup_chunk_size = 800      # SQL Server-safe lookup chunk for large 3k+ uploads
+    commit_chunk_size = 400      # fewer commits for faster large uploads, without one giant transaction
     hash_workers = min(8, max(2, (os.cpu_count() or 4)))
 
     def push_bulk_progress(processed_count: int, message: str | None = None):
@@ -1200,6 +1246,8 @@ async def toggle_archive(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if is_root_admin(user) and not is_root_admin(current_admin):
+        raise HTTPException(status_code=404, detail="User not found")
 
     permissions = parse_permissions(user.permissions)
     user.is_archived = archive
@@ -1239,28 +1287,46 @@ async def bulk_toggle_archive(
     if not user_ids:
         raise HTTPException(status_code=400, detail="No users selected.")
 
-    users: list[models.User] = []
     chunk_size = 1000
-    for start in range(0, len(user_ids), chunk_size):
-        user_id_chunk = user_ids[start:start + chunk_size]
-        users.extend(
-            db.query(models.User).filter(models.User.id.in_(user_id_chunk)).all()
-        )
-
-    if not users:
-        raise HTTPException(status_code=404, detail="No eligible users found.")
-
     updated_count = 0
-    for user in users:
-        permissions = parse_permissions(user.permissions)
-        user.is_archived = archive
-        if archive:
-            user.permissions = json.dumps([])
-        else:
+
+    if archive:
+        for start in range(0, len(user_ids), chunk_size):
+            user_id_chunk = user_ids[start:start + chunk_size]
+            updated_count += db.query(models.User).filter(
+                models.User.id.in_(user_id_chunk),
+                models.User.id != current_admin.id,
+                models.User.email != ROOT_ADMIN_EMAIL,
+                models.User.is_archived == False
+            ).update(
+                {
+                    models.User.is_archived: True,
+                    models.User.permissions: json.dumps([])
+                },
+                synchronize_session=False
+            )
+    else:
+        users: list[models.User] = []
+        for start in range(0, len(user_ids), chunk_size):
+            user_id_chunk = user_ids[start:start + chunk_size]
+            users.extend(
+                db.query(models.User).filter(
+                    models.User.id.in_(user_id_chunk),
+                    models.User.id != current_admin.id,
+                    models.User.email != ROOT_ADMIN_EMAIL,
+                    models.User.is_archived == True
+                ).all()
+            )
+
+        for user in users:
+            permissions = parse_permissions(user.permissions)
             permissions = [permission for permission in permissions if permission != DELETE_QUEUE_PERMISSION]
             user.permissions = json.dumps(permissions)
-        user.archived_at = datetime.now() if archive else None
-        updated_count += 1
+            user.is_archived = False
+            updated_count += 1
+
+    if updated_count == 0:
+        raise HTTPException(status_code=404, detail="No eligible users found.")
 
     db.commit()
 
@@ -1281,24 +1347,25 @@ async def move_user_to_delete(
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
-    if not user.is_archived:
-        raise HTTPException(status_code=400, detail="Only archived users can be moved to delete.")
+    if is_root_admin(user):
+        raise HTTPException(status_code=404, detail="User not found")
 
     permissions = parse_permissions(user.permissions)
+    user.is_archived = True
+    user.archived_at = datetime.utcnow()
     if DELETE_QUEUE_PERMISSION not in permissions:
         permissions.append(DELETE_QUEUE_PERMISSION)
-        user.permissions = json.dumps(permissions)
-        db.commit()
-        create_admin_notification(
-            db,
-            f"{current_admin.full_name or current_admin.email} moved user {user.full_name or user.email} to the delete queue.",
-            "user_management_students" if not user.is_admin else "user_management_admin",
-            user.id,
-            created_by_admin_id=current_admin.id
-        )
+    user.permissions = json.dumps(permissions)
+    db.commit()
+    create_admin_notification(
+        db,
+        f"{current_admin.full_name or current_admin.email} moved user {user.full_name or user.email} to Trash.",
+        "user_management_students" if not user.is_admin else "user_management_admin",
+        user.id,
+        created_by_admin_id=current_admin.id
+    )
 
-    return {"message": f"User {user.full_name} moved to Delete tab."}
+    return {"message": f"User {user.full_name} moved to Trash."}
 
 
 @router.post("/bulk-move-to-delete")
@@ -1318,25 +1385,28 @@ async def bulk_move_users_to_delete(
         users.extend(
             db.query(models.User).filter(
                 models.User.id.in_(user_id_chunk),
-                models.User.is_archived == True
+                models.User.email != ROOT_ADMIN_EMAIL,
+                models.User.id != current_admin.id
             ).all()
         )
 
     if not users:
-        raise HTTPException(status_code=404, detail="No eligible archived users found.")
+        raise HTTPException(status_code=404, detail="No eligible users found.")
 
     moved_count = 0
     for user in users:
         permissions = parse_permissions(user.permissions)
+        user.is_archived = True
+        user.archived_at = datetime.utcnow()
         if DELETE_QUEUE_PERMISSION not in permissions:
             permissions.append(DELETE_QUEUE_PERMISSION)
-            user.permissions = json.dumps(permissions)
-            moved_count += 1
+        user.permissions = json.dumps(permissions)
+        moved_count += 1
 
     db.commit()
 
     return {
-        "message": f"{moved_count} user account(s) moved to Delete successfully.",
+        "message": f"{moved_count} user account(s) moved to Trash successfully.",
         "count": moved_count,
         "requested_count": len(user_ids)
     }
@@ -1351,6 +1421,8 @@ async def permanent_delete(
     user = db.query(models.User).filter(models.User.id == user_id).first()
     
     if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if is_root_admin(user):
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
@@ -1389,7 +1461,10 @@ async def bulk_permanent_delete(
     for start in range(0, len(user_ids), chunk_size):
         user_id_chunk = user_ids[start:start + chunk_size]
         users.extend(
-            db.query(models.User).filter(models.User.id.in_(user_id_chunk)).all()
+            db.query(models.User).filter(
+                models.User.id.in_(user_id_chunk),
+                models.User.email != ROOT_ADMIN_EMAIL
+            ).all()
         )
 
     if not users:
@@ -1544,109 +1619,6 @@ async def confirm_match(
     db.commit()
     return {"message": "Items successfully matched!"}
 
-
-@router.post("/items/analyze-matches")
-async def analyze_item_matches(
-    db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
-):
-    lost_items = db.query(models.Item).filter(
-        models.Item.status == "lost",
-        models.Item.archived == False,
-        models.Item.is_matched == False,
-        models.Item.image_embedding.isnot(None),
-    ).all()
-
-    found_items = db.query(models.Item).filter(
-        models.Item.status == "found",
-        models.Item.archived == False,
-        models.Item.is_matched == False,
-        models.Item.image_embedding.isnot(None),
-    ).all()
-
-    if not lost_items or not found_items:
-        return {
-            "message": "No available items to analyze.",
-            "scanned_lost": len(lost_items),
-            "scanned_found": len(found_items),
-            "matched_count": 0,
-            "matches": [],
-        }
-
-    match_threshold = 0.55
-    matched_found_ids: set[int] = set()
-    created_matches: list[dict] = []
-
-    existing_pairs = {
-        (claim.lost_item_id, claim.found_item_id)
-        for claim in db.query(models.Claim).all()
-        if claim.lost_item_id and claim.found_item_id
-    }
-
-    for lost_item in lost_items:
-        best_found = None
-        best_score = 0.0
-        lost_category = (lost_item.category or "").strip().lower()
-
-        for found_item in found_items:
-            if found_item.id in matched_found_ids:
-                continue
-
-            found_category = (found_item.category or "").strip().lower()
-            if lost_category and found_category and lost_category != found_category:
-                continue
-
-            score = compute_item_match_score(lost_item, found_item)
-            if score is None:
-                continue
-
-            if score > best_score:
-                best_score = score
-                best_found = found_item
-
-        if not best_found or best_score < match_threshold:
-            continue
-
-        lost_item.is_matched = True
-        best_found.is_matched = True
-        matched_found_ids.add(best_found.id)
-
-        if (lost_item.id, best_found.id) not in existing_pairs:
-            db.add(models.Claim(
-                lost_item_id=lost_item.id,
-                found_item_id=best_found.id,
-                claimant_id=lost_item.user_id or current_admin.id,
-                similarity_score=f"{best_score * 100:.1f}%",
-                status="pending",
-            ))
-            existing_pairs.add((lost_item.id, best_found.id))
-
-        created_matches.append({
-            "lost_id": lost_item.id,
-            "found_id": best_found.id,
-            "score": best_score,
-            "category": lost_item.category or best_found.category or "Unknown",
-        })
-
-    db.commit()
-
-    if created_matches:
-        create_admin_notification(
-            db,
-            f"Match analysis completed. {len(created_matches)} lost and found pairs were flagged for review.",
-            "match",
-            created_matches[0]["lost_id"],
-            "/admin/Claim-Management",
-            created_by_admin_id=current_admin.id
-        )
-
-    return {
-        "message": "Analysis completed.",
-        "scanned_lost": len(lost_items),
-        "scanned_found": len(found_items),
-        "matched_count": len(created_matches),
-        "matches": created_matches,
-    }
 
 @router.get("/items/found")
 def get_found_items(
@@ -1889,7 +1861,7 @@ def get_pending_items(
         models.PendingItem.archived == False
     ).order_by(models.PendingItem.created_at.desc()).all()
 
-    return items
+    return [serialize_pending_item(db, item) for item in items]
 
 
 @router.get("/pending-items/archived")
@@ -1901,7 +1873,7 @@ def get_archived_pending_items(
         models.PendingItem.archived == True
     ).order_by(models.PendingItem.created_at.desc()).all()
 
-    return items
+    return [serialize_pending_item(db, item) for item in items]
 
 @router.get("/departments")
 async def get_departments(
@@ -2123,6 +2095,8 @@ async def update_user_permissions(
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if is_root_admin(user) and not is_root_admin(admin):
+        raise HTTPException(status_code=404, detail="User not found")
 
     requested_permissions = list(dict.fromkeys(data.permissions))
     assignable_permissions = get_assignable_permissions(admin)
@@ -2164,6 +2138,9 @@ async def get_all_users(
     user_list = []
     
     for u in users:
+        if is_root_admin(u) and not is_root_admin(admin):
+            continue
+
         # 1. Handle permissions safely
         perms = parse_permissions(u.permissions)
         is_student_active = True if u.is_admin else student_has_portal_access(u)
@@ -2304,6 +2281,8 @@ async def grant_admin_access(
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if is_root_admin(user) and not is_root_admin(current_admin):
         raise HTTPException(status_code=404, detail="User not found")
 
     if user.is_archived:
@@ -2463,6 +2442,11 @@ async def bulk_register(
 
     if not isinstance(students_list, list) or len(students_list) == 0:
         raise HTTPException(status_code=400, detail="No users were provided for registration.")
+    if len(students_list) > MAX_BULK_REGISTRATION_ROWS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"One bulk registration request can process up to {MAX_BULK_REGISTRATION_ROWS:,} users. Please split this upload."
+        )
 
     job_id = uuid.uuid4().hex
     with BULK_JOB_LOCK:
@@ -2787,6 +2771,8 @@ async def reset_student_password(
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if is_root_admin(user) and not is_root_admin(current_admin):
+        raise HTTPException(status_code=404, detail="User not found")
 
     # Keep student/faculty temp passwords predictable; admins without IDs get a secure random suffix.
     student_no = str(user.student_no or "").strip()
@@ -2835,6 +2821,9 @@ async def finalize_lost_upload(
     category_id: int = Form(...), # Match!
     category: str = Form(...),    # Match!
     department: str = Form(...),  #
+    report_owner_user_id: int = Form(None),
+    report_owner_name: str = Form(None),
+    report_owner_group: str = Form(None),
     brand: str = Form(None),
     color: str = Form(None),
     description: str = Form(None),
@@ -2881,12 +2870,33 @@ async def finalize_lost_upload(
 
     # 5. Create the Database Record 
     saved_possible_matches = normalize_saved_possible_matches(possible_matches)
+    report_owner_user = None
+    if report_owner_user_id:
+        report_owner_user = db.query(models.User).filter(
+            models.User.id == report_owner_user_id,
+            models.User.is_admin == False,
+            models.User.is_archived == False,
+        ).first()
+    if not report_owner_user:
+        raise HTTPException(status_code=400, detail="Please select an existing student or faculty record for this lost item.")
+
+    owner_name = format_user_display_name(report_owner_user, "Unknown User")
+    owner_group = (
+        (report_owner_user.section or "").strip()
+        or (report_owner_user.course or "").strip()
+        or ("Teacher" if user_is_faculty_account(report_owner_user) else "")
+        or (report_owner_group or "").strip()
+        or None
+    )
 
     new_item = models.Item(
         status="lost",
         category_id=category_id,
         category=category,
         department=department,
+        report_owner_user_id=report_owner_user.id,
+        report_owner_name=owner_name,
+        report_owner_group=owner_group,
         user_id=current_user.id,  # <--- SETS THE UPLOADER RECORD
         description=f"[{item_name}] {description}" if description else item_name,
         brand=brand,

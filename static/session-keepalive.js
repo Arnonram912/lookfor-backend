@@ -1,12 +1,15 @@
 (function () {
+    const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
     const REFRESH_WINDOW_MS = 10 * 60 * 1000;
     const REFRESH_THROTTLE_MS = 5 * 60 * 1000;
     const ACTIVITY_CHECK_MS = 60 * 1000;
     const ACTIVE_WINDOW_MS = 2 * 60 * 1000;
+    const LAST_ACTIVITY_KEY = "lookfor_last_activity_at";
 
     let lastRefreshAt = 0;
     let lastActivityAt = Date.now();
     let refreshInFlight = false;
+    let idleTimeoutId = null;
     const ROOT_ADMIN_EMAIL = "admin@novaliches.sti.edu.ph";
     const ADMIN_PERMISSION_KEYS = [
         "Messages",
@@ -68,6 +71,38 @@
         return payload && payload.exp ? payload.exp * 1000 : null;
     }
 
+    function getLastActivityAt() {
+        const stored = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+        return Number.isFinite(stored) && stored > 0 ? stored : lastActivityAt;
+    }
+
+    function persistLastActivity(timestamp) {
+        lastActivityAt = timestamp;
+        localStorage.setItem(LAST_ACTIVITY_KEY, String(timestamp));
+    }
+
+    function expireSession() {
+        sessionStorage.clear();
+        localStorage.removeItem("token");
+        localStorage.removeItem("admin_token");
+        localStorage.removeItem(LAST_ACTIVITY_KEY);
+        document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+        window.location.replace("/login");
+    }
+
+    function isIdleTimedOut() {
+        return Date.now() - getLastActivityAt() >= IDLE_TIMEOUT_MS;
+    }
+
+    function scheduleIdleTimeout() {
+        if (idleTimeoutId) {
+            clearTimeout(idleTimeoutId);
+        }
+
+        const remainingMs = Math.max(0, IDLE_TIMEOUT_MS - (Date.now() - getLastActivityAt()));
+        idleTimeoutId = setTimeout(expireSession, remainingMs);
+    }
+
     function persistToken(newToken) {
         if (isAdminToken(newToken)) {
             sessionStorage.setItem("admin_token", newToken);
@@ -111,6 +146,7 @@
             });
 
             if (response.status === 401) {
+                expireSession();
                 return;
             }
 
@@ -131,19 +167,38 @@
     }
 
     function recordActivity() {
-        lastActivityAt = Date.now();
+        if (isIdleTimedOut()) {
+            expireSession();
+            return;
+        }
+
+        persistLastActivity(Date.now());
+        scheduleIdleTimeout();
         refreshSession(false);
     }
 
     function initializeSessionKeepAlive() {
         if (!getStoredToken()) return;
 
+        if (isIdleTimedOut()) {
+            expireSession();
+            return;
+        }
+
+        persistLastActivity(Date.now());
+        scheduleIdleTimeout();
+
         ["mousemove", "keydown", "click", "scroll", "touchstart"].forEach((eventName) => {
             window.addEventListener(eventName, recordActivity, { passive: true });
         });
 
         setInterval(() => {
-            if (Date.now() - lastActivityAt <= ACTIVE_WINDOW_MS) {
+            if (isIdleTimedOut()) {
+                expireSession();
+                return;
+            }
+
+            if (Date.now() - getLastActivityAt() <= ACTIVE_WINDOW_MS) {
                 refreshSession(false);
             }
         }, ACTIVITY_CHECK_MS);
@@ -236,12 +291,12 @@
             const profilePicUrl = normalizeProfilePicUrl(user.profile_pic);
 
             avatars.forEach((avatar) => {
-                avatar.style.width = "38px";
-                avatar.style.height = "38px";
-                avatar.style.minWidth = "38px";
-                avatar.style.maxWidth = "38px";
-                avatar.style.minHeight = "38px";
-                avatar.style.maxHeight = "38px";
+                avatar.style.width = "34px";
+                avatar.style.height = "34px";
+                avatar.style.minWidth = "34px";
+                avatar.style.maxWidth = "34px";
+                avatar.style.minHeight = "34px";
+                avatar.style.maxHeight = "34px";
                 avatar.style.borderRadius = "50%";
                 avatar.style.objectFit = "cover";
                 avatar.style.display = "block";

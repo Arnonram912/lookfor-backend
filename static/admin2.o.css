@@ -291,7 +291,7 @@ body {
 .topbar-menu {
     display: flex;
     align-items: center; 
-    gap: 25px; 
+    gap: 16px; 
     list-style: none;
     margin: 0;
     padding: 0;
@@ -315,20 +315,40 @@ body {
     margin: 0;
 }
 .profile-icon {
-  color: white;   
-  font-size: 30px;
-  cursor: pointer;
+    color: white;
+    font-size: 22px;
+    cursor: pointer;
 }
 
-.profile-trigger {
-    display: inline-flex;
+.message-icon,
+.notification-bell,
+.profile-trigger,
+.student-profile-trigger {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    display: inline-flex !important;
     align-items: center;
     justify-content: center;
+    border-radius: 50%;
+    line-height: 1;
+    position: relative;
+}
+
+.message-icon,
+.notification-bell {
+    color: white;
+    font-size: 22px;
 }
 
 .topbar-profile-pic {
-    width: 38px;
-    height: 38px;
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    min-height: 34px !important;
+    max-height: 34px !important;
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid rgba(255, 224, 0, 0.95);
@@ -337,17 +357,9 @@ body {
     display: block;
 }
 
-.student-profile-trigger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-}
-
 .student-profile-icon {
     color: white;
-    font-size: 20px;
+    font-size: 22px;
     line-height: 1;
 }
 
@@ -355,18 +367,24 @@ body {
 .badge.red {
     background-color: #ff4d4d;
     color: white;
-    font-size: 10px;
-    padding: 2px 5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
     border-radius: 50%;
     position: absolute;
-    top: -8px;
-    right: -8px;
+    top: 2px;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
 }
 
 
 .notification-bell {
     cursor: pointer;
-    font-size: 20px;
 }
 
 .badge.red {
@@ -374,12 +392,18 @@ body {
     color: white;
     font-size: 10px;
     font-weight: bold;
-    padding: 2px 6px;
-    border-radius: 10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 50%;
     position: absolute;
-    top: -8px;
-    right: -10px;
+    top: 2px;
+    right: 0;
     border: 2px solid #114b7a;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 /*
 .notification-dropdown {
@@ -449,7 +473,7 @@ body {
 */
 /* 1. Main Container (The Bell & Dropdown Wrapper) */
 .notification-container {
-    margin: 10px;
+    margin: 0;
     position: relative;
     display: flex;
     align-items: center;
@@ -458,25 +482,31 @@ body {
 /* 2. The Bell Icon & Badge */
 .notification-bell {
     cursor: pointer;
-    font-size: 1.5rem;
+    font-size: 22px;
     position: relative;
-    padding: 5px;
     transition: transform 0.2s ease;
 }
 
 .notification-bell:hover {
-    transform: scale(1.1);
+    transform: translateY(-1px);
 }
 
 .badge.red {
     background-color: #ff4d4d;
     color: white;
-    font-size: 0.7rem;
-    padding: 2px 6px;
-    border-radius: 10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 50%;
     position: absolute;
-    top: 0;
-    right: -5px;
+    top: 2px;
+    right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
     font-family: Arial, sans-serif;
 }
 
@@ -822,7 +852,7 @@ h2 {
 }
 
 .message-icon:hover {
-    transform: scale(1.1);
+    transform: translateY(-1px);
     filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.18));
 }
 

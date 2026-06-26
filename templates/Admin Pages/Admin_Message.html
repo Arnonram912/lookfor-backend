@@ -10,7 +10,7 @@
 
     
     <link rel="stylesheet" href="/static/Messages.css?v=12"> 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <style>
@@ -99,6 +99,278 @@
             min-height: 52px;
             padding: 0 20px;
             font-weight: 700;
+        }
+
+        .new-message-view {
+            display: none;
+            flex: 1;
+            min-height: 0;
+            flex-direction: column;
+            background: #f7fbff;
+        }
+
+        .new-message-topbar {
+            position: relative;
+            padding: 16px 20px 12px;
+            border-bottom: 1px solid #dbe6f2;
+            background: rgba(255, 255, 255, 0.96);
+        }
+
+        .new-message-title-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .new-message-title-row h3 {
+            margin: 0;
+            color: #14395f;
+            font-size: 16px;
+        }
+
+        .new-message-close {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 50%;
+            background: #e8f0f8;
+            color: #24425f;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .new-message-to-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            color: #5d7085;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .compose-recipient-box {
+            flex: 1;
+            min-height: 38px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 6px 8px;
+            border: 1px solid #cfdae7;
+            border-radius: 16px;
+            background: #fff;
+        }
+
+        .compose-recipient-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 9px;
+            border-radius: 999px;
+            background: #e8f1ff;
+            color: #1459b8;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .compose-recipient-chip button {
+            border: none;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            font-weight: 900;
+            line-height: 1;
+            padding: 0;
+        }
+
+        .compose-user-search {
+            flex: 1;
+            min-width: 180px;
+            border: none;
+            outline: none;
+            font: inherit;
+            font-weight: 600;
+            color: #1f344a;
+            padding: 6px 4px;
+        }
+
+        .compose-user-suggestions {
+            position: absolute;
+            left: 72px;
+            right: 20px;
+            top: calc(100% - 8px);
+            z-index: 20;
+            max-height: 260px;
+            overflow: auto;
+            border: 1px solid #d6e3f2;
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 18px 42px rgba(16, 48, 82, 0.16);
+            display: none;
+        }
+
+        .compose-user-suggestion {
+            width: 100%;
+            border: none;
+            background: #fff;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 12px;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .compose-user-suggestion:hover {
+            background: #f2f7fd;
+        }
+
+        .compose-user-suggestion .avatar {
+            width: 34px;
+            height: 34px;
+            margin-right: 0;
+        }
+
+        .new-message-body {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #718399;
+            text-align: center;
+            padding: 28px;
+        }
+
+        .new-message-input {
+            display: flex;
+            gap: 12px;
+            padding: 16px 18px;
+            border-top: 1px solid #dbe6f2;
+            background: rgba(255, 255, 255, 0.95);
+            align-items: flex-end;
+        }
+
+        .new-message-input textarea {
+            flex: 1;
+            min-height: 52px;
+            max-height: 170px;
+            padding: 12px 14px;
+            border: 1px solid #c9d7e6;
+            border-radius: 14px;
+            resize: vertical;
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        .new-message-input button {
+            min-height: 52px;
+            padding: 0 20px;
+            border: none;
+            border-radius: 10px;
+            background: #005bab;
+            color: #fff;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .message-toast {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            z-index: 10050;
+            min-width: 280px;
+            max-width: min(420px, calc(100vw - 48px));
+            padding: 14px 16px;
+            border-radius: 14px;
+            background: #103a5f;
+            color: #fff;
+            box-shadow: 0 18px 42px rgba(8, 35, 63, 0.28);
+            display: none;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .message-toast.show {
+            display: flex;
+            animation: messageToastIn 0.18s ease-out;
+        }
+
+        .message-toast strong {
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .message-toast p {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.84);
+            line-height: 1.4;
+        }
+
+        .message-toast-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #22c55e;
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            flex: 0 0 auto;
+        }
+
+        @keyframes messageToastIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .admin-message-layout .fb-search {
+            position: relative;
+        }
+
+        .admin-message-layout .fb-search input {
+            padding-right: 38px;
+        }
+
+        .admin-message-layout .search-clear-btn {
+            position: absolute;
+            right: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            border: none;
+            border-radius: 50%;
+            background: #dbe5f0;
+            color: #31465c;
+            cursor: pointer;
+            font-weight: 800;
+            line-height: 1;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .admin-message-layout .search-clear-btn:hover {
+            background: #c9d8e8;
+        }
+
+        .conversation-empty-state {
+            display: none;
+            padding: 22px 18px;
+            color: #66788d;
+            font-size: 13px;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .conversation-empty-state strong {
+            display: block;
+            color: #173d63;
+            margin-bottom: 4px;
         }
 
         #composeModal {
@@ -444,14 +716,14 @@
                 <a href="#" onclick="checkAccess('/admin/Lost_Items_Report', 'Lost-Reports'); return false;" 
                 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Items
                 </a>
             </li>
 
             <li class="#">
                  <a href="#" onclick="checkAccess('/admin/Found_Items_Report', 'Found-Reports'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/foundw.png" class="side-icon">  Surrendered Item
+                    <img src="/static/photos/foundw.png" class="side-icon">  Found Items
                 </a>
             </li>
 
@@ -558,14 +830,16 @@
         
          <div class="fb-sidebar-header">
             <div class="section-title"><span>Messages</span></div>
-            <button class="compose-btn" type="button" onclick="openComposeModal()">+ Compose</button>
+            <button class="compose-btn" type="button" onclick="openNewMessagePage()">+ New Message</button>
         </div>
 
         <div class="fb-search">
-            <input type="text" id="searchConversation" placeholder="Search..." onkeyup="filterConversations()">
+            <input type="text" id="searchConversation" placeholder="Search conversations..." onkeyup="filterConversations()" onfocus="filterConversations()">
+            <button type="button" id="clearConversationSearch" class="search-clear-btn" onclick="clearConversationSearch()" aria-label="Clear search">&times;</button>
         </div>
 
       <ul class="conversation-list" id="conversationList"></ul>
+      <div id="conversationEmptyState" class="conversation-empty-state"></div>
     
 
           
@@ -575,7 +849,7 @@
     <!-- RIGHT SIDE - CHAT AREA -->
     <div class="fb-chat">
 
-        <div class="chat-header">
+        <div class="chat-header" id="normalChatHeader">
             <div>
                 <h3 id="chatUserName">Select a conversation</h3>
                 <small id="chatStatus"></small>
@@ -591,12 +865,47 @@
             <!-- Thread messages load here -->
         </div>
 
-        <div class="chat-input">
+        <div class="chat-input" id="normalChatInput">
             <textarea id="replyMessage" placeholder="Type your reply..."></textarea>
             <button onclick="sendReply()">Send</button>
         </div>
 
+        <div id="newMessageView" class="new-message-view">
+            <div class="new-message-topbar">
+                <div class="new-message-title-row">
+                    <button type="button" class="new-message-close" onclick="closeCompose()" aria-label="Close new message">&times;</button>
+                    <h3>New Message</h3>
+                </div>
+                <div class="new-message-to-row">
+                    <span>To:</span>
+                    <div class="compose-recipient-box" onclick="document.getElementById('composeUserSearch')?.focus()">
+                        <div id="composeRecipientChips" style="display:contents;"></div>
+                        <input id="composeUserSearch" class="compose-user-search" type="text" placeholder="Search students or administrators" oninput="filterComposeStudents()" onfocus="filterComposeStudents()">
+                    </div>
+                </div>
+                <div id="composeUserSuggestions" class="compose-user-suggestions"></div>
+            </div>
+            <div class="new-message-body">
+                <div>
+                    <strong>Select recipients to start a new message.</strong>
+                    <p>Search all users, choose one or more recipients, then type your message below.</p>
+                </div>
+            </div>
+            <div class="new-message-input">
+                <textarea id="newMessageContent" placeholder="Type your message"></textarea>
+                <button type="button" onclick="sendNewMessage()">Send</button>
+            </div>
+        </div>
+
 </div>
+</div>
+
+<div id="messageToast" class="message-toast" role="status" aria-live="polite">
+    <span class="message-toast-icon">✓</span>
+    <div>
+        <strong id="messageToastTitle">Message sent</strong>
+        <p id="messageToastText">Your message was delivered.</p>
+    </div>
 </div>
 
 <div id="conversationContextMenu" style="display:none; position:fixed; z-index:10000; min-width:190px; background:#fff; border:1px solid #d6e3f2; border-radius:14px; box-shadow:0 18px 40px rgba(0, 24, 51, 0.18); padding:8px;">
@@ -611,8 +920,8 @@
         <span class="close-modal" onclick="closeCompose()">&times;</span>
         <div class="compose-modal-header">
             <p class="compose-eyebrow">LookFor Messaging</p>
-            <h3>Message Multiple Students</h3>
-            <p class="compose-subtitle">Pick multiple students and send the same chat message to all of them at the same time.</p>
+            <h3>New Message</h3>
+            <p class="compose-subtitle">Pick one or more users and send the same chat message to all of them at the same time.</p>
         </div>
 
         <div class="compose-modal-grid">
@@ -620,11 +929,11 @@
                 <div class="compose-panel-header">
                     <div>
                         <h4>Select Recipients</h4>
-                        <p>Search and choose the students who should receive this chat message.</p>
+                        <p>Search and choose the users who should receive this chat message.</p>
                     </div>
                     <span id="composeRecipientCount" class="compose-count-pill">0 selected</span>
                 </div>
-                <input type="text" id="composeStudentSearch" class="compose-search-input" placeholder="Search students..." onkeyup="filterComposeStudents()">
+                <input type="text" id="composeStudentSearch" class="compose-search-input" placeholder="Search users..." onkeyup="filterComposeStudents()">
                 <div id="composeStudentList" class="compose-student-list"></div>
             </div>
 
@@ -632,7 +941,7 @@
                 <div class="compose-panel-header">
                     <div>
                         <h4>Chat Message</h4>
-                        <p>Write one message and it will be sent to every selected student.</p>
+                        <p>Write one message and it will be sent to every selected user.</p>
                     </div>
                 </div>
                 <textarea id="newContent" class="compose-message-textarea" placeholder="Type your message"></textarea>
@@ -641,7 +950,7 @@
 
         <div class="modal-actions compose-modal-actions">
             <button class="compose-cancel-btn" onclick="closeCompose()">Cancel</button>
-            <button class="compose-send-btn" onclick="sendNewMessage()">Send to Selected Students</button>
+            <button class="compose-send-btn" onclick="sendNewMessage()">Send to Selected Users</button>
         </div>
     </div>
 </div>
@@ -718,6 +1027,10 @@ const getHeader = () => {
 
 let searchTimeout; 
 let availableStudents = [];
+let allConversationUsers = [];
+let selectedComposeRecipients = new Map();
+let composeSearchTimeout = null;
+let composeSearchRequestId = 0;
 
 function getRoleBadgeClass(roleLabel) {
     const normalized = String(roleLabel || '').toLowerCase();
@@ -744,12 +1057,69 @@ function renderUserMeta(user) {
     return user.email || roleLabel;
 }
 
+function renderConversationPreview(user) {
+    const lastMessage = String(user.last_message || "").trim();
+    if (!lastMessage) return renderUserMeta(user);
+    return `${user.is_outgoing ? "You: " : ""}${lastMessage}`;
+}
+
+function renderConversationTime(user) {
+    return user.last_message_at ? `<span class="convo-date">${formatMessageTimestamp(user.last_message_at)}</span>` : "";
+}
+
+function parseServerDate(value) {
+    if (!value) return null;
+    const normalized = String(value).replace(" ", "T");
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+    const date = new Date(hasTimezone ? normalized : `${normalized}Z`);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatMessageTimestamp(value) {
+    const date = parseServerDate(value);
+    if (!date) return "";
+    return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+
 function updateComposeRecipientCount() {
-    const count = document.querySelectorAll(".compose-student-checkbox:checked").length;
+    const count = selectedComposeRecipients.size || document.querySelectorAll(".compose-student-checkbox:checked").length;
     const countNode = document.getElementById("composeRecipientCount");
     if (countNode) {
         countNode.textContent = `${count} selected`;
     }
+}
+
+function setNormalChatVisible(isVisible) {
+    const display = isVisible ? "" : "none";
+    const chatHeader = document.getElementById("normalChatHeader");
+    const chatMessages = document.getElementById("chatMessages");
+    const chatInput = document.getElementById("normalChatInput");
+    if (chatHeader) chatHeader.style.display = display;
+    if (chatMessages) chatMessages.style.display = display;
+    if (chatInput) chatInput.style.display = display;
+}
+
+let messageToastTimeout = null;
+
+function showMessageToast(title, text) {
+    const toast = document.getElementById("messageToast");
+    const titleNode = document.getElementById("messageToastTitle");
+    const textNode = document.getElementById("messageToastText");
+    if (!toast || !titleNode || !textNode) return;
+
+    titleNode.textContent = title || "Message sent";
+    textNode.textContent = text || "Your message was delivered.";
+    toast.classList.add("show");
+
+    clearTimeout(messageToastTimeout);
+    messageToastTimeout = setTimeout(() => {
+        toast.classList.remove("show");
+    }, 3200);
 }
 
 let contextConversationTarget = null;
@@ -818,64 +1188,52 @@ async function handleDeleteConversation() {
 
 function filterConversations() {
     const input = document.getElementById('searchConversation');
-    const filter = input.value.toLowerCase();
-    const listItems = document.querySelectorAll('.conversation-item');
+    const clearBtn = document.getElementById('clearConversationSearch');
+    const emptyState = document.getElementById('conversationEmptyState');
+    const filter = input.value.toLowerCase().trim();
+    const listItems = Array.from(document.querySelectorAll('.conversation-item'));
+    let visibleCount = 0;
 
-    // Local Filter (Existing History)
-    listItems.forEach(item => {
+    if (clearBtn) clearBtn.style.display = filter ? "inline-flex" : "none";
+
+    listItems.forEach((item, index) => {
         const nameText = item.querySelector('.convo-name').innerText.toLowerCase();
         const previewText = item.querySelector('.convo-preview').innerText.toLowerCase();
-        
-        if (nameText.includes(filter) || previewText.includes(filter)) {
-            item.style.display = ""; 
-        } else {
-            item.style.display = "none"; 
-        }
+        const matches = !filter
+            ? (document.activeElement === input ? index < 3 : true)
+            : (nameText.includes(filter) || previewText.includes(filter));
+
+        item.style.display = matches ? "" : "none";
+        if (matches) visibleCount += 1;
     });
 
-    // Global Search (New Students)
-    clearTimeout(searchTimeout);
-    if (filter.length >= 3) {
-        // Wait 500ms after user stops typing to search database
-        searchTimeout = setTimeout(() => {
-            searchGlobalUsers(filter);
-        }, 500);
+    if (emptyState) {
+        if (!listItems.length) {
+            emptyState.innerHTML = `
+                <strong>No conversations yet.</strong>
+                Use + New Message to search all users and start a conversation.
+            `;
+            emptyState.style.display = "block";
+        } else if (!visibleCount) {
+            emptyState.innerHTML = `
+                <strong>No matching conversations.</strong>
+                This search only checks previous conversations. Use + New Message to search all users.
+            `;
+            emptyState.style.display = "block";
+        } else {
+            emptyState.style.display = "none";
+        }
     }
+
+    clearTimeout(searchTimeout);
 }
 
-async function searchGlobalUsers(query) {
-    try {
-        // Use the correct helper (getAdminAuthHeader or getAuthHeader)
-        const headers = typeof getAdminAuthHeader === "function" ? getAdminAuthHeader() : getAuthHeader();
-        
-        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
-            headers: headers
-        });
-        
-        const globalUsers = await response.json();
-        const list = document.getElementById("conversationList");
-
-        globalUsers.forEach(user => {
-            // Only add if they aren't already in the sidebar
-            if (!document.getElementById(`convo-${user.id}`)) {
-                const li = document.createElement("li");
-                li.className = "conversation-item search-result"; 
-                li.id = `convo-${user.id}`;
-                li.innerHTML = `
-                    <img src="/static/photos/profilew.png" class="avatar">
-                    <div class="convo-info">
-                        <span class="convo-name">${renderUserNameWithRole(user)}</span>
-                        <span class="convo-preview">${renderUserMeta(user)}</span>
-                    </div>
-                `;
-                li.onclick = () => openChat(user.id, user.full_name || user.email);
-                attachConversationContextMenu(li, user.id, user.full_name || user.email || "this user");
-                list.appendChild(li);
-            }
-        });
-    } catch (e) {
-        console.error("Global search failed:", e);
-    }
+function clearConversationSearch() {
+    const input = document.getElementById('searchConversation');
+    if (!input) return;
+    input.value = "";
+    input.focus();
+    filterConversations();
 }
 // Function to check for new messages without refreshing the page
 async function checkNewMessages() {
@@ -918,11 +1276,12 @@ async function loadStudents() {
             headers: getAdminAuthHeader() 
         });
         const users = await response.json();
-        availableStudents = users.filter(user => !user.is_admin);
+        allConversationUsers = Array.isArray(users) ? users : [];
+        availableStudents = allConversationUsers;
         const list = document.getElementById("conversationList");
         list.innerHTML = ""; 
 
-        availableStudents.forEach((user) => {
+        allConversationUsers.forEach((user) => {
             const li = document.createElement("li");
             
             const unreadClass = user.has_unread ? "unread-bold" : "";
@@ -933,8 +1292,9 @@ async function loadStudents() {
                 <img src="/static/photos/profilew.png" class="avatar">
                 <div class="convo-info">
                     <span class="convo-name">${renderUserNameWithRole(user)}</span>
-                    <span class="convo-preview">${renderUserMeta(user)}</span>
+                    <span class="convo-preview">${renderConversationPreview(user)}</span>
                 </div>
+                ${renderConversationTime(user)}
             `;
 
             li.onclick = () => openChat(user.id, user.full_name || user.email);
@@ -961,8 +1321,8 @@ async function openChat(studentId, studentEmail) {
 
     // Backend: Tell the server to mark these as 'read'
     try {
-        await fetch(`/admin/message/read-all/${studentId}`, {
-            method: "PUT",
+        await fetch(`/api/messages/read/${studentId}`, {
+            method: "POST",
             headers: getAdminAuthHeader()
         });
     } catch (error) {
@@ -992,7 +1352,7 @@ async function loadHistory(userId) {
             messageDiv.innerHTML = `
                 <div class="message-bubble">
                     <p>${msg.content}</p>
-                    <span class="message-time">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span class="message-time">${formatMessageTimestamp(msg.created_at)}</span>
                 </div>
             `;
             chatBox.appendChild(messageDiv);
@@ -1000,7 +1360,7 @@ async function loadHistory(userId) {
         chatBox.scrollTop = chatBox.scrollHeight;
 
         if (currentChatId === userId) {
-            fetch(`/admin/message/read-all/${userId}`, { method: "PUT", headers: getAdminAuthHeader() });
+            fetch(`/api/messages/read/${userId}`, { method: "POST", headers: getAdminAuthHeader() });
         }
     } catch (error) {
         console.error("History Error:", error);
@@ -1032,80 +1392,153 @@ async function sendReply() {
     }
 }
 
-async function loadComposeRecipients() {
+async function loadComposeRecipients(query = "") {
     try {
-        const response = await fetch(`/api/users/search?q=`, {
+        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
             headers: getAdminAuthHeader()
         });
         const users = await response.json();
-        availableStudents = (Array.isArray(users) ? users : []).filter(user => user.role_label !== "Admin");
+        availableStudents = Array.isArray(users) ? users : [];
     } catch (error) {
         console.error("Failed to load compose recipients:", error);
         availableStudents = [];
     }
 }
 
-function openComposeModal() {
-    const modal = document.getElementById("composeModal");
-    if (!modal) return;
-    loadComposeRecipients().then(() => renderComposeStudentList());
-    document.getElementById("composeStudentSearch").value = "";
-    document.getElementById("newContent").value = "";
+function openNewMessagePage() {
+    const view = document.getElementById("newMessageView");
+    if (!view) return;
+    selectedComposeRecipients = new Map();
+    setNormalChatVisible(false);
+    view.style.display = "flex";
+    document.getElementById("composeUserSearch").value = "";
+    document.getElementById("newMessageContent").value = "";
+    renderComposeRecipientChips();
     updateComposeRecipientCount();
-    modal.style.display = "flex";
+    loadComposeRecipients().then(() => {
+        renderComposeSuggestions("");
+        document.getElementById("composeUserSearch")?.focus();
+    });
+}
+
+function openComposeModal() {
+    openNewMessagePage();
 }
 
 function closeCompose() {
     const modal = document.getElementById("composeModal");
     if (modal) modal.style.display = "none";
+    const view = document.getElementById("newMessageView");
+    if (view) view.style.display = "none";
+    const suggestions = document.getElementById("composeUserSuggestions");
+    if (suggestions) suggestions.style.display = "none";
+    setNormalChatVisible(true);
 }
 
-function renderComposeStudentList(searchTerm = "") {
-    const list = document.getElementById("composeStudentList");
-    if (!list) return;
+function renderComposeRecipientChips() {
+    const chipBox = document.getElementById("composeRecipientChips");
+    if (!chipBox) return;
 
-    const filter = String(searchTerm || "").trim().toLowerCase();
-    const students = availableStudents.filter(student => {
-        const name = String(student.full_name || "").toLowerCase();
-        const email = String(student.email || "").toLowerCase();
-        return !filter || name.includes(filter) || email.includes(filter);
-    });
-
-    if (!students.length) {
-        list.innerHTML = `<div class="compose-empty-state">No students found.</div>`;
-        updateComposeRecipientCount();
-        return;
-    }
-
-    list.innerHTML = students.map(student => `
-        <label class="compose-student-option">
-            <input type="checkbox" class="compose-student-checkbox" value="${student.id}" onchange="updateComposeRecipientCount()">
-            <div class="compose-student-copy">
-                <div class="compose-student-name">${renderUserNameWithRole(student)}</div>
-                <div class="compose-student-meta">${renderUserMeta(student)}</div>
-            </div>
-        </label>
+    chipBox.innerHTML = Array.from(selectedComposeRecipients.values()).map(user => `
+        <span class="compose-recipient-chip">
+            ${user.full_name || user.email || "User"}
+            <button type="button" onclick="removeComposeRecipient(${user.id})" aria-label="Remove recipient">&times;</button>
+        </span>
     `).join("");
     updateComposeRecipientCount();
 }
 
+function removeComposeRecipient(userId) {
+    selectedComposeRecipients.delete(Number(userId));
+    renderComposeRecipientChips();
+    filterComposeStudents();
+}
+
+function selectComposeRecipient(userId) {
+    const id = Number(userId);
+    const user = availableStudents.find(entry => Number(entry.id) === id);
+    if (!user) return;
+
+    selectedComposeRecipients.set(id, user);
+    document.getElementById("composeUserSearch").value = "";
+    renderComposeRecipientChips();
+    renderComposeSuggestions("");
+    document.getElementById("composeUserSearch")?.focus();
+}
+
+function renderComposeSuggestions(searchTerm = "") {
+    const list = document.getElementById("composeUserSuggestions");
+    if (!list) return;
+
+    const filter = String(searchTerm || "").trim().toLowerCase();
+    const users = availableStudents
+        .filter(user => !selectedComposeRecipients.has(Number(user.id)))
+        .filter(user => {
+            const haystack = [
+                user.full_name,
+                user.email,
+                user.student_no,
+                user.course,
+                user.section,
+                user.department,
+                user.role_label
+            ].map(value => String(value || "").toLowerCase()).join(" ");
+            return !filter || haystack.includes(filter);
+        })
+        .slice(0, filter ? 12 : 8);
+
+    if (!users.length) {
+        list.innerHTML = `<div class="compose-empty-state">No users found.</div>`;
+        list.style.display = "block";
+        return;
+    }
+
+    list.innerHTML = users.map(user => `
+        <button type="button" class="compose-user-suggestion" onclick="selectComposeRecipient(${user.id})">
+            <img src="/static/photos/profilew.png" class="avatar" alt="">
+            <div>
+                <div class="compose-student-name">${renderUserNameWithRole(user)}</div>
+                <div class="compose-student-meta">${renderUserMeta(user)}</div>
+            </div>
+        </button>
+    `).join("");
+    list.style.display = "block";
+}
+
+function renderComposeStudentList(searchTerm = "") {
+    renderComposeSuggestions(searchTerm);
+}
+
 function filterComposeStudents() {
-    const query = document.getElementById("composeStudentSearch")?.value || "";
-    renderComposeStudentList(query);
+    const query = document.getElementById("composeUserSearch")?.value || document.getElementById("composeStudentSearch")?.value || "";
+    const list = document.getElementById("composeUserSuggestions");
+
+    clearTimeout(composeSearchTimeout);
+    if (list) {
+        list.innerHTML = `<div class="compose-empty-state">Searching users...</div>`;
+        list.style.display = "block";
+    }
+
+    const requestId = ++composeSearchRequestId;
+    composeSearchTimeout = setTimeout(async () => {
+        await loadComposeRecipients(query);
+        if (requestId === composeSearchRequestId) {
+            renderComposeSuggestions(query);
+        }
+    }, 250);
 }
 
 async function sendNewMessage() {
-    const selectedIds = Array.from(document.querySelectorAll(".compose-student-checkbox:checked"))
-        .map(input => Number(input.value))
-        .filter(Boolean);
-    const content = document.getElementById("newContent")?.value.trim() || "";
+    const selectedIds = Array.from(selectedComposeRecipients.keys());
+    const selectedUsers = selectedIds.map(id => selectedComposeRecipients.get(id)).filter(Boolean);
+    const content = (document.getElementById("newMessageContent")?.value || document.getElementById("newContent")?.value || "").trim();
 
     if (!selectedIds.length) {
-        alert("Please select at least one student.");
+        showMessageToast("Choose a recipient", "Search for and select at least one user before sending.");
         return;
     }
     if (!content) {
-        alert("Please enter your message.");
+        showMessageToast("Message is empty", "Type a message before sending.");
         return;
     }
 
@@ -1129,10 +1562,17 @@ async function sendNewMessage() {
 
         closeCompose();
         await loadStudents();
-        alert(`Message sent to ${result.sent_count} student(s).`);
+        if (selectedIds.length === 1) {
+            const user = selectedUsers[0];
+            await openChat(selectedIds[0], user?.full_name || user?.email || "User");
+        }
+        showMessageToast(
+            "Message sent",
+            `Delivered to ${result.sent_count} user${Number(result.sent_count) === 1 ? "" : "s"}.`
+        );
     } catch (error) {
         console.error("Bulk send failed:", error);
-        alert(error.message || "Failed to send messages.");
+        showMessageToast("Send failed", error.message || "Failed to send messages.");
     }
 }
 // This runs every 5 seconds to check for new messages
@@ -1209,7 +1649,7 @@ function updateNotificationUI() {
                         ${escapeHtml(n.message)}
                     </span>
                     <small style="color:gray; font-size: 11px;">
-                        ${new Date(n.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        ${formatMessageTimestamp(n.created_at)}
                     </small>
                 </div>
             </div>
@@ -1317,8 +1757,8 @@ window.onload = () => {
 };
 </script>
 
-<script src="/static/session-keepalive.js?v=5"></script>
-<script src="/static/admin-bulk-job-monitor.js"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 </body>

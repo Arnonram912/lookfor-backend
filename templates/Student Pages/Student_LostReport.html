@@ -3,7 +3,7 @@
 <head> 
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=14"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
     <link rel="stylesheet" href="/static/Lost_item_report.css?v=15"> 
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -34,7 +34,7 @@
             <li class="active">
                 <a href="/student/Lost-report"
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
-                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Item 
+                    <img src="/static/photos/boxw.png" class="side-icon"> Lost Items 
                 </a>
             </li>
 
@@ -168,6 +168,7 @@
 
                     <p><strong>Where was the item found?</strong> <span id="modalLocation"></span></p>
                     <p><strong>When was the item found?</strong> <span id="modalDate"></span></p>
+                    <p><strong>Lost ID:</strong> <span id="modalItemCode"></span></p>
                     <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
 
                     <p><strong>Description:</strong></p>
@@ -543,6 +544,7 @@ async function loadLostItems() {
                     <div class="card-body">
                         <h3>${item.item_name || item.category || 'Unnamed Item'}</h3>
                         <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
+                        <p><strong>Lost ID:</strong> ${item.lost_id || item.item_code || 'N/A'}</p>
                         <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details →</span>
                     </div>
                 </div>
@@ -689,8 +691,6 @@ async function executeSubmit() {
         compareData.append("status", "lost");
         compareData.append("brand", document.getElementById('itemBrand').value || "");
         compareData.append("color", document.getElementById('itemColor').value || "");
-        appendOptionalImages(compareData);
-
         const compareRes = await fetch('/api/compare-text-details', { 
             method: 'POST', 
             body: compareData 
@@ -702,7 +702,7 @@ async function executeSubmit() {
         const hasConfirmedMatch = aiResult?.action === "show_match" &&
             aiResult?.matched_item?.id &&
             (aiResult.highest_score || 0) >= 0.55;
-        let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : (matchedItems[0] || null);
+        let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : null;
 
         if (matchedItems.length > 0) {
             let matchMessage = "";
@@ -737,6 +737,7 @@ async function executeSubmit() {
                 } : null,
                 matches: matchedItems
             }) || selectedMatch;
+            if (!hasConfirmedMatch) selectedMatch = null;
         } else {
             await showLostUploadAlert(
                 'info',
@@ -876,8 +877,6 @@ async function executeSubmit() {
         compareData.append("status", "lost");
         compareData.append("brand", document.getElementById('itemBrand').value || "");
         compareData.append("color", document.getElementById('itemColor').value || "");
-        appendOptionalImages(compareData);
-
         const compareRes = await fetch('/api/compare-text-details', {
             method: 'POST',
             body: compareData
@@ -889,7 +888,7 @@ async function executeSubmit() {
         const hasConfirmedMatch = aiResult?.action === "show_match" &&
             aiResult?.matched_item?.id &&
             (aiResult.highest_score || 0) >= 0.55;
-        let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : (matchedItems[0] || null);
+        let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : null;
 
         if (matchedItems.length > 0) {
             let matchMessage = "";
@@ -924,6 +923,7 @@ async function executeSubmit() {
                 } : null,
                 matches: matchedItems
             }) || selectedMatch;
+            if (!hasConfirmedMatch) selectedMatch = null;
         } else {
             await showLostUploadAlert(
                 'info',
@@ -1131,12 +1131,15 @@ function viewItemDetails(item) {
     document.getElementById("modalCategory").innerText = item.category;
     document.getElementById("modalLocation").innerText = item.location || 'Not Specified';
     document.getElementById("modalDate").innerText = item.date ? new Date(item.date).toLocaleDateString() : 'N/A';
+    if (document.getElementById("modalItemCode")) {
+        document.getElementById("modalItemCode").innerText = item.lost_id || item.item_code || 'N/A';
+    }
     
     // --- ADDED MISSING COLUMNS ---
     
     // 1. Uploader Info (Shows who reported it)
     if (document.getElementById("modalUploader")) {
-        document.getElementById("modalUploader").innerText = item.uploader_name || `User ID: ${item.user_id}`;
+        document.getElementById("modalUploader").innerText = item.uploader_name || 'Unknown User';
     }
 
     // 2. Physical Traits (Brand/Color)
@@ -1260,7 +1263,7 @@ function viewItemDetails(item) {
             }
         };
     </script>
-<script src="/static/session-keepalive.js?v=5"></script>
+<script src="/static/session-keepalive.js?v=7"></script>
 <script src="/static/student-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>

@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, EmailStr
 import models  # This is already there
 from database import engine, get_db
-from utils import UPLOAD_FOLDER, public_file_url, save_file, resolve_category_name, validate_upload_file_size
+from utils import UPLOAD_FOLDER, public_file_url, save_file, resolve_category_name, validate_upload_file_size, format_item_code
 from sqlalchemy import and_, or_, func
 from sqlalchemy import text
 from clip_test import (
@@ -331,6 +331,50 @@ def ensure_item_possible_matches_column():
         connection.execute(text(statement))
 
 
+def ensure_item_report_owner_columns():
+    statements = [
+        """
+        IF COL_LENGTH('items', 'report_owner_user_id') IS NULL
+        BEGIN
+            ALTER TABLE items ADD report_owner_user_id INT NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('items', 'report_owner_name') IS NULL
+        BEGIN
+            ALTER TABLE items ADD report_owner_name NVARCHAR(255) NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('items', 'report_owner_group') IS NULL
+        BEGIN
+            ALTER TABLE items ADD report_owner_group NVARCHAR(100) NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('reference_items', 'report_owner_user_id') IS NULL
+        BEGIN
+            ALTER TABLE reference_items ADD report_owner_user_id INT NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('reference_items', 'report_owner_name') IS NULL
+        BEGIN
+            ALTER TABLE reference_items ADD report_owner_name NVARCHAR(255) NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('reference_items', 'report_owner_group') IS NULL
+        BEGIN
+            ALTER TABLE reference_items ADD report_owner_group NVARCHAR(100) NULL
+        END
+        """,
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
 def ensure_item_id_column():
     statement = """
     IF COL_LENGTH('items', 'item_id') IS NULL
@@ -595,6 +639,7 @@ def create_default_admin():
     ensure_item_id_column()
     ensure_item_code_column()
     ensure_item_possible_matches_column()
+    ensure_item_report_owner_columns()
     ensure_notification_columns()
     ensure_report_module_indexes()
     db = next(get_db())
@@ -1005,17 +1050,19 @@ def search_users(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    search_text = (q or "").strip()
+    search_text = (q or "").strip().lower()
+    search_terms = [term for term in search_text.split() if term]
     query = db.query(models.User)
 
-    if search_text:
+    for term in search_terms:
         query = query.filter(
             or_(
-                models.User.email.contains(search_text),
-                models.User.full_name.contains(search_text),
-                models.User.student_no.contains(search_text),
-                models.User.course.contains(search_text),
-                models.User.department.contains(search_text)
+                func.lower(models.User.email).contains(term),
+                func.lower(models.User.full_name).contains(term),
+                func.lower(models.User.student_no).contains(term),
+                func.lower(models.User.course).contains(term),
+                func.lower(models.User.department).contains(term),
+                func.lower(models.User.section).contains(term)
             )
         )
 
@@ -1033,6 +1080,9 @@ def search_users(
             "full_name": get_user_display_name(u),
             "role_label": get_user_role_label(u),
             "student_no": u.student_no,
+            "course": u.course,
+            "section": u.section,
+            "department": u.department,
         }
         for u in users
     ]
@@ -1224,31 +1274,14 @@ def compute_text_detail_matches(
             "action": "no_match"
         }
 
-    items = db.query(models.Item).outerjoin(models.Category).filter(
-        models.Item.status.ilike(target_status),
-        or_(
-            models.Item.category == normalized_category,
-            models.Category.name == normalized_category
-        ),
-        models.Item.is_matched == False,
-        models.Item.archived == False
-    ).all()
-
-    if exclude_item_id is not None:
-        items = [item for item in items if item.id != exclude_item_id]
-
-    reference_items = db.query(models.ReferenceItem).filter(
-        models.ReferenceItem.status.ilike(target_status),
-        func.lower(models.ReferenceItem.category) == normalized_category.lower(),
-        models.ReferenceItem.image_embedding.isnot(None)
-    ).all()
-
     strict_match_threshold = 0.55
     possible_match_threshold = 0.45   # adjust if needed
 
-    all_matches = []
+    def item_category_name(item: models.Item) -> str:
+        return item.category_relationship.name if getattr(item, "category_relationship", None) else item.category
 
-    if items:
+    def score_items(items: list[models.Item], reference_items: list[models.ReferenceItem]) -> list[dict]:
+        matches = []
         for item in items:
             try:
                 if not item.image_embedding:
@@ -1289,23 +1322,41 @@ def compute_text_detail_matches(
                 score += get_reference_bonus(item, search_vec, reference_items)
 
                 if score >= possible_match_threshold:
-                    all_matches.append({
+                    matches.append({
                         "id": item.id,
                         "score": round(score, 4),
-                        "category": item.category_relationship.name if getattr(item, "category_relationship", None) else item.category,
+                        "category": item_category_name(item),
                         "location": item.location,
                         "image_path": public_file_url(item.image_path),
                         "brand": item.brand,
                         "color": item.color,
-                        "description": item.description
+                        "description": item.description,
                     })
 
             except Exception as e:
                 print(f"Error: {e}")
                 continue
+        return matches
+
+    candidate_items = db.query(models.Item).outerjoin(models.Category).filter(
+        models.Item.status.ilike(target_status),
+        models.Item.is_matched == False,
+        models.Item.archived == False
+    ).all()
+
+    if exclude_item_id is not None:
+        candidate_items = [item for item in candidate_items if item.id != exclude_item_id]
+
+    reference_items = db.query(models.ReferenceItem).filter(
+        models.ReferenceItem.status.ilike(target_status),
+        models.ReferenceItem.image_embedding.isnot(None)
+    ).all()
+
+    all_matches = score_items(candidate_items, reference_items)
 
     # Sort highest to lowest
     all_matches.sort(key=lambda x: x["score"], reverse=True)
+    all_matches = all_matches[:3]
 
     best_match = all_matches[0] if all_matches else None
     highest_score = best_match["score"] if best_match else 0.0
@@ -1315,7 +1366,8 @@ def compute_text_detail_matches(
         "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else list(search_vec),
         "matched_item": best_match if best_match and highest_score >= strict_match_threshold else None,
         "matched_items": all_matches,
-        "action": "show_match" if all_matches else "no_match"
+        "action": "show_match" if all_matches else "no_match",
+        "warning": None,
     }
 
 
@@ -1406,7 +1458,18 @@ def get_saved_item_possible_matches(
             "action": "no_match"
         }
 
-    if not current_user.is_admin and item.user_id != current_user.id:
+    current_user_name = format_user_display_name(current_user).strip().lower()
+    legacy_name_matches = (
+        not getattr(item, "report_owner_user_id", None)
+        and current_user_name
+        and str(getattr(item, "report_owner_name", "") or "").strip().lower() == current_user_name
+    )
+    user_owns_report = (
+        item.user_id == current_user.id
+        or getattr(item, "report_owner_user_id", None) == current_user.id
+        or legacy_name_matches
+    )
+    if not current_user.is_admin and not user_owns_report:
         raise HTTPException(status_code=403, detail="You do not have access to this item")
 
     if item.possible_matches:
@@ -1481,9 +1544,12 @@ def get_conversation_partners(db: Session = Depends(get_db), current_user: model
 
     # 2. Extract unique IDs (excluding the current user)
     partner_ids = set()
+    latest_by_partner_id = {}
     for s_id, r_id in msg_partners:
-        if s_id != current_user.id: partner_ids.add(s_id)
-        if r_id != current_user.id: partner_ids.add(r_id)
+        if s_id != current_user.id:
+            partner_ids.add(s_id)
+        if r_id != current_user.id:
+            partner_ids.add(r_id)
 
     # 3. If a student has NO history yet, we manually add the Admin 
     # so they have someone to talk to for the first time.
@@ -1496,8 +1562,27 @@ def get_conversation_partners(db: Session = Depends(get_db), current_user: model
     users = db.query(models.User).filter(models.User.is_admin == True if not current_user.is_admin else models.User.id.in_(partner_ids)).all()
     # Note: The logic above ensures students see Admins, and Admins see their history.
 
+    if partner_ids:
+        latest_messages = (
+            db.query(models.Message)
+            .filter(
+                or_(
+                    models.Message.sender_id == current_user.id,
+                    models.Message.recipient_id == current_user.id
+                )
+            )
+            .order_by(models.Message.created_at.desc(), models.Message.id.desc())
+            .all()
+        )
+
+        for message in latest_messages:
+            partner_id = message.recipient_id if message.sender_id == current_user.id else message.sender_id
+            if partner_id in partner_ids and partner_id not in latest_by_partner_id:
+                latest_by_partner_id[partner_id] = message
+
     result = []
     for u in users:
+        latest_message = latest_by_partner_id.get(u.id)
         unread_count = db.query(models.Message).filter(
             models.Message.sender_id == u.id,
             models.Message.recipient_id == current_user.id,
@@ -1512,7 +1597,12 @@ def get_conversation_partners(db: Session = Depends(get_db), current_user: model
             "has_unread": unread_count > 0,
             "role_label": get_user_role_label(u),
             "student_no": u.student_no,
+            "last_message": latest_message.content if latest_message else "",
+            "last_message_at": latest_message.created_at if latest_message else None,
+            "is_outgoing": bool(latest_message and latest_message.sender_id == current_user.id),
         })
+
+    result.sort(key=lambda user: user["last_message_at"] or datetime.min, reverse=True)
     return result
 
 @app.get("/api/messages/unread-count")
@@ -1534,12 +1624,7 @@ def get_recent_message_interactions(
     recent_messages = (
         db.query(models.Message)
         .options(joinedload(models.Message.sender), joinedload(models.Message.recipient))
-        .filter(
-            or_(
-                models.Message.sender_id == current_user.id,
-                models.Message.recipient_id == current_user.id,
-            )
-        )
+        .filter(models.Message.recipient_id == current_user.id)
         .order_by(models.Message.created_at.desc(), models.Message.id.desc())
         .limit(200)
         .all()
@@ -1549,7 +1634,7 @@ def get_recent_message_interactions(
     seen_partner_ids = set()
 
     for message in recent_messages:
-        partner = message.recipient if message.sender_id == current_user.id else message.sender
+        partner = message.sender
         if not partner or partner.id in seen_partner_ids:
             continue
 
@@ -1567,7 +1652,7 @@ def get_recent_message_interactions(
             "role_label": get_user_role_label(partner),
             "last_message": message.content or "",
             "last_message_at": message.created_at,
-            "is_outgoing": message.sender_id == current_user.id,
+            "is_outgoing": False,
             "unread_count": unread_count,
         })
 
@@ -1575,6 +1660,45 @@ def get_recent_message_interactions(
             break
 
     return interactions
+
+
+def serialize_pending_found_match(pending_item: models.PendingItem, score: float | None = None) -> dict:
+    return {
+        "id": pending_item.id,
+        "score": round(float(score or 0), 4),
+        "category": pending_item.category,
+        "location": pending_item.location,
+        "image_path": public_file_url(pending_item.image_path),
+        "brand": pending_item.brand,
+        "color": pending_item.color,
+        "description": pending_item.description,
+        "source": "pending_found",
+    }
+
+
+def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> int:
+    existing_matches = []
+    if lost_item.possible_matches:
+        try:
+            parsed_matches = json.loads(lost_item.possible_matches)
+            existing_matches = parsed_matches if isinstance(parsed_matches, list) else []
+        except Exception:
+            existing_matches = []
+
+    match_id = match_payload.get("id")
+    match_source = match_payload.get("source", "found")
+    deduped_matches = [
+        match for match in existing_matches
+        if not (
+            isinstance(match, dict)
+            and match.get("id") == match_id
+            and match.get("source", "found") == match_source
+        )
+    ]
+    updated_matches = [match_payload, *deduped_matches][:3]
+    lost_item.possible_matches = json.dumps(updated_matches)
+    return len(updated_matches)
+
 
 @app.post("/api/save-found-item")
 async def save_found_item(
@@ -1589,8 +1713,8 @@ async def save_found_item(
     image: UploadFile = File(...),
     image_embedding: str = Form(...), # Received from the previous AI call
     matched_item_id: int = Form(None),
-    user_id: int = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
     # 1. SAVE THE IMAGE FILE
     try:
@@ -1628,7 +1752,7 @@ async def save_found_item(
         image_path=save_path,
         image_embedding=normalized_image_embedding,
         matched_item_id=matched_item_id,
-        user_id=user_id
+        user_id=current_user.id
     )
     
     db.add(new_pending)
@@ -1649,9 +1773,40 @@ async def save_found_item(
     )
     
     db.add(admin_notif)
+
+    if matched_item_id:
+        matched_lost_item = db.query(models.Item).filter(
+            models.Item.id == matched_item_id,
+            models.Item.status == "lost",
+            models.Item.archived == False
+        ).first()
+
+        if matched_lost_item:
+            new_pending.matched_item_id = matched_lost_item.id
+            possible_match_count = prepend_lost_possible_match(
+                matched_lost_item,
+                serialize_pending_found_match(new_pending, 0.55)
+            )
+
+            if matched_lost_item.user_id:
+                reporter_name = format_user_display_name(current_user)
+                db.add(models.Notification(
+                    message=f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
+                    type="student_match",
+                    related_id=matched_lost_item.user_id,
+                    target_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
+                    is_read=False,
+                    created_at=datetime.utcnow()
+                ))
+
     db.commit()
     
-    return {"message": "Submitted successfully", "pending_id": new_pending.id}
+    return {
+        "message": "Submitted successfully",
+        "pending_id": new_pending.id,
+        "item_code": format_item_code("pending_found", new_pending.id),
+        "reported_by": format_user_display_name(current_user),
+    }
 
 
 @app.post("/api/lost-report-upload")
@@ -1812,6 +1967,8 @@ async def lost_report_upload(
         "status": "success", 
         "ai_match": ai_match_found, 
         "item_id": new_lost_report.id,
+        "item_code": format_item_code("lost", new_lost_report.id, getattr(new_lost_report, "item_code", None)),
+        "reported_by": format_user_display_name(current_user),
         "match_score": f"{final_score * 100:.1f}%" if ai_match_found else None,
         "is_matched": False
     }
@@ -1887,6 +2044,10 @@ async def send_message(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+
     # 1. Save the actual Message
     new_msg = models.Message(
         sender_id=current_user.id,
@@ -1909,13 +2070,12 @@ async def send_message(
         db.add(new_notif)
     
     else:
-        # Admin sending to Student
         admin_name = current_user.full_name or current_user.email or "LookFor Admin"
         new_notif = models.Notification(
             message=f"{admin_name} sent you a message.",
             type="chat",
-            related_id=recipient_id, # Target the specific student's ID here
-            target_url="/student/Messages",
+            related_id=recipient_id,
+            target_url="/admin/Messages" if recipient.is_admin else "/student/Messages",
             is_read=False
         )
         db.add(new_notif)
@@ -1958,7 +2118,7 @@ def get_claims(
             "claimant": {
                 "name": claimant_name,
                 "student_no": proof.claimant_student_no if proof else None,
-                "id_image": proof.id_image_path if proof else None,
+                "id_image": public_file_url(proof.id_image_path) if proof else None,
                 "has_proof": bool(proof and proof.id_image_path)
             },
             "report": build_claim_report_payload(claim, db)
@@ -2304,6 +2464,9 @@ def get_report_module_data(
                     models.Item.status,
                     models.Item.category,
                     models.Item.created_at,
+                    models.Item.report_owner_user_id,
+                    models.Item.report_owner_name,
+                    models.Item.report_owner_group,
                     models.Item.brand,
                     models.Item.color,
                     models.Item.archived,
@@ -2334,6 +2497,9 @@ def get_report_module_data(
             owner = item.owner
             report_item_id = item_report_id(item)
             report_item_code = item_report_code(item)
+            reported_person_name = str(getattr(item, "report_owner_name", "") or "").strip()
+            reported_person_group = str(getattr(item, "report_owner_group", "") or "").strip()
+            reported_by = reported_person_name or display_name(owner)
             rows.append({
                 "row_type": item.status or "item",
                 "row_id": report_item_code or f"ITEM-{report_item_id}",
@@ -2344,7 +2510,7 @@ def get_report_module_data(
                 "location": item.location or "Not specified",
                 "status": "Lost" if item.status == "lost" else "Found",
                 "date": item.date.isoformat() if item.date else (item.created_at.isoformat() if item.created_at else None),
-                "reported_by": display_name(owner),
+                "reported_by": reported_by,
                 "image_path": public_file_url(item.image_path),
                 "details": {
                     "Item Code": report_item_code or "Not specified",
@@ -2356,7 +2522,9 @@ def get_report_module_data(
                     "Color": item.color or "Not specified",
                     "Location": item.location or "Not specified",
                     "Description": item.description or "No description provided.",
-                    "Reported By": display_name(owner),
+                    "Reported By": reported_by,
+                    "Section / Role": reported_person_group or "Not specified",
+                    "Entered By": display_name(owner),
                     "Date": item.date.isoformat() if item.date else "Not specified",
                 },
                 "claim_payload": None,
@@ -3010,114 +3178,46 @@ async def update_bulk_content(
 # Make sure this is flush with the left margin (or aligned with your other routes)
 @app.get("/api/content/landing")
 async def get_landing_content(db: Session = Depends(get_db)):
-    # 1. Fetch Hero Data
-    hero_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "hero"
-    ).first()
+    content_by_key = {
+        content.section_key: content
+        for content in db.query(models.LandingContent).all()
+    }
 
-    # 2. Fetch Why Choose Us Data
-    why_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "why_choose_us"
-    ).first()
-    cta_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "cta-feature"
-    ).first()
-    reunite_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "reunite"
-    ).first()
-    how_it_works_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "how_it_works"
-    ).first()
-    features_main_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "features_main"
-    ).first()
-    feature_1_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "feature_1"
-    ).first()
-    feature_2_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "feature_2"
-    ).first()
-    feature_3_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "feature_3"
-    ).first()
-    feature_4_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "feature_4"
-    ).first()
-    explore_hero_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_hero"
-    ).first()
-    explore_student_section_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_student_section"
-    ).first()
-    explore_student_1_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_student_1"
-    ).first()
-    explore_student_2_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_student_2"
-    ).first()
-    explore_student_3_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_student_3"
-    ).first()
-    explore_admin_section_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_admin_section"
-    ).first()
-    explore_admin_1_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_admin_1"
-    ).first()
-    explore_admin_2_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_admin_2"
-    ).first()
-    explore_admin_3_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_admin_3"
-    ).first()
-    explore_cta_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "explore_cta"
-    ).first()
-    about_hero_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_hero"
-    ).first()
-    about_benefits_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_benefits"
-    ).first()
-    about_benefit_1_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_benefit_1"
-    ).first()
-    about_benefit_2_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_benefit_2"
-    ).first()
-    about_benefit_3_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_benefit_3"
-    ).first()
-    about_clip_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_clip"
-    ).first()
-    about_clip_1_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_clip_1"
-    ).first()
-    about_clip_2_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_clip_2"
-    ).first()
-    about_clip_3_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_clip_3"
-    ).first()
-    about_system_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_system"
-    ).first()
-    about_system_1_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_system_1"
-    ).first()
-    about_system_2_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_system_2"
-    ).first()
-    about_system_3_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_system_3"
-    ).first()
-    about_system_graphic_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_system_graphic"
-    ).first()
-    about_cta_data = db.query(models.LandingContent).filter(
-        models.LandingContent.section_key == "about_cta"
-    ).first()
+    hero_data = content_by_key.get("hero")
+    why_data = content_by_key.get("why_choose_us")
+    cta_data = content_by_key.get("cta-feature")
+    reunite_data = content_by_key.get("reunite")
+    how_it_works_data = content_by_key.get("how_it_works")
+    features_main_data = content_by_key.get("features_main")
+    feature_1_data = content_by_key.get("feature_1")
+    feature_2_data = content_by_key.get("feature_2")
+    feature_3_data = content_by_key.get("feature_3")
+    feature_4_data = content_by_key.get("feature_4")
+    explore_hero_data = content_by_key.get("explore_hero")
+    explore_student_section_data = content_by_key.get("explore_student_section")
+    explore_student_1_data = content_by_key.get("explore_student_1")
+    explore_student_2_data = content_by_key.get("explore_student_2")
+    explore_student_3_data = content_by_key.get("explore_student_3")
+    explore_admin_section_data = content_by_key.get("explore_admin_section")
+    explore_admin_1_data = content_by_key.get("explore_admin_1")
+    explore_admin_2_data = content_by_key.get("explore_admin_2")
+    explore_admin_3_data = content_by_key.get("explore_admin_3")
+    explore_cta_data = content_by_key.get("explore_cta")
+    about_hero_data = content_by_key.get("about_hero")
+    about_benefits_data = content_by_key.get("about_benefits")
+    about_benefit_1_data = content_by_key.get("about_benefit_1")
+    about_benefit_2_data = content_by_key.get("about_benefit_2")
+    about_benefit_3_data = content_by_key.get("about_benefit_3")
+    about_clip_data = content_by_key.get("about_clip")
+    about_clip_1_data = content_by_key.get("about_clip_1")
+    about_clip_2_data = content_by_key.get("about_clip_2")
+    about_clip_3_data = content_by_key.get("about_clip_3")
+    about_system_data = content_by_key.get("about_system")
+    about_system_1_data = content_by_key.get("about_system_1")
+    about_system_2_data = content_by_key.get("about_system_2")
+    about_system_3_data = content_by_key.get("about_system_3")
+    about_system_graphic_data = content_by_key.get("about_system_graphic")
+    about_cta_data = content_by_key.get("about_cta")
 
     # Prepare the response dictionary
     response = {}
