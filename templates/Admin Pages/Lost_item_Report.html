@@ -624,15 +624,15 @@ function showAccessDeniedPopup(permName) {
     async function loadLostItems() {
         const grid = document.getElementById("lostItemsGrid");
         const token = sessionStorage.getItem("admin_token");
-        const controller = new AbortController();
-        const loadingTimeout = setTimeout(() => {
-            controller.abort();
+        const loadingNoticeTimeout = setTimeout(() => {
+            if (grid && !lostItemsCache.length) {
+                grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center; color:#114b7a;">Still loading items...</p>`;
+            }
         }, 2000);
 
         try {
             const response = await fetch(showingLostArchived ? '/admin/items/lost/archived' : '/admin/items/lost', {
-                headers: { 'Authorization': `Bearer ${token}` },
-                signal: controller.signal
+                headers: { 'Authorization': `Bearer ${token}` }
             });
             const items = await response.json();
             lostItemsCache = Array.isArray(items) ? items : [];
@@ -642,12 +642,9 @@ function showAccessDeniedPopup(permName) {
             renderLostItems();
         } catch (err) {
             console.error("Load Error:", err);
-            const message = err?.name === 'AbortError'
-                ? 'Loading took longer than 2 seconds. Please refresh or try a narrower filter.'
-                : 'Error loading items.';
-            grid.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">${message}</p>`;
+            grid.innerHTML = `<p style="color:red; text-align:center; grid-column: 1/-1;">Error loading items. Please refresh and try again.</p>`;
         } finally {
-            clearTimeout(loadingTimeout);
+            clearTimeout(loadingNoticeTimeout);
         }
     }
 
