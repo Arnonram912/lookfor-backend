@@ -783,7 +783,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
 
     # Tuning knobs
     lookup_chunk_size = 800      # SQL Server-safe lookup chunk for large 3k+ uploads
-    commit_chunk_size = 400      # fewer commits for faster large uploads, without one giant transaction
+    commit_chunk_size = 800      # fewer commits for faster large uploads, while keeping transactions bounded
     # Bcrypt is CPU-intensive. Four workers keeps bulk registration moving
     # without consuming every available server core.
     hash_workers = min(4, max(2, (os.cpu_count() or 4)))
@@ -995,7 +995,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                 existing_by_email[str(user.email).strip().lower()] = user
 
         # ---------------------------------------------------------
-        # PASS 3: hash + process in commit chunks
+        # PASS 3: hash all required passwords in one persistent pool
         # ---------------------------------------------------------
         from concurrent.futures import as_completed
 
@@ -1019,6 +1019,42 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             user.is_admin = False
             user.permissions = row["permissions"]
 
+        rows_to_hash = []
+        for row in normalized_rows:
+            email_key = row["email"].strip().lower() if row["email"] else ""
+            existing_user = (
+                existing_by_student_no.get(row["student_no"])
+                or existing_by_email.get(email_key)
+            )
+            needs_password = (
+                existing_user is None
+                or (
+                    not existing_user.is_admin
+                    and (
+                        existing_user.is_archived
+                        or duplicate_action == "replace"
+                    )
+                )
+            )
+            if needs_password:
+                rows_to_hash.append(row)
+
+        if rows_to_hash:
+            update_bulk_job(
+                job_id,
+                message=f"Securely preparing passwords for {len(rows_to_hash):,} users..."
+            )
+            with ThreadPoolExecutor(max_workers=hash_workers) as executor:
+                futures = {
+                    executor.submit(hash_password, row): row
+                    for row in rows_to_hash
+                }
+                for future in as_completed(futures):
+                    futures[future]["hashed_password"] = future.result()
+
+        # ---------------------------------------------------------
+        # PASS 4: write users in bounded transaction chunks
+        # ---------------------------------------------------------
         processed_valid_rows = processed_seed
 
         for row_chunk in chunked(normalized_rows, commit_chunk_size):
@@ -1031,40 +1067,6 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             }
 
             try:
-                if row_chunk:
-                    rows_to_hash = []
-                    for row in row_chunk:
-                        email_key = row["email"].strip().lower() if row["email"] else ""
-                        existing_user = (
-                            existing_by_student_no.get(row["student_no"])
-                            or existing_by_email.get(email_key)
-                        )
-
-                        # New and replaced accounts need a new password. Existing
-                        # admins and active duplicates set to "ignore" do not.
-                        needs_password = (
-                            existing_user is None
-                            or (
-                                not existing_user.is_admin
-                                and (
-                                    existing_user.is_archived
-                                    or duplicate_action == "replace"
-                                )
-                            )
-                        )
-                        if needs_password:
-                            rows_to_hash.append(row)
-
-                    if rows_to_hash:
-                        with ThreadPoolExecutor(max_workers=hash_workers) as executor:
-                            futures = {
-                                executor.submit(hash_password, row): row
-                                for row in rows_to_hash
-                            }
-
-                            for future in as_completed(futures):
-                                futures[future]["hashed_password"] = future.result()
-
                 update_bulk_job(
                     job_id,
                     message=f"Processing users {processed_valid_rows + 1}-{min(processed_valid_rows + len(row_chunk), total_students)} of {total_students}..."
