@@ -41,7 +41,7 @@
                 <span id="cms-app-button-label">Download Android App (APK)</span>
             </div>
             <p class="app-download-notice" id="cms-app-notice">Only install apps from sources you trust.</p>
-            <p id="cms-app-apk-url" style="margin:12px auto 0;font-size:13px;">/static/downloads/lookfor-app.apk</p>
+            <p id="cms-app-apk-url" style="margin:12px auto 0;font-size:13px;">/download/lookfor-app.apk</p>
         </div>
     </section>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
@@ -76,7 +76,7 @@
             document.getElementById('cms-app-eyebrow').innerText = data.app_download.eyebrow || 'LookFor on Android';
             document.getElementById('cms-app-button-label').innerText = appParts[0] || 'Download Android App (APK)';
             document.getElementById('cms-app-notice').innerText = appParts[1] || '';
-            document.getElementById('cms-app-apk-url').innerText = appParts[2] || '/static/downloads/lookfor-app.apk';
+            document.getElementById('cms-app-apk-url').innerText = appParts[2] || '/download/lookfor-app.apk';
         }
 
         // --- LOAD WHY CHOOSE US SECTION ---

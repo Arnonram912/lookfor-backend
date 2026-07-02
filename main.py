@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPExcep
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload, load_only
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -980,6 +980,23 @@ def explore_page(request: Request):
 @app.get("/about")
 def about_page(request: Request):
     return templates.TemplateResponse("aboutlookfor.html", {"request": request})
+
+
+@app.get("/download/lookfor-app.apk", include_in_schema=False)
+def download_android_app():
+    apk_path = os.path.join(STATIC_DIR, "downloads", "lookfor-app.apk")
+    if not os.path.isfile(apk_path):
+        raise HTTPException(status_code=404, detail="Android app download is unavailable.")
+
+    return FileResponse(
+        path=apk_path,
+        media_type="application/vnd.android.package-archive",
+        filename="LookFor-Android.apk",
+        headers={
+            "Content-Disposition": 'attachment; filename="LookFor-Android.apk"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 
@@ -3315,7 +3332,7 @@ async def get_landing_content(db: Session = Depends(get_db)):
         }
     response["app_download"] = {
         "eyebrow": app_download_data.title if app_download_data and app_download_data.title else "LookFor on Android",
-        "description": app_download_data.description if app_download_data and app_download_data.description else "Download Android App (APK)|||Installing the APK? Android may ask you to allow installation from your browser or file manager. Only install apps from sources you trust.|||/static/downloads/lookfor-app.apk",
+        "description": app_download_data.description if app_download_data and app_download_data.description else "Download Android App (APK)|||Installing the APK? Android may ask you to allow installation from your browser or file manager. Only install apps from sources you trust.|||/download/lookfor-app.apk",
     }
     response["faq"] = {
         "title": faq_data.title if faq_data and faq_data.title else "Frequently asked questions",

@@ -100,7 +100,7 @@
             document.getElementById('cms-app-button-label').innerText =
                 appParts[0] || 'Download Android App (APK)';
             document.getElementById('cms-app-notice').innerText = appParts[1] || '';
-            window.lookForApkPath = appParts[2] || '/static/downloads/lookfor-app.apk';
+            window.lookForApkPath = appParts[2] || '/download/lookfor-app.apk';
         }
 
         // --- LOAD WHY CHOOSE US SECTION ---
@@ -252,7 +252,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
         <p class="app-download-modal-copy">
             Scan to download <strong>LookFor App</strong> or visit:
         </p>
-        <a class="app-download-site-link" id="appDownloadSiteLink" href="/static/downloads/lookfor-app.apk" download="LookFor-Android.apk">
+        <a class="app-download-site-link" id="appDownloadSiteLink" href="/download/lookfor-app.apk" download="LookFor-Android.apk">
             <span aria-hidden="true">&#127760;</span>
             <span id="appDownloadSiteText">Download APK directly</span>
         </a>
@@ -438,7 +438,10 @@ document.querySelectorAll('.step-card').forEach((card) => {
 
 <script>
 function getLookForApkUrl() {
-    const configuredPath = window.lookForApkPath || '/static/downloads/lookfor-app.apk';
+    let configuredPath = window.lookForApkPath || '/download/lookfor-app.apk';
+    if (/\/static\/downloads\/lookfor-app\.apk(?:$|[?#])/i.test(configuredPath)) {
+        configuredPath = '/download/lookfor-app.apk';
+    }
     return new URL(configuredPath, window.location.origin).href;
 }
 
