@@ -1095,7 +1095,10 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                             })
 
                         elif existing_user.is_archived:
-                            apply_registration_row_to_user(existing_user, row, keep_archived=True)
+                            # Semester-end processing archives prior-term students.
+                            # Registering one again means they are enrolled for the
+                            # current term, so restore the account to the active list.
+                            apply_registration_row_to_user(existing_user, row, keep_archived=False)
 
                             existing_by_student_no[s_id] = existing_user
                             if email_key:
@@ -1111,7 +1114,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 "level": row["level"],
                                 "batch_id": row["batch_id"],
                                 "temp_password": row["temp_password"],
-                                "status": "Saved to archived duplicate"
+                                "status": "Re-registered for current term"
                             })
 
                         elif duplicate_action == "ignore":
@@ -1227,7 +1230,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 )
 
                             elif existing_user.is_archived:
-                                apply_registration_row_to_user(existing_user, row, keep_archived=True)
+                                apply_registration_row_to_user(existing_user, row, keep_archived=False)
 
                                 db.commit()
 
@@ -1245,7 +1248,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                     "level": row["level"],
                                     "batch_id": row["batch_id"],
                                     "temp_password": row["temp_password"],
-                                    "status": "Saved to archived duplicate"
+                                    "status": "Re-registered for current term"
                                 })
                                 processed_valid_rows += 1
                                 push_bulk_progress(
