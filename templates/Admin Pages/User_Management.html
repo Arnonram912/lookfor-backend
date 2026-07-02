@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/User_Management.css?v=22">
+    <link rel="stylesheet" href="/static/User_Management.css?v=23">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
@@ -260,7 +260,14 @@
 </div>
 
 <div id="studentContainer" class="table-box" style="display:none;">
-    <div id="studentYearEndTermLabel" class="student-year-term-label" style="display:none;"></div>
+    <div id="studentYearEndTermLabel" class="student-year-term-label" style="display:none;" aria-live="polite">
+        <span class="student-year-term-heading">
+            <i class="fas fa-calendar-check" aria-hidden="true"></i>
+            Active Academic Term
+        </span>
+        <strong id="studentActiveAcademicTerm"></strong>
+        <span id="studentAcademicTermStatus" class="student-year-term-status">Active</span>
+    </div>
     <table class="user-table">
         <thead><tr><th>Select</th><th>Student ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course / Strand</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="studentTableBody"></tbody>
@@ -2029,8 +2036,28 @@ function renderSemesterFilterCheckboxes(containerId, items, selectedSet, labelFo
 function updateStudentYearEndTermLabel() {
     const label = document.getElementById('studentYearEndTermLabel');
     if (!label) return;
-    label.style.display = 'none';
-    label.textContent = '';
+
+    if (currentView !== 'student') {
+        label.style.display = 'none';
+        return;
+    }
+
+    const academicYear = academicTermSetting?.current_academic_year || getDefaultAcademicYearRange();
+    const semester = academicTermSetting?.current_semester || getDefaultSemesterTerm();
+    const isEnded = academicTermSetting?.current_status === 'ended';
+    const termText = document.getElementById('studentActiveAcademicTerm');
+    const status = document.getElementById('studentAcademicTermStatus');
+    const heading = label.querySelector('.student-year-term-heading');
+
+    if (termText) termText.textContent = `${academicYear} · ${semester}`;
+    if (heading) {
+        heading.lastChild.textContent = isEnded ? ' Current Academic Term' : ' Active Academic Term';
+    }
+    if (status) {
+        status.textContent = isEnded ? 'Ended' : 'Active';
+        status.classList.toggle('ended', isEnded);
+    }
+    label.style.display = 'flex';
 }
 
 function populateSemesterFilterOptions() {
