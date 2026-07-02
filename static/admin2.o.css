@@ -124,6 +124,21 @@ body > .sidebar {
     flex-shrink: 0 !important;
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.38) transparent;
+}
+
+body > .sidebar::-webkit-scrollbar {
+    width: 5px;
+}
+
+body > .sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+body > .sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.38);
+    border-radius: 999px;
 }
 
 body > .sidebar .logow {
@@ -196,6 +211,38 @@ body > .sidebar .nav-links .side-icon {
     margin: 0 12px 0 0 !important;
     object-fit: contain !important;
     filter: brightness(0) invert(1) !important;
+}
+
+/*
+ * Keep the complete admin menu visible at common laptop heights and when the
+ * browser is slightly zoomed. Scrolling remains available for smaller screens.
+ */
+@media (max-height: 1000px) {
+    body > .sidebar .logow {
+        height: 82px !important;
+        min-height: 82px !important;
+        font-size: 36px !important;
+    }
+
+    body > .sidebar .nav-links li {
+        min-height: 43px !important;
+        padding: 10px 25px !important;
+        line-height: 19px !important;
+    }
+}
+
+@media (max-height: 760px) {
+    body > .sidebar .logow {
+        height: 70px !important;
+        min-height: 70px !important;
+        font-size: 32px !important;
+    }
+
+    body > .sidebar .nav-links li {
+        min-height: 39px !important;
+        padding: 8px 22px !important;
+        font-size: 13px !important;
+    }
 }
 
 /* Dashboard Main Area */
