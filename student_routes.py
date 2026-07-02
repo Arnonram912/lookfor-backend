@@ -227,6 +227,7 @@ def serialize_student_item(item: models.Item, owner: models.User | None) -> dict
         "time_found": item.time_found,
         "is_matched": bool(item.is_matched),
         "archived": bool(item.archived),
+        "deleted": bool(getattr(item, "deleted", False)),
         "user_id": item.user_id,
         "report_owner_user_id": getattr(item, "report_owner_user_id", None),
         "uploader_name": report_owner_name or format_user_display_name(owner, "Self"),
@@ -243,6 +244,8 @@ def serialize_student_pending_found(item: models.PendingItem, owner: models.User
         "item_code": pending_code,
         "found_id": pending_code,
         "status": "pending_found",
+        "archived": bool(item.archived),
+        "deleted": bool(getattr(item, "deleted", False)),
         "item_name": item.item_name,
         "category": item.category,
         "brand": item.brand,
@@ -622,16 +625,28 @@ async def update_student_settings(
 # ... (your existing imports)
 @router.get("/items/found/me")
 async def get_my_found_items(
+    view: str = "active",
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
+    view = view if view in {"active", "archive", "deleted"} else "active"
+    lifecycle_filters = {
+        "active": (False, False),
+        "archive": (True, False),
+        "deleted": (True, True),
+    }
+    archived, deleted = lifecycle_filters[view]
     pending = db.query(models.PendingItem).filter(
-        models.PendingItem.user_id == current_user.id
+        models.PendingItem.user_id == current_user.id,
+        models.PendingItem.archived == archived,
+        models.PendingItem.deleted == deleted,
     ).all()
     
     approved = db.query(models.Item).filter(
         models.Item.user_id == current_user.id,
-        models.Item.status == "found"
+        models.Item.status == "found",
+        models.Item.archived == archived,
+        models.Item.deleted == deleted,
     ).all()
 
     results = []
@@ -824,9 +839,16 @@ async def submit_user_lost_report(
         raise HTTPException(status_code=500, detail="Failed to submit report")
 @router.get("/api/items/lost/me")
 async def get_my_lost_reports(
+    view: str = "active",
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
+    view = view if view in {"active", "archive", "deleted"} else "active"
+    archived, deleted = {
+        "active": (False, False),
+        "archive": (True, False),
+        "deleted": (True, True),
+    }[view]
     current_user_name = format_user_display_name(current_user, "").strip().lower()
     # Change 'LostItem' to 'Item' to match your models.py
     reports = db.query(models.Item).filter(
@@ -839,10 +861,108 @@ async def get_my_lost_reports(
             ) if current_user_name else False,
         ),
         models.Item.status == "lost",
-        models.Item.archived == 0
+        models.Item.archived == archived,
+        models.Item.deleted == deleted,
     ).all()
     
     return [serialize_student_item(report, current_user) for report in reports]
+
+
+def get_owned_student_report(db: Session, current_user: models.User, record_type: str, item_id: int):
+    if record_type == "pending-found":
+        return db.query(models.PendingItem).filter(
+            models.PendingItem.id == item_id,
+            models.PendingItem.user_id == current_user.id,
+        ).first()
+    if record_type not in {"found", "lost"}:
+        return None
+    return db.query(models.Item).filter(
+        models.Item.id == item_id,
+        models.Item.status == record_type,
+        or_(
+            models.Item.user_id == current_user.id,
+            models.Item.report_owner_user_id == current_user.id,
+        ),
+    ).first()
+
+
+@router.put("/items/{record_type}/{item_id}/archive")
+def archive_my_report(
+    record_type: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user),
+):
+    item = get_owned_student_report(db, current_user, record_type, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Report not found")
+    item.archived = True
+    item.deleted = False
+    db.commit()
+    return {"message": "Report archived"}
+
+
+@router.put("/items/{record_type}/{item_id}/delete")
+def delete_my_report(
+    record_type: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user),
+):
+    item = get_owned_student_report(db, current_user, record_type, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Report not found")
+    item.archived = True
+    item.deleted = True
+    db.commit()
+    return {"message": "Report moved to Deleted Items"}
+
+
+@router.put("/items/{record_type}/{item_id}/recover")
+def recover_my_report(
+    record_type: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user),
+):
+    item = get_owned_student_report(db, current_user, record_type, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Report not found")
+    item.archived = False
+    item.deleted = False
+    db.commit()
+    return {"message": "Report recovered"}
+
+
+@router.delete("/items/{record_type}/{item_id}/permanent")
+def permanently_delete_my_report(
+    record_type: str,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user),
+):
+    item = get_owned_student_report(db, current_user, record_type, item_id)
+    if not item or not bool(getattr(item, "deleted", False)):
+        raise HTTPException(status_code=404, detail="Deleted report not found")
+    if record_type != "pending-found":
+        linked_claims = db.query(models.Claim).filter(or_(
+            models.Claim.lost_item_id == item_id,
+            models.Claim.found_item_id == item_id,
+        )).all()
+        if linked_claims:
+            claim_ids = [claim.id for claim in linked_claims]
+            db.query(models.ClaimDecisionReport).filter(
+                models.ClaimDecisionReport.claim_id.in_(claim_ids)
+            ).delete(synchronize_session=False)
+            db.query(models.ClaimProof).filter(
+                models.ClaimProof.claim_id.in_(claim_ids)
+            ).delete(synchronize_session=False)
+            db.query(models.Claim).filter(
+                models.Claim.id.in_(claim_ids)
+            ).delete(synchronize_session=False)
+    db.delete(item)
+    db.commit()
+    return {"message": "Report permanently deleted"}
 
 # --- Your existing page routes below ---
 

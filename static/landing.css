@@ -18,6 +18,264 @@
 
 } 
 
+/* Android app download callout */
+.app-download-section {
+    position: relative;
+    padding: clamp(72px, 9vw, 120px) 24px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 18% 25%, rgba(0, 91, 171, 0.08), transparent 24rem),
+        radial-gradient(circle at 82% 75%, rgba(255, 224, 0, 0.13), transparent 22rem),
+        #ffffff;
+    border-top: 1px solid #e8eef5;
+    border-bottom: 1px solid #e8eef5;
+}
+
+.app-download-inner {
+    width: min(820px, 100%);
+    margin: 0 auto;
+    text-align: center;
+}
+
+.app-hero-content {
+    width: min(850px, calc(100% - 36px));
+    padding: 48px 30px;
+}
+
+.app-hero-content h1 span {
+    color: var(--sti-blue);
+}
+
+.app-hero-content #cms-hero-desc {
+    max-width: 700px;
+    margin: 22px auto 34px;
+    color: #52657a;
+    line-height: 1.75;
+}
+
+.app-hero-content .app-download-notice {
+    margin: 38px auto 0;
+    color: #64748b;
+    font-size: 0.92rem;
+}
+
+.app-download-eyebrow {
+    display: inline-block;
+    margin-bottom: 14px;
+    color: var(--sti-blue);
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.app-download-section h2 {
+    margin: 0;
+    color: var(--dark-blue);
+    font-family: 'Montserrat', sans-serif;
+    font-size: clamp(2.35rem, 5vw, 4rem);
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -0.045em;
+}
+
+.app-download-section h2 span {
+    color: var(--sti-blue);
+}
+
+.app-download-description {
+    max-width: 690px;
+    margin: 24px auto 34px;
+    color: #64748b;
+    font-family: 'Montserrat', sans-serif;
+    font-size: clamp(1rem, 1.8vw, 1.15rem);
+    line-height: 1.75;
+}
+
+.app-download-button {
+    min-height: 58px;
+    padding: 0 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 11px;
+    border-radius: 13px;
+    background: var(--sti-yellow);
+    color: #111827;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    text-decoration: none;
+    border: 0;
+    cursor: pointer;
+    box-shadow: 0 12px 30px rgba(255, 224, 0, 0.32);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+body.app-download-modal-open {
+    overflow: hidden;
+}
+
+.app-download-modal[hidden] {
+    display: none;
+}
+
+.app-download-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.app-download-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 31, 63, 0.72);
+    backdrop-filter: blur(5px);
+}
+
+.app-download-modal-card {
+    position: relative;
+    width: min(390px, 100%);
+    max-height: calc(100vh - 48px);
+    padding: 28px 26px 24px;
+    overflow-y: auto;
+    border: 5px solid var(--sti-yellow);
+    border-radius: 12px;
+    background: #ffffff;
+    text-align: center;
+    box-shadow: 0 24px 70px rgba(0, 28, 64, 0.35);
+    animation: appDownloadModalIn 0.22s ease-out;
+}
+
+@keyframes appDownloadModalIn {
+    from { opacity: 0; transform: translateY(18px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.app-download-modal-close {
+    position: absolute;
+    top: 9px;
+    right: 11px;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: #eef5fb;
+    color: var(--dark-blue);
+    font-size: 25px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.app-download-modal-card h2 {
+    margin: 2px 34px 18px;
+    color: var(--sti-blue);
+    font-family: 'Montserrat', sans-serif;
+    font-size: clamp(2rem, 8vw, 2.8rem);
+    font-weight: 800;
+    line-height: 1.05;
+}
+
+.app-download-scan-label {
+    margin: 0 auto 14px;
+    padding: 10px 18px;
+    border-radius: 18px;
+    background: var(--sti-yellow);
+    color: var(--sti-blue);
+    font-size: clamp(1.6rem, 7vw, 2.35rem);
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.app-download-qr-frame {
+    padding: 10px;
+    border: 4px solid var(--sti-blue);
+    border-radius: 14px;
+    background: #fff;
+}
+
+.app-download-qr-frame img {
+    width: 100%;
+    aspect-ratio: 1;
+    display: block;
+    object-fit: contain;
+}
+
+.app-download-modal-copy {
+    margin: 17px 0 10px;
+    color: #111827;
+    font-size: 0.88rem;
+    font-weight: 700;
+}
+
+.app-download-modal-copy strong {
+    color: var(--sti-blue);
+}
+
+.app-download-site-link {
+    max-width: 100%;
+    padding: 9px 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 8px;
+    background: var(--sti-blue);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.app-download-site-link:hover {
+    background: #004989;
+    color: #fff;
+}
+
+.app-download-button:hover {
+    background: #ffea3b;
+    color: #111827;
+    transform: translateY(-3px);
+    box-shadow: 0 17px 34px rgba(255, 224, 0, 0.4);
+}
+
+.app-download-button:focus-visible {
+    outline: 4px solid rgba(0, 91, 171, 0.28);
+    outline-offset: 4px;
+}
+
+.app-download-notice {
+    max-width: 720px;
+    margin: 46px auto 0;
+    color: #64748b;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.92rem;
+    line-height: 1.7;
+}
+
+@media (max-width: 560px) {
+    .app-download-section {
+        padding-inline: 18px;
+    }
+
+    .app-download-button {
+        width: 100%;
+        padding: 0 18px;
+    }
+
+    .app-download-button span {
+        display: none;
+    }
+
+    .app-download-notice {
+        margin-top: 34px;
+    }
+}
+
   
 
 * { 
@@ -1367,6 +1625,271 @@ padding: 0 20px;
     transition: all 0.3s ease; /* Smooth border transition */ 
 
 } 
+
+/* Landing page responsive layout */
+@media (max-width: 768px) {
+    html,
+    body {
+        height: auto;
+        overflow-x: hidden;
+    }
+
+    .navbar {
+        min-height: 68px;
+        padding: 9px 16px;
+        gap: 12px;
+    }
+
+    .logow,
+    .logow span {
+        font-size: 34px;
+    }
+
+    .navbar nav ul {
+        gap: 14px;
+    }
+
+    .navbar nav ul li a {
+        font-size: 0.82rem;
+    }
+
+    .btn-login {
+        padding: 9px 14px;
+        font-size: 0.82rem;
+    }
+
+    .hero {
+        height: auto;
+        min-height: 100svh;
+        padding: 92px 16px 40px;
+        background-position: center;
+    }
+
+    .app-hero-content {
+        width: 100%;
+        padding: 30px 18px;
+    }
+
+    .hero-content h1 {
+        font-size: clamp(2.15rem, 10vw, 3.2rem);
+        line-height: 1.08;
+        overflow-wrap: anywhere;
+    }
+
+    .app-hero-content #cms-hero-desc {
+        margin: 18px auto 26px;
+        font-size: 1rem;
+        line-height: 1.55;
+    }
+
+    .app-download-button {
+        max-width: 100%;
+        min-height: 54px;
+        padding: 10px 18px;
+    }
+
+    .app-hero-content .app-download-notice {
+        margin-top: 24px;
+        font-size: 0.8rem;
+        line-height: 1.5;
+    }
+
+    .cta-feature,
+    .why-choose-us,
+    .final-features,
+    .how-it-works,
+    .features-grid-section,
+    .faq-section {
+        padding: 56px 16px;
+    }
+
+    .feature-card {
+        padding: 38px 22px;
+        border-radius: 30px;
+        flex-direction: column;
+        gap: 32px;
+        text-align: center;
+    }
+
+    .feature-text {
+        text-align: center;
+    }
+
+    .feature-text h2,
+    .main-headline,
+    .reunite-header,
+    .section-title,
+    .section-header h2 {
+        font-size: clamp(1.9rem, 8vw, 2.5rem);
+    }
+
+    .feature-text p {
+        margin-bottom: 28px;
+        font-size: 1.05rem;
+    }
+
+    .feature-btns {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 24px;
+    }
+
+    .feature-image {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .feature-image img {
+        width: min(100%, 360px);
+        height: auto;
+    }
+
+    .content-wrapper {
+        flex-direction: column;
+        gap: 36px;
+    }
+
+    .lost-box-icon img {
+        width: min(100%, 280px);
+    }
+
+    .text-side,
+    .description p {
+        text-align: center;
+    }
+
+    .sub-headline {
+        font-size: 1.35rem;
+    }
+
+    .description p,
+    .feature-subtext {
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
+    .check-list {
+        width: 100%;
+        margin-bottom: 32px;
+        text-align: left;
+    }
+
+    .check-list li {
+        align-items: flex-start;
+        font-size: 1rem;
+        line-height: 1.45;
+    }
+
+    .check-icon {
+        flex: 0 0 30px;
+    }
+
+    .large-btn {
+        width: 100%;
+        padding: 17px 20px;
+    }
+
+    .steps-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 0;
+    }
+
+    .step-card {
+        width: 100%;
+        max-width: none;
+        padding: 44px 24px 30px;
+    }
+
+    .section-title,
+    .section-header {
+        margin-bottom: 36px;
+    }
+
+    .grid-container {
+        gap: 20px;
+    }
+
+    .feature-item {
+        padding: 24px 20px;
+    }
+
+    .faq-card {
+        padding: 24px 22px;
+        border-radius: 24px;
+    }
+
+    .social-footer {
+        padding: 24px;
+        justify-content: center;
+    }
+
+    .app-download-modal {
+        padding: 12px;
+    }
+
+    .app-download-modal-card {
+        max-height: calc(100svh - 24px);
+        padding: 24px 18px 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .navbar {
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+
+    .navbar nav {
+        order: 3;
+        width: 100%;
+    }
+
+    .navbar nav ul {
+        justify-content: center;
+        padding-top: 3px;
+    }
+
+    .hero {
+        padding-top: 126px;
+    }
+
+    .app-download-button {
+        width: 100%;
+    }
+
+    .app-download-button span {
+        display: inline;
+        font-size: 0.86rem;
+    }
+
+    .feature-btns {
+        flex-direction: column;
+    }
+
+    .btn-yellow,
+    .btn-link {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .feature-item {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .icon-box {
+        width: 68px;
+        margin: 0 0 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .floating-animation,
+    .pulse-animation {
+        animation: none;
+    }
+}
 
  
 

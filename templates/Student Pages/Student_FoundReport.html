@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Student Panel | LookFor STI</title>
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
     <link rel="stylesheet" href="/static/Found_item_report.css?v=15">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
@@ -126,6 +126,8 @@
                 <div class="profile-page-card">
                     <div class="action-bar">
                             <h2 class="section-title">Found Items <span></span></h2>
+                            <button class="upload-btn" id="studentFoundArchiveBtn" onclick="setStudentFoundView('archive')">Archive</button>
+                            <button class="upload-btn" id="studentFoundDeletedBtn" onclick="setStudentFoundView('deleted')">Deleted Items</button>
                             <button class="upload-btn" onclick="openModal('reportModal')">
                                 <span class="plus">+ Upload Found Item</span>
                             </button>
@@ -165,6 +167,7 @@
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
+                        <div id="studentFoundLifecycleActions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;"></div>
                     </div>
                 </div>
             </div>
@@ -367,6 +370,15 @@ window.onclick = function(event) {
             img.src = ITEM_IMAGE_FALLBACK;
         }
 
+        let studentFoundView = "active";
+
+        function setStudentFoundView(view) {
+            studentFoundView = studentFoundView === view ? "active" : view;
+            document.getElementById("studentFoundArchiveBtn").textContent = studentFoundView === "archive" ? "Show Active Items" : "Archive";
+            document.getElementById("studentFoundDeletedBtn").textContent = studentFoundView === "deleted" ? "Show Active Items" : "Deleted Items";
+            loadFoundItems();
+        }
+
         async function loadFoundItems() {
             const grid = document.getElementById("foundItemsGrid");
             const token = getStudentToken();
@@ -378,7 +390,7 @@ window.onclick = function(event) {
             }
 
             try {
-                const response = await fetch('/student/items/found/me', {
+                const response = await fetch(`/student/items/found/me?view=${studentFoundView}`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
@@ -400,7 +412,7 @@ window.onclick = function(event) {
                 const items = await response.json();
 
                 if (!items.length) {
-                    grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">You haven't surrendered any items yet.</p>`;
+                    grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${studentFoundView} found items.</p>`;
                     return;
                 }
 
@@ -602,7 +614,41 @@ window.onclick = function(event) {
             statusEl.innerText = (item.display_status || "Pending Approval").toUpperCase();
             statusEl.style.color = item.display_status === "Matched" ? "#28a745" : "#f59f00";
 
+            renderStudentFoundActions(item);
+
             openModal('itemDetailModal');
+        }
+
+        function studentFoundRecordType(item) {
+            return item.status === "pending_found" ? "pending-found" : "found";
+        }
+
+        function renderStudentFoundActions(item) {
+            const actions = document.getElementById("studentFoundLifecycleActions");
+            const type = studentFoundRecordType(item);
+            const button = (label, action, color) =>
+                `<button type="button" onclick="studentFoundLifecycleAction('${action}','${type}',${item.id})" style="border:0;border-radius:8px;padding:10px 14px;color:white;background:${color};cursor:pointer;font-weight:700;">${label}</button>`;
+            actions.innerHTML = studentFoundView === "active"
+                ? button("Archive", "archive", "#114b7a") + button("Delete", "delete", "#dc3545")
+                : studentFoundView === "archive"
+                    ? button("Recover", "recover", "#198754") + button("Delete", "delete", "#dc3545")
+                    : button("Recover", "recover", "#198754") + button("Delete Permanently", "permanent", "#b02a37");
+        }
+
+        async function studentFoundLifecycleAction(action, type, itemId) {
+            const permanent = action === "permanent";
+            if (!confirm(permanent ? "Permanently delete this report? This cannot be undone." : `Are you sure you want to ${action} this report?`)) return;
+            const response = await fetch(`/student/items/${type}/${itemId}/${action}`, {
+                method: permanent ? "DELETE" : "PUT",
+                headers: { 'Authorization': `Bearer ${getStudentToken()}` }
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                alert(result.detail || "Action failed.");
+                return;
+            }
+            closeModal("itemDetailModal");
+            loadFoundItems();
         }
 
         async function fetchCategories() {

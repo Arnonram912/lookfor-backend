@@ -73,6 +73,11 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
 
         if user is None:
             raise credentials_exception
+        if bool(getattr(user, "is_archived", False)):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This account is archived and disabled.",
+            )
         return user # Now returns the object with .id, .email, etc.
     except (JWTError, IndexError):
         raise credentials_exception
@@ -108,6 +113,11 @@ async def get_current_admin(
         admin = db.query(models.User).filter(models.User.email == email).first()
         if not admin:
             raise HTTPException(status_code=401, detail="User not found")
+        if bool(getattr(admin, "is_archived", False)):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This account is archived and disabled.",
+            )
             
         return admin 
 

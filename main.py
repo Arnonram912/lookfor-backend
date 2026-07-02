@@ -38,7 +38,7 @@ from clip_test import (
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from admin_messages import router as admin_messages_router
-from admin_routes import ADMIN_PERMISSION_KEYS, ROOT_ADMIN_EMAIL, router as admin_router, create_admin_notification
+from admin_routes import ADMIN_PERMISSION_KEYS, ROOT_ADMIN_EMAIL, router as admin_router, create_admin_notification, process_academic_term_schedule
 from student_routes import router as student_router
 from security import (
     pwd_context,
@@ -134,7 +134,7 @@ PAGE_ALIASES = {
     "/admin/Found_Items_Report": {
         "alias": "f63b7f52-4bb0-5d24-8a09-80b3d1f77db2",
         "template": "Admin Pages/Found_item_Report.html",
-        "label": "Surrendered Items",
+        "label": "Found Items",
     },
     "/admin/Claim-Management": {
         "alias": "f97a07ee-7138-519e-8e81-c077ced9ee0a",
@@ -329,6 +329,53 @@ def ensure_item_possible_matches_column():
     """
     with engine.begin() as connection:
         connection.execute(text(statement))
+
+
+def ensure_item_lifecycle_columns():
+    statements = [
+        """
+        IF COL_LENGTH('items', 'deleted') IS NULL
+        BEGIN
+            ALTER TABLE items ADD deleted BIT NOT NULL CONSTRAINT DF_items_deleted DEFAULT 0
+        END
+        """,
+        """
+        IF COL_LENGTH('pending_items', 'deleted') IS NULL
+        BEGIN
+            ALTER TABLE pending_items ADD deleted BIT NOT NULL CONSTRAINT DF_pending_items_deleted DEFAULT 0
+        END
+        """,
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_confiscated_disposal_columns():
+    statements = [
+        """
+        IF COL_LENGTH('confiscated_items', 'disposal_status') IS NULL
+        BEGIN
+            ALTER TABLE confiscated_items ADD disposal_status NVARCHAR(30) NOT NULL
+                CONSTRAINT DF_confiscated_disposal_status DEFAULT 'active'
+        END
+        """,
+        """
+        IF COL_LENGTH('confiscated_items', 'disposal_note') IS NULL
+        BEGIN
+            ALTER TABLE confiscated_items ADD disposal_note NVARCHAR(500) NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('confiscated_items', 'disposal_updated_at') IS NULL
+        BEGIN
+            ALTER TABLE confiscated_items ADD disposal_updated_at DATETIME2 NULL
+        END
+        """,
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
 
 
 def ensure_item_report_owner_columns():
@@ -639,11 +686,14 @@ def create_default_admin():
     ensure_item_id_column()
     ensure_item_code_column()
     ensure_item_possible_matches_column()
+    ensure_item_lifecycle_columns()
+    ensure_confiscated_disposal_columns()
     ensure_item_report_owner_columns()
     ensure_notification_columns()
     ensure_report_module_indexes()
     db = next(get_db())
     try:
+        process_academic_term_schedule(db)
         admin_email = ROOT_ADMIN_EMAIL
         admin_full_name = "LookForAdministrator"
         admin = db.query(models.User).filter(models.User.email == admin_email).first()
@@ -716,6 +766,11 @@ async def login_for_access_token(
         raise HTTPException(
             status_code=401, detail="invalid_email"
         )
+    if bool(user.is_archived):
+        raise HTTPException(
+            status_code=403,
+            detail="account_archived"
+        )
 
     # 2. Check if password is correct
     if not verify_password(form_data.password, user.hashed_password):
@@ -760,6 +815,9 @@ async def verify_mfa_code(
     if not user:
         MFA_PENDING_LOGINS.pop(email, None)
         raise HTTPException(status_code=404, detail="user_not_found")
+    if bool(user.is_archived):
+        MFA_PENDING_LOGINS.pop(email, None)
+        raise HTTPException(status_code=403, detail="account_archived")
 
     MFA_PENDING_LOGINS.pop(email, None)
     update_last_login(db, user)
@@ -777,6 +835,8 @@ async def request_password_reset(
 
     if not user:
         raise HTTPException(status_code=404, detail="user_not_found")
+    if bool(user.is_archived):
+        raise HTTPException(status_code=403, detail="account_archived")
 
     reset_code = f"{secrets.randbelow(1000000):06d}"
     PASSWORD_RESET_PENDING[user.email.lower()] = {
@@ -828,6 +888,9 @@ async def reset_password_with_code(
     if not user:
         PASSWORD_RESET_PENDING.pop(email, None)
         raise HTTPException(status_code=404, detail="user_not_found")
+    if bool(user.is_archived):
+        PASSWORD_RESET_PENDING.pop(email, None)
+        raise HTTPException(status_code=403, detail="account_archived")
 
     user.hashed_password = get_password_hash(new_password)
     user.must_change_password = False
@@ -3005,6 +3068,12 @@ def save_and_replace_file(new_file: UploadFile, old_path: str = None):
 async def update_bulk_content(
     hero_title: str = Form(None),
     hero_desc: str = Form(None),
+    app_eyebrow: str = Form(None),
+    app_button_label: str = Form(None),
+    app_notice: str = Form(None),
+    app_apk_url: str = Form(None),
+    faq_title: str = Form(None),
+    faq_desc: str = Form(None),
     why_title: str = Form(None),
     why_desc_1: str = Form(None),
     why_desc_2: str = Form(None),
@@ -3126,6 +3195,12 @@ async def update_bulk_content(
 
         # --- 1. HANDLE HERO SECTION ---
         await upsert_landing_section("hero", hero_title, hero_desc)
+        await upsert_landing_section(
+            "app_download",
+            app_eyebrow,
+            f"{app_button_label or ''}|||{app_notice or ''}|||{app_apk_url or ''}",
+        )
+        await upsert_landing_section("faq", faq_title, faq_desc)
 
         # --- 2. HANDLE WHY CHOOSE US SECTION ---
         await upsert_landing_section("why_choose_us", why_title, f"{why_desc_1}|||{why_desc_2}", why_img)
@@ -3184,6 +3259,8 @@ async def get_landing_content(db: Session = Depends(get_db)):
     }
 
     hero_data = content_by_key.get("hero")
+    app_download_data = content_by_key.get("app_download")
+    faq_data = content_by_key.get("faq")
     why_data = content_by_key.get("why_choose_us")
     cta_data = content_by_key.get("cta-feature")
     reunite_data = content_by_key.get("reunite")
@@ -3232,10 +3309,22 @@ async def get_landing_content(db: Session = Depends(get_db)):
     else:
         # Default Fallback
         response["hero"] = {
-            "title": "Found something?<br>Lost something?",
-            "description": "Connect with your community to reunite people with their belongings",
+            "title": "Lost Something?<br><span>Found Something?</span>",
+            "description": "Connect instantly with your student community. Report found items or locate your missing belongings in seconds so you can get back to class.",
             "image_path": None
         }
+    response["app_download"] = {
+        "eyebrow": app_download_data.title if app_download_data and app_download_data.title else "LookFor on Android",
+        "description": app_download_data.description if app_download_data and app_download_data.description else "Download Android App (APK)|||Installing the APK? Android may ask you to allow installation from your browser or file manager. Only install apps from sources you trust.|||/static/downloads/lookfor-app.apk",
+    }
+    response["faq"] = {
+        "title": faq_data.title if faq_data and faq_data.title else "Frequently asked questions",
+        "description": faq_data.description if faq_data and faq_data.description else (
+            "Where is the Admin Office Located?|||You can find the admin at 3rd floor of the STI College Novaliches Building.|||"
+            "How long do you keep unclaimed items?|||Items are kept for the entire semester. After this period the unclaimed items are disposed according to school policy.|||"
+            "What proof do I need to claim an item?|||You need to present your School ID and describe the unique features of the item."
+        ),
+    }
 
     # --- Process Why Choose Us Section ---
     if why_data:

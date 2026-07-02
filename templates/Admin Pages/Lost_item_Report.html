@@ -3,7 +3,7 @@
 <head> 
     <meta charset="UTF-8"> 
     <title>Admin Panel | LookFor STI</title> 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
     
     <link rel="stylesheet" href="/static/Lost_item_report.css?v=22">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -161,7 +161,10 @@
                             <option value="all">All Categories</option>
                         </select>
                         <input type="date" id="lostDateFilter" class="inventory-filter date-filter" onchange="resetLostPaginationAndRender()" title="Filter by date">
-                        <button class="upload-btn archive-toggle-btn" id="lostArchiveToggleBtn" onclick="toggleLostArchiveView()">
+                        <button class="upload-btn archive-toggle-btn" id="lostArchiveToggleBtn" onclick="setLostLifecycleView('archive')">
+                            Archive
+                        </button>
+                        <button class="upload-btn archive-toggle-btn" id="lostDeletedToggleBtn" onclick="setLostLifecycleView('deleted')">
                             Deleted Items
                         </button>
                         <button class="upload-btn" onclick="openModal('reportModal')"> 
@@ -232,7 +235,7 @@
                         
                         <div class="modal-actions">
                             <button type="button" class="btn-found lost-submit-btn" id="applySelectedMatchBtn" style="display:none;" onclick="applySelectedPossibleMatch()">Use Selected Match</button>
-                            <button type="button" class="btn-archive-big" id="archiveBtn">Move to Deleted Items</button>
+                            <button type="button" class="btn-archive-big" id="archiveBtn">Delete</button>
                             <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
                             <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">Delete Item</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
@@ -555,7 +558,7 @@ function showAccessDeniedPopup(permName) {
         }
     }
         let lostItemsCache = [];
-        let showingLostArchived = false;
+        let lostLifecycleView = "active";
         let currentLostPage = 1;
         let currentLostPageSize = 10;
         let reportOwnerUsersCache = [];
@@ -631,7 +634,8 @@ function showAccessDeniedPopup(permName) {
         }, 2000);
 
         try {
-            const response = await fetch(showingLostArchived ? '/admin/items/lost/archived' : '/admin/items/lost', {
+            const lifecyclePath = lostLifecycleView === "active" ? "" : `/${lostLifecycleView === "archive" ? "archived" : "deleted"}`;
+            const response = await fetch(`/admin/items/lost${lifecyclePath}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const items = await response.json();
@@ -649,14 +653,16 @@ function showAccessDeniedPopup(permName) {
     }
 
     function updateLostArchiveButton() {
-        const btn = document.getElementById("lostArchiveToggleBtn");
-        if (!btn) return;
-        btn.textContent = showingLostArchived ? "Show Active Items" : "Deleted Items";
-        btn.classList.toggle("active-archive-view", showingLostArchived);
+        const archiveBtn = document.getElementById("lostArchiveToggleBtn");
+        const deletedBtn = document.getElementById("lostDeletedToggleBtn");
+        archiveBtn.textContent = lostLifecycleView === "archive" ? "Show Active Items" : "Archive";
+        deletedBtn.textContent = lostLifecycleView === "deleted" ? "Show Active Items" : "Deleted Items";
+        archiveBtn.classList.toggle("active-archive-view", lostLifecycleView === "archive");
+        deletedBtn.classList.toggle("active-archive-view", lostLifecycleView === "deleted");
     }
 
-    function toggleLostArchiveView() {
-        showingLostArchived = !showingLostArchived;
+    function setLostLifecycleView(view) {
+        lostLifecycleView = lostLifecycleView === view ? "active" : view;
         const statusFilter = document.getElementById("lostStatusFilter");
         const categoryFilter = document.getElementById("lostCategoryFilter");
         const dateFilter = document.getElementById("lostDateFilter");
@@ -777,7 +783,7 @@ function showAccessDeniedPopup(permName) {
 
         if (filteredItems.length === 0) {
             updateLostPaginationControls(0);
-            grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${showingLostArchived ? 'archived' : 'lost'} reports found for this filter.</p>`;
+            grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${lostLifecycleView === "active" ? "active" : lostLifecycleView} lost reports found.</p>`;
             return;
         }
 
@@ -975,31 +981,36 @@ function showAccessDeniedPopup(permName) {
     document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
     const possibleMatchesPanel = document.getElementById("possibleMatchesPanel");
     if (possibleMatchesPanel) {
-        possibleMatchesPanel.style.display = showingLostArchived ? "none" : "";
+        possibleMatchesPanel.style.display = lostLifecycleView !== "active" ? "none" : "";
     }
-    if (!showingLostArchived) {
+    if (lostLifecycleView === "active") {
         loadPossibleMatchesForDetail(item.id, item.category, Boolean(item.is_matched), false);
     }
     const disposeBtn = document.getElementById("disposeBtn");
     const archiveBtn = document.getElementById("archiveBtn");
     const deleteBtn = document.getElementById("deleteBtn");
     const recoveryBtn = document.getElementById("recoverBtn");
-    if (deleteBtn) {
-        deleteBtn.style.display = "inline-flex";
-        deleteBtn.onclick = () => disposeItem(item.id);
-    }
-    if (showingLostArchived) {
+    if (lostLifecycleView !== "active") {
         recoveryBtn.style.display = "inline-flex";
-        archiveBtn.style.display = "none";
+        archiveBtn.style.display = lostLifecycleView === "archive" ? "inline-flex" : "none";
+        archiveBtn.textContent = "Delete";
+        archiveBtn.onclick = () => moveLostItemToDeleted(item.id);
         disposeBtn.style.display = "none";
         disposeBtn.onclick = null;
         recoveryBtn.onclick = () => recoverArchivedLostItem(item.id);
+        deleteBtn.style.display = lostLifecycleView === "deleted" ? "inline-flex" : "none";
+        deleteBtn.textContent = "Delete Permanently";
+        deleteBtn.onclick = () => disposeItem(item.id);
     } else {
         archiveBtn.style.display = "inline-flex";
+        archiveBtn.textContent = "Archive Item";
         archiveBtn.onclick = () => archiveLostItem(item.id);
         disposeBtn.style.display = "none";
         disposeBtn.onclick = null;
         recoveryBtn.style.display = "none"; 
+        deleteBtn.style.display = "inline-flex";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.onclick = () => moveLostItemToDeleted(item.id);
     
     }
     
@@ -1153,10 +1164,10 @@ function showAccessDeniedPopup(permName) {
         async function archiveLostItem(itemId) {
         const confirmArchive = await fireSwalOnTop({
             icon: 'warning',
-            title: 'Move to Deleted Items?',
-            text: 'This item will be moved out of the active lost items list.',
+            title: 'Archive item?',
+            text: 'This item will be moved out of the active lost items list and into Archive.',
             showCancelButton: true,
-            confirmButtonText: 'Move item',
+            confirmButtonText: 'Archive item',
             cancelButtonText: 'Cancel',
             confirmButtonColor: '#d33',
             cancelButtonColor: '#114b7a',
@@ -1178,10 +1189,9 @@ function showAccessDeniedPopup(permName) {
             });
 
             if (response.ok) {
-                await showLostUploadAlert('success', 'Item moved', 'Item moved to Deleted Items successfully.');
+                await showLostUploadAlert('success', 'Item archived', 'Item moved to Archive successfully.');
                 closeModal('itemDetailModal');
-                // Refresh the current list to remove the archived item
-                location.reload(); 
+                loadLostItems();
             } else {
                 const error = await response.json();
                 await showLostUploadAlert('error', 'Archive failed', error.detail || 'Failed to archive item.');
@@ -1191,6 +1201,31 @@ function showAccessDeniedPopup(permName) {
             await showLostUploadAlert('error', 'Connection failed', 'Server connection failed.');
         }
     }
+
+async function moveLostItemToDeleted(itemId) {
+    const confirmed = await fireSwalOnTop({
+        icon: 'warning',
+        title: 'Delete item?',
+        text: 'You can recover this item later from Deleted Items.',
+        showCancelButton: true,
+        confirmButtonText: 'Delete',
+        confirmButtonColor: '#d33'
+    });
+    if (!confirmed.isConfirmed) return;
+    try {
+        const response = await fetch(`/admin/items/${itemId}/delete`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || 'Failed to move item.');
+        await showLostUploadAlert('success', 'Item moved', result.message || 'Item moved to Deleted Items.');
+        closeModal('itemDetailModal');
+        loadLostItems();
+    } catch (error) {
+        await showLostUploadAlert('error', 'Move failed', error.message);
+    }
+}
 
         function showLostUploadAlert(icon, title, text) {
             if (window.Swal) {
@@ -1883,7 +1918,7 @@ async function disposeItem(itemId) {
         window.location.href = "/";
     }
     </script>
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=10"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

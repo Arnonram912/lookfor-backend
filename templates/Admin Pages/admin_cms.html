@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LookFor - Lost and Found</title>
-    <link rel="stylesheet" href="/static/landing.css?v=5.1">
+    <link rel="stylesheet" href="/static/landing.css?v=5.5">
 </head>
 <body>
 
@@ -33,14 +33,15 @@
     </button>
 </div>
     <section class="hero">
-        <div class="hero-content">
-            <h1 id="cms-hero-title">Found something?<br>Lost something?</h1>
-            <p id="cms-hero-desc">Connect with your community to reunite people with their belongings</p>
-            <div class="hero-btns">
-                <a href="/login" class="btn-primary">Begin Reporting</a>
-                <a href="/admin/Content-management/features" class="btn-secondary">Explore Features</a>
-
+        <div class="hero-content app-hero-content">
+            <span class="app-download-eyebrow" id="cms-app-eyebrow">LookFor on Android</span>
+            <h1 id="cms-hero-title">Lost Something?<br><span>Found Something?</span></h1>
+            <p id="cms-hero-desc">Connect instantly with your student community. Report found items or locate your missing belongings in seconds.</p>
+            <div class="app-download-button" style="margin:auto;">
+                <span id="cms-app-button-label">Download Android App (APK)</span>
             </div>
+            <p class="app-download-notice" id="cms-app-notice">Only install apps from sources you trust.</p>
+            <p id="cms-app-apk-url" style="margin:12px auto 0;font-size:13px;">/static/downloads/lookfor-app.apk</p>
         </div>
     </section>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
@@ -54,10 +55,10 @@
         // --- LOAD HERO SECTION ---
         if (data.hero) {
             if (document.getElementById('cms-hero-title')) {
-                document.getElementById('cms-hero-title').innerHTML = data.hero.title || "Found something?<br>Lost something?";
+                document.getElementById('cms-hero-title').innerHTML = data.hero.title || "Lost Something?<br><span>Found Something?</span>";
             }
             if (document.getElementById('cms-hero-desc')) {
-                document.getElementById('cms-hero-desc').innerText = data.hero.description || "Connect with your community to reunite people with their belongings";
+                document.getElementById('cms-hero-desc').innerText = data.hero.description || "Connect instantly with your student community. Report found items or locate your missing belongings in seconds.";
             }
 
             if (data.hero.image_path) {
@@ -68,6 +69,14 @@
                     heroSection.style.backgroundImage = `linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)), url('${path}')`;
                 }
             }
+        }
+
+        if (data.app_download) {
+            const appParts = String(data.app_download.description || '').split('|||');
+            document.getElementById('cms-app-eyebrow').innerText = data.app_download.eyebrow || 'LookFor on Android';
+            document.getElementById('cms-app-button-label').innerText = appParts[0] || 'Download Android App (APK)';
+            document.getElementById('cms-app-notice').innerText = appParts[1] || '';
+            document.getElementById('cms-app-apk-url').innerText = appParts[2] || '/static/downloads/lookfor-app.apk';
         }
 
         // --- LOAD WHY CHOOSE US SECTION ---
@@ -186,6 +195,15 @@ if (data.cta_feature) {
                     imgEl.src = path;
                 }
             });
+        }
+
+        if (data.faq) {
+            const faqParts = String(data.faq.description || '').split('|||');
+            document.getElementById('cms-faq-title').innerText = data.faq.title || 'Frequently asked questions';
+            for (let index = 1; index <= 3; index++) {
+                document.getElementById(`cms-faq-${index}-question`).innerText = faqParts[(index - 1) * 2] || '';
+                document.getElementById(`cms-faq-${index}-answer`).innerText = faqParts[(index - 1) * 2 + 1] || '';
+            }
         }
     } catch (err) {
         console.error("CMS Error:", err);
@@ -436,22 +454,22 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
 </script>
 <section class="faq-section" data-aos="fade-up">
     <div class="container">
-        <h2 class="section-title">Frequently asked questions</h2>
+        <h2 class="section-title" id="cms-faq-title">Frequently asked questions</h2>
         
         <div class="faq-container">
             <div class="faq-card">
-                <h3>Where is the Admin Office Located?</h3>
-                <p>You can find the admin at 3<sup>rd</sup> floor of the STI College Novaliches Building.</p>
+                <h3 id="cms-faq-1-question">Where is the Admin Office Located?</h3>
+                <p id="cms-faq-1-answer">You can find the admin at 3<sup>rd</sup> floor of the STI College Novaliches Building.</p>
             </div>
 
             <div class="faq-card">
-                <h3>How long do you keep unclaimed items?</h3>
-                <p>Items are kept for the entire semester. After this period the unclaimed items are disposed according to the school policy.</p>
+                <h3 id="cms-faq-2-question">How long do you keep unclaimed items?</h3>
+                <p id="cms-faq-2-answer">Items are kept for the entire semester. After this period the unclaimed items are disposed according to the school policy.</p>
             </div>
 
             <div class="faq-card">
-                <h3>What proof do I need to claim an item?</h3>
-                <p>You need to present your School ID and be able to describe the unique features of the item.</p>
+                <h3 id="cms-faq-3-question">What proof do I need to claim an item?</h3>
+                <p id="cms-faq-3-answer">You need to present your School ID and be able to describe the unique features of the item.</p>
             </div>
         </div>
     </div>
@@ -542,6 +560,10 @@ function toggleEditMode() {
     const textElements = [
         'cms-hero-title', 
         'cms-hero-desc', 
+        'cms-app-eyebrow',
+        'cms-app-button-label',
+        'cms-app-notice',
+        'cms-app-apk-url',
         'cms-why-sub', 
         'cms-why-title', 
         'cms-why-desc-1', 
@@ -560,7 +582,11 @@ function toggleEditMode() {
         'cms-feat-1-title', 'cms-feat-1-desc',
         'cms-feat-2-title', 'cms-feat-2-desc',
         'cms-feat-3-title', 'cms-feat-3-desc',
-        'cms-feat-4-title', 'cms-feat-4-desc'];
+        'cms-feat-4-title', 'cms-feat-4-desc',
+        'cms-faq-title',
+        'cms-faq-1-question', 'cms-faq-1-answer',
+        'cms-faq-2-question', 'cms-faq-2-answer',
+        'cms-faq-3-question', 'cms-faq-3-answer'];
     textElements.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -636,6 +662,10 @@ async function saveDirectChanges() {
     // 1. Hero
     formData.append("hero_title", document.getElementById('cms-hero-title').innerHTML);
     formData.append("hero_desc", document.getElementById('cms-hero-desc').innerText);
+    formData.append("app_eyebrow", document.getElementById('cms-app-eyebrow').innerText);
+    formData.append("app_button_label", document.getElementById('cms-app-button-label').innerText);
+    formData.append("app_notice", document.getElementById('cms-app-notice').innerText);
+    formData.append("app_apk_url", document.getElementById('cms-app-apk-url').innerText.trim());
 
     // 2. Why Choose Us
     formData.append("why_title", document.getElementById('cms-why-title').innerHTML);
@@ -685,6 +715,14 @@ for (let i = 1; i <= 4; i++) {
     }
 }
 
+const faqParts = [];
+for (let i = 1; i <= 3; i++) {
+    faqParts.push(document.getElementById(`cms-faq-${i}-question`).innerText);
+    faqParts.push(document.getElementById(`cms-faq-${i}-answer`).innerText);
+}
+formData.append("faq_title", document.getElementById('cms-faq-title').innerText);
+formData.append("faq_desc", faqParts.join("|||"));
+
     try {
         const response = await fetch('/admin/api/update-content/bulk', {
             method: 'POST',
@@ -710,7 +748,7 @@ for (let i = 1; i <= 4; i++) {
 }
 loadAllContent();
 </script>
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=10"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 </body>

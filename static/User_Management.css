@@ -333,17 +333,23 @@ body.swal2-height-auto > .swal2-container {
 }
 
 #createAdminModal .create-admin-content {
-    width: min(860px, calc(100vw - 32px));
-    max-width: 860px;
-    max-height: 90vh;
+    width: min(1320px, calc(100vw - 40px));
+    max-width: 1320px;
+    max-height: calc(100vh - 32px);
+    padding: 26px 30px 24px;
     overflow-y: auto;
     border-top: 8px solid var(--dark-blue);
+    border-radius: 18px;
+    box-shadow: 0 24px 70px rgba(2, 34, 67, 0.34);
+    transform: scale(var(--create-admin-scale, 1));
+    transform-origin: center center;
+    transition: transform 0.18s ease;
 }
 
 .create-admin-info-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 14px;
 }
 
 .create-admin-info-grid .form-group {
@@ -354,13 +360,98 @@ body.swal2-height-auto > .swal2-container {
     grid-column: span 2;
 }
 
+.create-admin-department-field {
+    grid-column: span 2;
+}
+
+#createAdminModal .permission-modal-header {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #dbe5ef;
+}
+
+#createAdminModal .permissions-container {
+    margin-top: 14px !important;
+    padding: 14px 16px;
+    background: #f6f9fc;
+    border-color: #d8e3ed;
+}
+
+#createAdminModal .permissions-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+    margin-top: 10px;
+}
+
+#createAdminModal .perm-item.professional {
+    min-height: 70px;
+    padding: 10px 12px;
+}
+
+#createAdminModal .perm-desc {
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+#createAdminModal .user-management-access-panel {
+    padding: 12px 14px;
+}
+
+#createAdminModal .nested-permission-group {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    padding-left: 0;
+    border-left: 0;
+}
+
+#createAdminModal .nested-permission-group .perm-item {
+    min-height: 76px;
+}
+
+#createAdminModal .create-admin-footer {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #dbe5ef;
+}
+
+@media (min-width: 1100px) and (min-height: 720px) {
+    #createAdminModal .create-admin-content {
+        overflow-y: visible;
+        max-height: none;
+    }
+}
+
+@media (max-width: 1050px) {
+    #createAdminModal .permissions-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #createAdminModal .nested-permission-group {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
 @media (max-width: 760px) {
+    #createAdminModal .create-admin-content {
+        width: calc(100vw - 20px);
+        max-height: calc(100vh - 20px);
+        padding: 22px 18px;
+        overflow-y: auto;
+        transform: none;
+    }
+
     .create-admin-info-grid {
         grid-template-columns: 1fr;
     }
 
-    .create-admin-email-field {
+    .create-admin-email-field,
+    .create-admin-department-field {
         grid-column: span 1;
+    }
+
+    #createAdminModal .permissions-grid,
+    #createAdminModal .nested-permission-group {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -810,6 +901,33 @@ body.dark-theme #bulkEmails {
     margin: 2px 3px;
 }
 
+.user-table .action-icon-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    font-size: 14px;
+    box-shadow: 0 2px 5px rgba(15, 47, 87, 0.16);
+    transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+.user-table .action-icon-btn:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.06);
+    box-shadow: 0 5px 10px rgba(15, 47, 87, 0.22);
+}
+
+.user-table .action-icon-btn:focus-visible {
+    outline: 3px solid rgba(255, 224, 0, 0.7);
+    outline-offset: 2px;
+}
+
 .view-btn {
     background: #0d6efd;
     color: #fff;
@@ -822,6 +940,11 @@ body.dark-theme #bulkEmails {
 
 .delete-perm-btn {
     background: #dc3545;
+    color: #fff;
+}
+
+.restore-btn {
+    background: #198754;
     color: #fff;
 }
 
@@ -1500,6 +1623,279 @@ body.dark-theme #bulkEmails {
 
 .btn-secondary:hover {
     background: #b5b5b5;
+}
+
+/* Academic term management modal */
+#academicTermModal {
+    padding: 20px;
+}
+
+#academicTermModal .academic-term-modal-card {
+    width: min(620px, 100%);
+    max-width: 620px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #dce6f1;
+    border-radius: 18px;
+    background: #f8fafc;
+    box-shadow: 0 24px 70px rgba(3, 35, 68, 0.28);
+}
+
+#academicTermModal .close-modal {
+    top: 18px;
+    right: 20px;
+    z-index: 2;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: #60758b;
+    background: #edf3f8;
+    font-size: 22px;
+    line-height: 1;
+}
+
+#academicTermModal .close-modal:hover {
+    color: #123b63;
+    background: #dfeaf3;
+}
+
+.academic-term-modal-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 30px 64px 24px 30px;
+    color: #fff;
+    background: linear-gradient(135deg, #002f5f 0%, #075ca8 100%);
+}
+
+.academic-term-icon {
+    flex: 0 0 46px;
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    color: #003b73;
+    background: #ffd34e;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+    font-size: 21px;
+}
+
+.academic-term-eyebrow {
+    display: block;
+    margin-bottom: 4px;
+    color: #bcdcff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.academic-term-modal-header h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 25px;
+    line-height: 1.2;
+}
+
+.academic-term-modal-header p {
+    margin: 7px 0 0;
+    color: #dbeeff;
+    font-size: 13px;
+}
+
+.academic-term-summary {
+    padding: 24px 30px 0;
+}
+
+.academic-term-panel {
+    padding: 18px 20px;
+    border: 1px solid #dce6f1;
+    border-radius: 13px;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(25, 60, 94, 0.05);
+}
+
+.academic-term-panel.current {
+    border-left: 4px solid #0b65b1;
+}
+
+.academic-term-panel.next {
+    border-left: 4px solid #e5aa00;
+}
+
+.academic-term-panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+    color: #63788d;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.academic-term-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+}
+
+.academic-term-status.active {
+    color: #087443;
+    background: #ddf7ea;
+}
+
+.academic-term-status.ended {
+    color: #64748b;
+    background: #e9eef3;
+}
+
+.academic-term-status.upcoming {
+    color: #865f00;
+    background: #fff2c6;
+}
+
+.academic-term-name {
+    display: block;
+    color: #102f4d;
+    font-size: 18px;
+}
+
+.academic-term-date {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 9px;
+    color: #5d7287;
+    font-size: 13px;
+}
+
+.academic-term-flow {
+    height: 34px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    padding: 0 18px;
+    color: #7890a7;
+}
+
+.academic-term-flow span {
+    height: 1px;
+    background: #dce6ef;
+}
+
+.academic-term-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 20px 30px 0;
+    padding: 12px 14px;
+    border-radius: 10px;
+    color: #5d4a10;
+    background: #fff7dc;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.academic-term-notice i {
+    margin-top: 2px;
+    color: #d69e00;
+}
+
+.academic-term-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 22px 30px 28px;
+}
+
+.academic-term-btn {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    font-weight: 750;
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.academic-term-btn:not(:disabled):hover {
+    transform: translateY(-1px);
+}
+
+.academic-term-btn-secondary {
+    color: #31485f;
+    border-color: #cbd7e2;
+    background: #fff;
+}
+
+.academic-term-btn-danger {
+    color: #a52626;
+    border-color: #f0caca;
+    background: #fff3f3;
+}
+
+.academic-term-btn-warning {
+    color: #725000;
+    border-color: #efd58e;
+    background: #fff5d6;
+}
+
+.academic-term-btn-primary {
+    color: #fff;
+    background: #064f91;
+    box-shadow: 0 5px 12px rgba(6, 79, 145, 0.2);
+}
+
+.academic-term-btn:disabled {
+    color: #8a99a8;
+    border-color: #dce3e9;
+    background: #edf1f4;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 0.72;
+}
+
+.academic-term-loading {
+    padding: 30px;
+    text-align: center;
+    color: #64788d;
+}
+
+@media (max-width: 620px) {
+    .academic-term-modal-header,
+    .academic-term-summary {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    .academic-term-notice {
+        margin-left: 20px;
+        margin-right: 20px;
+    }
+
+    .academic-term-actions {
+        flex-direction: column-reverse;
+        padding: 20px;
+    }
+
+    .academic-term-btn {
+        width: 100%;
+    }
 }
 
 /* Styling for your own account row */

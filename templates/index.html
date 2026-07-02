@@ -633,6 +633,10 @@
                 forgotEmailInput.classList.add('input-error');
                 forgotModalError.textContent = 'We could not find an account with that email.';
                 forgotModalError.style.display = 'block';
+            } else if (message.includes('account_archived')) {
+                forgotEmailInput.classList.add('input-error');
+                forgotModalError.textContent = 'This account is archived and disabled. Contact an administrator to restore access.';
+                forgotModalError.style.display = 'block';
             } else if (message.includes('password_reset_email_failed')) {
                 forgotModalError.textContent = 'Could not send the reset code. Check Gmail SMTP settings.';
                 forgotModalError.style.display = 'block';
@@ -693,6 +697,12 @@
             if (message.includes('user_not_found')) {
                 emailInput.classList.add('input-error');
                 showLoginError('We could not find an account with that email.');
+                return;
+            }
+
+            if (message.includes('account_archived')) {
+                emailInput.classList.add('input-error');
+                showLoginError('This account is archived and disabled. Contact an administrator to restore access.');
                 return;
             }
 

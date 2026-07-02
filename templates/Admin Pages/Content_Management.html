@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <style>
@@ -199,6 +199,139 @@
             transform: translateY(-1px);
         }
 
+        .academic-schedule-modal-card {
+            width: min(980px, calc(100vw - 32px));
+            max-width: 980px;
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid #dce6f1;
+            border-radius: 18px;
+            background: #f8fafc;
+            box-shadow: 0 24px 70px rgba(3, 35, 68, 0.3);
+        }
+
+        .academic-schedule-modal-card .close-modal {
+            top: 18px;
+            right: 20px;
+            color: #dbeeff;
+            z-index: 2;
+        }
+
+        .academic-schedule-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 28px 64px 24px 28px;
+            color: #fff;
+            background: linear-gradient(135deg, #003366, #0868b8);
+        }
+
+        .academic-schedule-header h2 {
+            margin: 0 0 7px;
+            color: #fff;
+        }
+
+        .academic-schedule-header p {
+            margin: 0;
+            color: #dbeeff;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .academic-schedule-icon {
+            flex: 0 0 44px;
+            height: 44px;
+            display: grid;
+            place-items: center;
+            border-radius: 11px;
+            color: #07569d;
+            background: #fff;
+            font-size: 20px;
+        }
+
+        .academic-schedule-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            padding: 26px 28px 20px;
+        }
+
+        .academic-schedule-grid label {
+            color: #183b5d;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .academic-schedule-grid input,
+        .academic-schedule-grid select {
+            width: 100%;
+            min-height: 43px;
+            margin-top: 7px;
+            padding: 10px 12px;
+            border: 1px solid #cbd7e2;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .academic-schedule-grid input:disabled,
+        .academic-schedule-grid select:disabled {
+            color: #6d7f90;
+            background: #edf2f6;
+            cursor: not-allowed;
+        }
+
+        .academic-schedule-status {
+            margin: 0 28px;
+            padding: 12px 14px;
+            border-left: 4px solid #0b65b1;
+            border-radius: 8px;
+            color: #17466f;
+            background: #eaf4fd;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .academic-schedule-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            padding: 22px 28px 28px;
+        }
+
+        .academic-schedule-actions .content-submit-btn,
+        .academic-schedule-actions .content-cancel-btn {
+            min-height: 42px;
+        }
+
+        .academic-schedule-actions .academic-default-btn {
+            border: 1px solid #126bb8;
+            color: #07569d;
+            background: #e9f4ff;
+        }
+
+        @media (max-width: 780px) {
+            .academic-schedule-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 520px) {
+            .academic-schedule-grid {
+                grid-template-columns: 1fr;
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+
+            .academic-schedule-actions {
+                flex-direction: column-reverse;
+                padding: 20px;
+            }
+
+            .academic-schedule-actions button {
+                width: 100%;
+            }
+        }
+
         .action-bar {
         display: flex;
         justify-content: flex-end;  /* push everything to the right */
@@ -361,6 +494,9 @@
         <button class="upload-btn" onclick="openModal('announcementModal')">
             <span class="plus"></span> Replace Announcement
         </button>
+        <button class="upload-btn" onclick="openModal('academicScheduleModal')">
+            <i class="fas fa-calendar-days"></i> Academic Term Schedule
+        </button>
         <a class="upload-btn" href="/admin/Content-Editor" style="text-decoration: none;">
             <span class="plus"></span> Update Landing Page
         </a>
@@ -422,6 +558,34 @@
         <div class="content-modal-actions">
             <button type="button" class="content-cancel-btn" onclick="closeModal('departmentModal')">Cancel</button>
             <button type="button" class="content-submit-btn" onclick="createDepartment()">Save Department</button>
+        </div>
+    </div>
+</div>
+<div id="academicScheduleModal" class="modal">
+    <div class="modal-content academic-schedule-modal-card">
+        <span class="close-modal" onclick="closeModal('academicScheduleModal')">&times;</span>
+        <div class="academic-schedule-header">
+            <div class="academic-schedule-icon"><i class="fas fa-calendar-days"></i></div>
+            <div>
+                <h2>Academic Term Schedule</h2>
+                <p>Configure semester dates. Defaults: 1st Semester runs July 28–December 5; 2nd Semester runs January 5–June 5.</p>
+            </div>
+        </div>
+        <div class="academic-schedule-grid">
+            <label>Current Academic Year<input id="termCurrentYear" type="text" placeholder="2025-2026"></label>
+            <label>Current Semester<select id="termCurrentSemester"><option>1st Semester</option><option>2nd Semester</option></select></label>
+            <label>Current Start<input id="termCurrentStart" type="date"></label>
+            <label>Current End<input id="termCurrentEnd" type="date"></label>
+            <label>Next Academic Year<input id="termNextYear" type="text" placeholder="2026-2027"></label>
+            <label>Next Semester<select id="termNextSemester"><option>1st Semester</option><option>2nd Semester</option></select></label>
+            <label>Next Start<input id="termNextStart" type="date"></label>
+            <label>Next End<input id="termNextEnd" type="date"></label>
+        </div>
+        <div id="academicTermStatus" class="academic-schedule-status">Loading schedule...</div>
+        <div class="academic-schedule-actions">
+            <button type="button" class="content-cancel-btn" onclick="closeModal('academicScheduleModal')">Cancel</button>
+            <button type="button" class="content-submit-btn academic-default-btn" onclick="applyDefaultSemesterDates()">Apply Default Dates</button>
+            <button type="button" class="content-submit-btn" onclick="saveAcademicTermSchedule()">Save Academic Schedule</button>
         </div>
     </div>
 </div>
@@ -546,6 +710,96 @@ function escapeHtml(text) {
 function getAdminAuthHeader() {
     const token = sessionStorage.getItem("admin_token");
     return token ? { "Authorization": `Bearer ${token}` } : {};
+}
+
+async function loadAcademicTermSchedule() {
+    const response = await fetch('/admin/academic-term', { headers: getAdminAuthHeader() });
+    const term = await response.json();
+    if (!response.ok) throw new Error(term.detail || 'Failed to load academic schedule.');
+    document.getElementById('termCurrentYear').value = term.current_academic_year || '';
+    document.getElementById('termCurrentSemester').value = term.current_semester || '1st Semester';
+    document.getElementById('termCurrentStart').value = term.current_start_date || '';
+    document.getElementById('termCurrentEnd').value = term.current_end_date || '';
+    document.getElementById('termNextYear').value = term.next_academic_year || '';
+    document.getElementById('termNextSemester').value = term.next_semester || '1st Semester';
+    document.getElementById('termNextStart').value = term.next_start_date || '';
+    document.getElementById('termNextEnd').value = term.next_end_date || '';
+    const currentTermLocked = term.current_status === 'active';
+    ['termCurrentYear', 'termCurrentSemester', 'termCurrentStart', 'termCurrentEnd'].forEach(id => {
+        const field = document.getElementById(id);
+        field.disabled = currentTermLocked;
+        field.title = currentTermLocked
+            ? 'The current semester is active. End it before changing these details.'
+            : '';
+    });
+    document.getElementById('academicTermStatus').textContent =
+        currentTermLocked
+            ? `Active and locked — ${term.current_academic_year} ${term.current_semester}`
+            : `Current status: ${term.current_status} — current-term details may now be edited`;
+}
+
+function getDefaultTermDates(academicYear, semester) {
+    const match = String(academicYear || '').trim().match(/^(\d{4})-(\d{4})$/);
+    if (!match || Number(match[2]) !== Number(match[1]) + 1) {
+        throw new Error('Use a valid academic year such as 2026-2027.');
+    }
+    const startYear = Number(match[1]);
+    const endYear = Number(match[2]);
+    if (semester === '1st Semester') {
+        return { start: `${startYear}-07-28`, end: `${startYear}-12-05` };
+    }
+    return { start: `${endYear}-01-05`, end: `${endYear}-06-05` };
+}
+
+function applyDefaultSemesterDates() {
+    try {
+        const currentStart = document.getElementById('termCurrentStart');
+        if (!currentStart.disabled) {
+            const currentDates = getDefaultTermDates(
+                document.getElementById('termCurrentYear').value,
+                document.getElementById('termCurrentSemester').value
+            );
+            currentStart.value = currentDates.start;
+            document.getElementById('termCurrentEnd').value = currentDates.end;
+        }
+
+        const nextDates = getDefaultTermDates(
+            document.getElementById('termNextYear').value,
+            document.getElementById('termNextSemester').value
+        );
+        document.getElementById('termNextStart').value = nextDates.start;
+        document.getElementById('termNextEnd').value = nextDates.end;
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function saveAcademicTermSchedule() {
+    const payload = {
+        current_academic_year: document.getElementById('termCurrentYear').value.trim(),
+        current_semester: document.getElementById('termCurrentSemester').value,
+        current_start_date: document.getElementById('termCurrentStart').value,
+        current_end_date: document.getElementById('termCurrentEnd').value,
+        next_academic_year: document.getElementById('termNextYear').value.trim(),
+        next_semester: document.getElementById('termNextSemester').value,
+        next_start_date: document.getElementById('termNextStart').value,
+        next_end_date: document.getElementById('termNextEnd').value
+    };
+    if (Object.values(payload).some(value => !value)) {
+        alert('Complete all academic schedule fields.');
+        return;
+    }
+    if (!confirm(`Save this schedule? ${payload.current_academic_year} students will be archived when ${payload.current_semester} ends on ${payload.current_end_date}.`)) return;
+    const response = await fetch('/admin/academic-term', {
+        method: 'PUT',
+        headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Failed to save academic schedule.');
+    alert('Academic schedule saved. An admin notification was created.');
+    await loadAcademicTermSchedule();
+    closeModal('academicScheduleModal');
 }
 
 function renderAnnouncementTable(announcements) {
@@ -911,7 +1165,7 @@ async function executeSubmitAnnouncement() {
 document.addEventListener("DOMContentLoaded", async () => {
     await loadAnnouncements();
     try {
-        await Promise.all([loadCategoriesTable(), loadDepartmentsTable()]);
+        await Promise.all([loadCategoriesTable(), loadDepartmentsTable(), loadAcademicTermSchedule()]);
     } catch (error) {
         console.error("Failed to load content management tables:", error);
     }
@@ -919,7 +1173,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </script>
 
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=10"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

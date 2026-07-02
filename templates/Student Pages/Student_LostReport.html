@@ -3,7 +3,7 @@
 <head> 
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
     <link rel="stylesheet" href="/static/Lost_item_report.css?v=15"> 
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -133,6 +133,8 @@
              <div class="profile-page-card">
                 <div class="action-bar">
                     <h2 class="section-title">Lost Items</h2>
+                    <button class="upload-btn" id="studentLostArchiveBtn" onclick="setStudentLostView('archive')">Archive</button>
+                    <button class="upload-btn" id="studentLostDeletedBtn" onclick="setStudentLostView('deleted')">Deleted Items</button>
                     <button class="upload-btn" onclick="openModal('reportModal')"> 
                         <span class="plus">+ Upload Lost Item </span>
                     </button> 
@@ -177,6 +179,7 @@
                         <p><strong>Possible Matches:</strong></p>
                         <div id="modalPossibleMatches" class="description-text">Loading possible matches...</div>
                     </div>
+                    <div id="studentLostLifecycleActions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;"></div>
                     
                     </div>
                 </div>
@@ -483,6 +486,15 @@ window.onclick = function(event) {
 
         // --- LOAD ITEMS INTO BOXES ---
        // --- LOAD ONLY MY ITEMS ---
+let studentLostView = "active";
+
+function setStudentLostView(view) {
+    studentLostView = studentLostView === view ? "active" : view;
+    document.getElementById("studentLostArchiveBtn").textContent = studentLostView === "archive" ? "Show Active Items" : "Archive";
+    document.getElementById("studentLostDeletedBtn").textContent = studentLostView === "deleted" ? "Show Active Items" : "Deleted Items";
+    loadLostItems();
+}
+
 async function loadLostItems() {
     const grid = document.getElementById("lostItemsGrid");
     const token = getStudentToken();
@@ -494,7 +506,7 @@ async function loadLostItems() {
     }
 
     try {
-        const response = await fetch('/student/api/items/lost/me', { // Matches your Python route
+        const response = await fetch(`/student/api/items/lost/me?view=${studentLostView}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -504,7 +516,7 @@ async function loadLostItems() {
         grid.innerHTML = "";
 
         if (items.length === 0) {
-            grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center; padding: 20px;">You haven't reported any lost items yet.</p>`;
+            grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center; padding: 20px;">No ${studentLostView} lost items.</p>`;
             return;
         }
 
@@ -1159,9 +1171,37 @@ function viewItemDetails(item) {
 
     // Description
     document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
-    loadPossibleMatchesForDetail(item.id, item.category);
+    if (studentLostView === "active") loadPossibleMatchesForDetail(item.id, item.category);
+    renderStudentLostActions(item);
 
     openModal('itemDetailModal');
+}
+
+function renderStudentLostActions(item) {
+    const actions = document.getElementById("studentLostLifecycleActions");
+    const button = (label, action, color) =>
+        `<button type="button" onclick="studentLostLifecycleAction('${action}',${item.id})" style="border:0;border-radius:8px;padding:10px 14px;color:white;background:${color};cursor:pointer;font-weight:700;">${label}</button>`;
+    actions.innerHTML = studentLostView === "active"
+        ? button("Archive", "archive", "#114b7a") + button("Delete", "delete", "#dc3545")
+        : studentLostView === "archive"
+            ? button("Recover", "recover", "#198754") + button("Delete", "delete", "#dc3545")
+            : button("Recover", "recover", "#198754") + button("Delete Permanently", "permanent", "#b02a37");
+}
+
+async function studentLostLifecycleAction(action, itemId) {
+    const permanent = action === "permanent";
+    if (!confirm(permanent ? "Permanently delete this report? This cannot be undone." : `Are you sure you want to ${action} this report?`)) return;
+    const response = await fetch(`/student/items/lost/${itemId}/${action}`, {
+        method: permanent ? "DELETE" : "PUT",
+        headers: { 'Authorization': `Bearer ${getStudentToken()}` }
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        alert(result.detail || "Action failed.");
+        return;
+    }
+    closeModal("itemDetailModal");
+    loadLostItems();
 }
 
         // Use this instead of window.onload to avoid overwriting other scripts

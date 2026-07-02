@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
     <link rel="stylesheet" href="/static/Found_item_report.css?v=18">
 
 
@@ -175,7 +175,10 @@
                         <select id="foundCategoryFilter" class="inventory-filter" onchange="resetFoundPaginationAndRender()">
                             <option value="all">All Categories</option>
                         </select>
-                        <button class="upload-btn archive-toggle-btn" id="foundArchiveToggleBtn" onclick="toggleFoundArchiveView()"> 
+                        <button class="upload-btn archive-toggle-btn" id="foundArchiveToggleBtn" onclick="setFoundLifecycleView('archive')">
+                            Archive
+                        </button>
+                        <button class="upload-btn archive-toggle-btn" id="foundDeletedToggleBtn" onclick="setFoundLifecycleView('deleted')">
                             Deleted Items
                         </button>
                         <button class="upload-btn surrender-upload-btn" onclick="openModal('reportModal')"> 
@@ -242,7 +245,7 @@
                         <div class="modal-actions">
                             <button type="button" class="btn-archive-big" id="approveBtn" style="display:none; background:#198754;">Approve Item</button>
                             <button type="button" class="btn-dispose-big" id="rejectBtn" style="display:none; background:#dc3545;">Reject Item</button>
-                            <button type="button" class="btn-archive-big" id="archiveBtn">Move to Deleted Items</button>
+                            <button type="button" class="btn-archive-big" id="archiveBtn">Delete</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
                             <button type="button" class="btn-archive-big" id="manualClaimBtn" onclick="handleManualClaimButtonClick()" style="display:none; background:#0d6efd;">Create Manual Claim</button>
                             <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
@@ -561,7 +564,7 @@ function showAccessDeniedPopup(permName) {
         }
     }
         let foundItemsCache = [];
-        let showingFoundArchived = false;
+        let foundLifecycleView = "active";
         let currentFoundPage = 1;
         let currentFoundPageSize = 10;
         let activeFoundItemForManualClaim = null;
@@ -573,12 +576,13 @@ function showAccessDeniedPopup(permName) {
         const token = sessionStorage.getItem("admin_token");
 
         try {
-            if (showingFoundArchived) {
+            if (foundLifecycleView !== "active") {
+                const lifecyclePath = foundLifecycleView === "archive" ? "archived" : "deleted";
                 const [foundResponse, archivedPendingResponse] = await Promise.all([
-                    fetch('/admin/items/found/archived', {
+                    fetch(`/admin/items/found/${lifecyclePath}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }),
-                    fetch('/admin/pending-items/archived', {
+                    fetch(`/admin/pending-items/${lifecyclePath}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     })
                 ]);
@@ -635,14 +639,20 @@ function showAccessDeniedPopup(permName) {
     }
 
     function updateFoundArchiveButton() {
-        const btn = document.getElementById("foundArchiveToggleBtn");
-        if (!btn) return;
-        btn.textContent = showingFoundArchived ? "Show Active Items" : "Deleted Items";
-        btn.classList.toggle("active-archive-view", showingFoundArchived);
+        const archiveBtn = document.getElementById("foundArchiveToggleBtn");
+        const deletedBtn = document.getElementById("foundDeletedToggleBtn");
+        if (archiveBtn) {
+            archiveBtn.textContent = foundLifecycleView === "archive" ? "Show Active Items" : "Archive";
+            archiveBtn.classList.toggle("active-archive-view", foundLifecycleView === "archive");
+        }
+        if (deletedBtn) {
+            deletedBtn.textContent = foundLifecycleView === "deleted" ? "Show Active Items" : "Deleted Items";
+            deletedBtn.classList.toggle("active-archive-view", foundLifecycleView === "deleted");
+        }
     }
 
-    function toggleFoundArchiveView() {
-        showingFoundArchived = !showingFoundArchived;
+    function setFoundLifecycleView(view) {
+        foundLifecycleView = foundLifecycleView === view ? "active" : view;
         const statusFilter = document.getElementById("foundStatusFilter");
         const categoryFilter = document.getElementById("foundCategoryFilter");
         if (statusFilter) statusFilter.value = "all";
@@ -806,7 +816,7 @@ function showAccessDeniedPopup(permName) {
 
         if (filteredItems.length === 0) {
             updateFoundPaginationControls(0);
-                grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${showingFoundArchived ? 'deleted' : 'found'} items found for this filter.</p>`;
+                grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${foundLifecycleView === "active" ? "active" : foundLifecycleView} items found for this filter.</p>`;
             return;
         }
 
@@ -896,11 +906,7 @@ function showAccessDeniedPopup(permName) {
     const approveBtn = document.getElementById("approveBtn");
     const rejectBtn = document.getElementById("rejectBtn");
     const manualClaimBtn = document.getElementById("manualClaimBtn");
-    if (deleteBtn) {
-        deleteBtn.style.display = "inline-flex";
-        deleteBtn.onclick = () => disposeItem(item.id);
-    }
-    if (showingFoundArchived) {
+    if (foundLifecycleView !== "active") {
         if (approveBtn) {
             approveBtn.style.display = "none";
             approveBtn.onclick = null;
@@ -909,7 +915,9 @@ function showAccessDeniedPopup(permName) {
             rejectBtn.style.display = "none";
             rejectBtn.onclick = null;
         }
-        archiveBtn.style.display = "none";
+        archiveBtn.style.display = foundLifecycleView === "archive" ? "inline-flex" : "none";
+        archiveBtn.textContent = "Delete";
+        archiveBtn.onclick = () => moveFoundItemToDeleted(item.id, item.is_pending);
         if (recoverBtn) {
             recoverBtn.style.display = "inline-flex";
             recoverBtn.textContent = item.is_pending ? "Recover to Pending" : "Recover Item";
@@ -919,8 +927,11 @@ function showAccessDeniedPopup(permName) {
             manualClaimBtn.style.display = "none";
             manualClaimBtn.disabled = true;
         }
-        disposeBtn.style.display = "none";
-        disposeBtn.onclick = null;
+        if (deleteBtn) {
+            deleteBtn.style.display = foundLifecycleView === "deleted" ? "inline-flex" : "none";
+            deleteBtn.textContent = "Delete Permanently";
+            deleteBtn.onclick = () => disposeItem(item.id, item.is_pending);
+        }
     } else {
         if (item.is_pending) {
             if (approveBtn) {
@@ -929,7 +940,8 @@ function showAccessDeniedPopup(permName) {
             }
             if (rejectBtn) {
                 rejectBtn.style.display = "inline-flex";
-                rejectBtn.onclick = () => rejectPendingFoundItem(item.id);
+                rejectBtn.textContent = "Archive Item";
+                rejectBtn.onclick = () => archivePendingItem(item.id);
             }
             archiveBtn.style.display = "none";
         } else {
@@ -942,7 +954,7 @@ function showAccessDeniedPopup(permName) {
                 rejectBtn.onclick = null;
             }
             archiveBtn.style.display = "inline-flex";
-            archiveBtn.textContent = "Move to Deleted Items";
+            archiveBtn.textContent = "Archive Item";
             archiveBtn.onclick = () => archiveLostItem(item.id);
         }
         if (recoverBtn) {
@@ -955,6 +967,11 @@ function showAccessDeniedPopup(permName) {
         }
         disposeBtn.style.display = "none";
         disposeBtn.onclick = null;
+        if (deleteBtn) {
+            deleteBtn.style.display = "inline-flex";
+            deleteBtn.textContent = "Delete";
+            deleteBtn.onclick = () => moveFoundItemToDeleted(item.id, item.is_pending);
+        }
     }
     
     openModal('itemDetailModal');
@@ -1160,7 +1177,7 @@ async function submitDirectClaim() {
         }
 
         async function archiveLostItem(itemId) {
-        const confirmArchive = await confirmFoundReportAction("Move to Deleted Items?", "This item will be moved to Deleted Items.", "Move item");
+        const confirmArchive = await confirmFoundReportAction("Archive item?", "This item will be moved out of the active list and into Archive.", "Archive item");
         if (!confirmArchive) return;
 
         try {
@@ -1172,17 +1189,42 @@ async function submitDirectClaim() {
             });
 
             if (response.ok) {
-                await showFoundReportAlert('success', 'Item moved', 'Item moved to Deleted Items successfully.');
+                await showFoundReportAlert('success', 'Item archived', 'Item moved to Archive successfully.');
                 closeModal('itemDetailModal');
-                // Refresh the current list to remove the archived item
-                location.reload(); 
+                loadLostItems();
             } else {
                 const error = await response.json();
-                await showFoundReportAlert('error', 'Move failed', error.detail || 'Failed to move item to Deleted Items.');
+                await showFoundReportAlert('error', 'Archive failed', error.detail || 'Failed to archive item.');
             }
         } catch (err) {
             console.error("Archive Error:", err);
             await showFoundReportAlert('error', 'Connection failed', 'Server connection failed.');
+    }
+}
+
+async function moveFoundItemToDeleted(itemId, isPending = false) {
+    const confirmed = await confirmFoundReportAction(
+        "Delete item?",
+        "You can recover this item later from Deleted Items.",
+        "Delete"
+    );
+    if (!confirmed) return;
+
+    const endpoint = isPending
+        ? `/admin/pending-items/${itemId}/delete`
+        : `/admin/items/${itemId}/delete`;
+    try {
+        const response = await fetch(endpoint, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || "Failed to move item.");
+        await showFoundReportAlert('success', 'Item moved', result.message || 'Item moved to Deleted Items.');
+        closeModal('itemDetailModal');
+        loadLostItems();
+    } catch (error) {
+        await showFoundReportAlert('error', 'Move failed', error.message || 'Failed to move item.');
     }
 }
 
@@ -1545,9 +1587,8 @@ async function executeSubmit() {
     }
 }
 
-async function disposeItem(itemId) {
-    const targetItem = foundItemsCache.find(item => item.id === itemId);
-    const disposeUrl = targetItem?.is_pending
+async function disposeItem(itemId, isPending = false) {
+    const disposeUrl = isPending
         ? `/admin/pending-items/${itemId}/dispose`
         : `/admin/items/${itemId}/dispose`;
     const confirmed = await confirmFoundReportAction("Delete item permanently?", "This action cannot be undone.", "Delete item");
@@ -1657,7 +1698,7 @@ async function disposeItem(itemId) {
     </script>
       </div>
 </main>
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=10"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

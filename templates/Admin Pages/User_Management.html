@@ -8,8 +8,8 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
-    <link rel="stylesheet" href="/static/User_Management.css?v=17"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
+    <link rel="stylesheet" href="/static/User_Management.css?v=22">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
@@ -187,7 +187,8 @@
     <div class="table-header-top">
         <div class="tab-group user-tabs">
         <button id="btnShowAdmin" class="tab-btn active" onclick="filterTable('admin')">Admin/Staff</button>
-        <button id="btnShowStudent" class="tab-btn" onclick="filterTable('student')">Student/Faculty</button>
+        <button id="btnShowStudent" class="tab-btn" onclick="filterTable('student')">Student</button>
+        <button id="btnShowFaculty" class="tab-btn" onclick="filterTable('faculty')">Faculty</button>
 
         <div class="tab-divider" aria-hidden="true"></div>
 
@@ -230,6 +231,9 @@
         <button id="openResetStudentPasswordBtn" class="upload-btn" onclick="openModal('resetStudentPasswordModal')">
             + Reset Student/Faculty Password
         </button>
+        <button id="openAcademicTermBtn" class="upload-btn" onclick="openAcademicTermModal()">
+            Academic Term
+        </button>
         <button id="btnArchiveSelected" class="tab-btn archive-style batch-action-btn" style="color: #ff4d4d; border-color: #ff4d4d; display: none;" onclick="archiveSelectedUsers()">
             <i class="fas fa-box-archive"></i> Move to Archive 
         </button>
@@ -258,8 +262,15 @@
 <div id="studentContainer" class="table-box" style="display:none;">
     <div id="studentYearEndTermLabel" class="student-year-term-label" style="display:none;"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course/Strand/Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>Student ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course / Strand</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="studentTableBody"></tbody>
+    </table>
+</div>
+
+<div id="facultyContainer" class="table-box" style="display:none;">
+    <table class="user-table">
+        <thead><tr><th>Select</th><th>Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="facultyTableBody"></tbody>
     </table>
 </div>
 
@@ -274,6 +285,7 @@
 
 <div id="deleteContainer" class="table-box archive-theme" style="display:none;">
     <h3 id="deleteTitle"><i class="fas fa-trash"></i> Trash</h3>
+    <div id="trashFolderGrid" class="archive-folder-grid"></div>
     <table class="user-table">
         <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="deleteTableBody"></tbody>
@@ -324,11 +336,11 @@
         <div class="bulk-settings-grid">
             <div class="form-group" style="margin-bottom: 18px;">
                 <label for="batchYear">Batch Year <span class="required-asterisk">*</span></label>
-                <select id="batchYear" class="admin-input" onchange="updateBatchPreview()"></select>
+                <select id="batchYear" class="admin-input" disabled aria-label="Automatically selected academic year"></select>
             </div>
             <div class="form-group" style="margin-bottom: 18px;">
                 <label for="batchTerm">Term / Semester <span class="required-asterisk">*</span></label>
-                <select id="batchTerm" class="admin-input" onchange="updateBatchPreview()">
+                <select id="batchTerm" class="admin-input" disabled aria-label="Automatically selected semester">
                     <option value="2nd Semester">2nd Semester</option>
                     <option value="1st Semester">1st Semester</option>
                 </select>
@@ -401,6 +413,39 @@
         <div class="bulk-modal-footer">
             <button class="btn-secondary" type="button" onclick="closeModal('bulkRegisterModal')">Cancel</button>
             <button class="btn-primary success-btn" type="button" onclick="submitBulk()">Generate Accounts</button>
+        </div>
+    </div>
+</div>
+
+<div id="academicTermModal" class="modal">
+    <div class="modal-content academic-term-modal-card">
+        <span class="close-modal" onclick="closeModal('academicTermModal')">&times;</span>
+        <div class="academic-term-modal-header">
+            <div class="academic-term-icon"><i class="fas fa-calendar-check"></i></div>
+            <div>
+                <span class="academic-term-eyebrow">Academic calendar</span>
+                <h2>Term Management</h2>
+                <p>Review the semester status before performing a rollover.</p>
+            </div>
+        </div>
+        <div id="academicTermSummary" class="academic-term-summary">
+            <div class="academic-term-loading">Loading academic term…</div>
+        </div>
+        <div class="academic-term-notice">
+            <i class="fas fa-circle-info"></i>
+            Ending a semester archives its active student accounts. This action does not archive faculty.
+        </div>
+        <div class="academic-term-actions">
+            <button type="button" class="academic-term-btn academic-term-btn-secondary" onclick="closeModal('academicTermModal')">Cancel</button>
+            <button type="button" id="endAcademicTermBtn" class="academic-term-btn academic-term-btn-danger" onclick="endAcademicTerm()">
+                <i class="fas fa-box-archive"></i> End Current Semester
+            </button>
+            <button type="button" id="reactivateAcademicTermBtn" class="academic-term-btn academic-term-btn-warning" onclick="reactivateAcademicTerm()">
+                <i class="fas fa-rotate-left"></i> Reactivate Semester
+            </button>
+            <button type="button" id="startAcademicTermBtn" class="academic-term-btn academic-term-btn-primary" onclick="startAcademicTerm()">
+                <i class="fas fa-play"></i> Start Next Semester
+            </button>
         </div>
     </div>
 </div>
@@ -700,6 +745,11 @@
 
             <div class="create-admin-info-grid">
                 <div class="form-group">
+                    <label for="adminEmployeeId">Admin / Employee ID</label>
+                    <input type="text" id="adminEmployeeId" placeholder="Enter ID number" class="admin-input" autocomplete="off">
+                </div>
+
+                <div class="form-group">
                     <label for="adminLastName">Last Name</label>
                     <input type="text" id="adminLastName" placeholder="Dela Cruz" class="admin-input">
                 </div>
@@ -719,7 +769,7 @@
                     <input type="email" id="adminEmail" placeholder="juan.delacruz@sti.edu.ph" class="admin-input">
                 </div>
                 
-                <div class="form-group">
+                <div class="form-group create-admin-department-field">
                     <label for="adminCourse">Department / Office</label>
                     <select id="adminCourse" class="admin-input" required>
                         <option value="">-- Select Office --</option>
@@ -730,13 +780,6 @@
                 <p style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Module Access</p>
                 <p class="permission-helper-text">Choose which modules this new admin can open from the admin panel.</p>
                 <div class="permissions-grid">
-                    <label class="perm-item professional">
-                        <input type="checkbox" class="perm-check" value="Confiscated-items">
-                        <span class="perm-copy">
-                            <span class="perm-title">Confiscated Items</span>
-                            <span class="perm-desc">View and process confiscated item records.</span>
-                        </span>
-                    </label>
                     <label class="perm-item professional">
                         <input type="checkbox" class="perm-check" value="Messages">
                         <span class="perm-copy">
@@ -1221,6 +1264,7 @@ function toggleUserManagementActions() {
 
     const enabled = !!masterCheckbox?.checked;
     actionsGroup.style.display = enabled ? 'grid' : 'none';
+    requestAnimationFrame(fitCreateAdminModalToViewport);
 
     if (!enabled) {
         actionCheckboxes.forEach(cb => cb.checked = false);
@@ -1772,11 +1816,13 @@ let currentAdminId = null; // Store your ID globally
 let currentView = 'admin';
 let currentBatchFilter = '';
 let currentArchiveFolderYear = '';
+let currentTrashFolderYear = '';
 let selectedYearEndTerms = new Set();
 let selectedSemesterTerms = new Set();
 let selectedUserIds = new Set();
 let currentUserPage = 1;
 let currentUserPageSize = 10;
+let academicTermSetting = null;
 
 function getUserPageSize() {
     const pageSizeInput = document.getElementById('userPageSize');
@@ -1929,11 +1975,13 @@ function populateBatchFilterOptions() {
 }
 
 function getDefaultSemesterTerm() {
-    return new Date().getMonth() >= 6 ? '1st Semester' : '2nd Semester';
+    if (academicTermSetting?.current_semester) return academicTermSetting.current_semester;
+    return new Date().getMonth() >= 5 ? '1st Semester' : '2nd Semester';
 }
 
 function syncActiveStudentSemesterSelection() {
     if (currentView !== 'student') return;
+
     selectedYearEndTerms = new Set([getDefaultAcademicYearRange()]);
     selectedSemesterTerms = new Set([getDefaultSemesterTerm()]);
 }
@@ -1981,16 +2029,8 @@ function renderSemesterFilterCheckboxes(containerId, items, selectedSet, labelFo
 function updateStudentYearEndTermLabel() {
     const label = document.getElementById('studentYearEndTermLabel');
     if (!label) return;
-
-    const selectedYears = [...selectedYearEndTerms].sort((a, b) => b.localeCompare(a));
-    if (!selectedYears.length) {
-        label.style.display = 'none';
-        label.textContent = '';
-        return;
-    }
-
-    label.textContent = `Year End Term: ${selectedYears.join(', ')}`;
-    label.style.display = currentView === 'student' ? 'block' : 'none';
+    label.style.display = 'none';
+    label.textContent = '';
 }
 
 function populateSemesterFilterOptions() {
@@ -2027,7 +2067,7 @@ function populateSemesterFilterOptions() {
     const visibleYearEndTerms = isActiveStudentView ? [getDefaultAcademicYearRange()] : yearEndTerms;
     const visibleSemesterTerms = isActiveStudentView ? [getDefaultSemesterTerm()] : semesters;
 
-    renderSemesterFilterCheckboxes('yearEndFilterOptions', visibleYearEndTerms, selectedYearEndTerms, value => `Year End Term ${value}`, isActiveStudentView);
+    renderSemesterFilterCheckboxes('yearEndFilterOptions', visibleYearEndTerms, selectedYearEndTerms, value => `Academic Year ${value}`, isActiveStudentView);
     renderSemesterFilterCheckboxes('semesterTermFilterOptions', visibleSemesterTerms, selectedSemesterTerms, value => value, isActiveStudentView);
     updateStudentYearEndTermLabel();
 }
@@ -2052,7 +2092,10 @@ function applySemesterFilter(users) {
 function getArchiveFolderYear(user) {
     if (user?.is_admin) return 'Admin/Staff';
     const batchInfo = parseBatchTerm(user?.batch_id);
-    return batchInfo.yearEndTerm || 'No Year End Term';
+    if (batchInfo.yearEndTerm && batchInfo.semester) {
+        return `${batchInfo.yearEndTerm} · ${batchInfo.semester}`;
+    }
+    return batchInfo.yearEndTerm || 'No Academic Term';
 }
 
 function isTruthyFlag(value) {
@@ -2067,11 +2110,11 @@ function isTrashTabUser(user) {
     return isTruthyFlag(user?.is_archived) && isTruthyFlag(user?.is_pending_delete);
 }
 
-function getArchivedUserFolders() {
+function getUserFolders(userFilter) {
     const folderMap = new Map();
 
     allUsers
-        .filter(isArchiveTabUser)
+        .filter(userFilter)
         .forEach(user => {
             const year = getArchiveFolderYear(user);
             if (!folderMap.has(year)) {
@@ -2096,7 +2139,7 @@ function getArchivedUserFolders() {
         });
 
     const folderRank = year => {
-        if (year === 'No Year End Term') return 2;
+        if (year === 'No Academic Term') return 2;
         if (year === 'Admin/Staff') return 1;
         return 0;
     };
@@ -2106,6 +2149,14 @@ function getArchivedUserFolders() {
         if (rankDiff !== 0) return rankDiff;
         return b.year.localeCompare(a.year);
     });
+}
+
+function getArchivedUserFolders() {
+    return getUserFolders(isArchiveTabUser);
+}
+
+function getTrashUserFolders() {
+    return getUserFolders(isTrashTabUser);
 }
 
 function renderArchiveFolders() {
@@ -2174,12 +2225,76 @@ function syncArchiveFolderSelectionForUsers(users) {
     }
 }
 
+function renderTrashFolders() {
+    const grid = document.getElementById('trashFolderGrid');
+    if (!grid) return;
+
+    const folders = getTrashUserFolders();
+    if (!folders.length) {
+        currentTrashFolderYear = '';
+        grid.innerHTML = '<div class="archive-folder-empty">No accounts in Trash.</div>';
+        return;
+    }
+    if (!folders.some(folder => folder.year === currentTrashFolderYear)) {
+        currentTrashFolderYear = folders[0].year;
+    }
+
+    grid.innerHTML = '';
+    folders.forEach(folder => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `archive-folder-card${folder.year === currentTrashFolderYear ? ' active' : ''}`;
+        button.onclick = () => selectTrashFolder(folder.year);
+
+        const title = document.createElement('span');
+        title.className = 'archive-folder-title';
+        title.innerText = folder.year;
+
+        const meta = document.createElement('span');
+        meta.className = 'archive-folder-meta';
+        const parts = [`${folder.total} trashed account${folder.total === 1 ? '' : 's'}`];
+        if (folder.students) parts.push(`${folder.students} student${folder.students === 1 ? '' : 's'}`);
+        if (folder.faculty) parts.push(`${folder.faculty} faculty`);
+        if (folder.admins) parts.push(`${folder.admins} admin${folder.admins === 1 ? '' : 's'}`);
+        meta.innerText = parts.join(' | ');
+
+        button.appendChild(title);
+        button.appendChild(meta);
+        grid.appendChild(button);
+    });
+}
+
+function selectTrashFolder(year) {
+    currentTrashFolderYear = year;
+    selectedUserIds.clear();
+    const selectAllRows = document.getElementById('selectAllRows');
+    if (selectAllRows) selectAllRows.checked = false;
+    renderTrashFolders();
+    searchUsers();
+    updateSelectionActionButtons();
+}
+
+function applyTrashFolderFilter(users) {
+    if (!currentTrashFolderYear) return [];
+    return users.filter(user => isTrashTabUser(user) && getArchiveFolderYear(user) === currentTrashFolderYear);
+}
+
+function syncTrashFolderSelectionForUsers(users) {
+    if (!Array.isArray(users) || users.length === 0) return;
+    const activeFolderHasMatch = users.some(user => getArchiveFolderYear(user) === currentTrashFolderYear);
+    if (!activeFolderHasMatch) {
+        currentTrashFolderYear = getArchiveFolderYear(users[0]);
+        renderTrashFolders();
+    }
+}
+
 function getFilteredUsersForRole(role) {
     let filtered = allUsers.filter(user => {
         const isAdmin = isTruthyFlag(user.is_admin);
 
         if (role === 'admin') return isAdmin && !isTruthyFlag(user.is_archived);
-        if (role === 'student') return !isAdmin && !isTruthyFlag(user.is_archived);
+        if (role === 'student') return !isAdmin && !isFacultyUser(user) && !isTruthyFlag(user.is_archived);
+        if (role === 'faculty') return !isAdmin && isFacultyUser(user) && !isTruthyFlag(user.is_archived);
         if (role === 'archive') return isArchiveTabUser(user);
         if (role === 'delete') return isTrashTabUser(user);
         return false;
@@ -2190,7 +2305,7 @@ function getFilteredUsersForRole(role) {
 
 function getInitialUserManagementTab() {
     const tab = new URLSearchParams(window.location.search).get('tab');
-    return ['admin', 'student', 'archive', 'delete'].includes(tab) ? tab : 'admin';
+    return ['admin', 'student', 'faculty', 'archive', 'delete'].includes(tab) ? tab : 'admin';
 }
 
 function sortUsersByFullName(users) {
@@ -2229,6 +2344,11 @@ async function loadUsers(currentRole = getInitialUserManagementTab()) {
         const payload = JSON.parse(atob(token.split('.')[1]));
         currentAdminId = payload.id || payload.sub;
 
+        const termResponse = await fetch('/admin/academic-term', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (termResponse.ok) academicTermSetting = await termResponse.json();
+
         const response = await fetch('/admin/get-all-users', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -2237,6 +2357,7 @@ async function loadUsers(currentRole = getInitialUserManagementTab()) {
         populateBatchFilterOptions();
         populateSemesterFilterOptions();
         renderArchiveFolders();
+        renderTrashFolders();
         syncBatchYearOptions();
         syncSemesterSequenceOptions();
         
@@ -2252,6 +2373,7 @@ function filterTable(role = 'admin') {
     const config = {
         admin:   { container: 'adminContainer',   body: 'adminTableBody' },
         student: { container: 'studentContainer', body: 'studentTableBody' },
+        faculty: { container: 'facultyContainer', body: 'facultyTableBody' },
         archive: { container: 'archiveContainer', body: 'archiveTableBody' },
         delete:  { container: 'deleteContainer',  body: 'deleteTableBody' }
     };
@@ -2268,20 +2390,25 @@ function filterTable(role = 'admin') {
     currentView = role;
     currentUserPage = 1;
     selectedUserIds.clear();
+    if (role === 'delete' && previousView !== 'delete') {
+        selectedYearEndTerms.clear();
+        selectedSemesterTerms.clear();
+    }
 
-    const tabButtons = ['btnShowAdmin', 'btnShowStudent', 'btnShowArchive', 'btnShowDelete'];
+    const tabButtons = ['btnShowAdmin', 'btnShowStudent', 'btnShowFaculty', 'btnShowArchive', 'btnShowDelete'];
     tabButtons.forEach(id => document.getElementById(id)?.classList.remove('active'));
 
     const activeButtonMap = {
         admin: 'btnShowAdmin',
         student: 'btnShowStudent',
+        faculty: 'btnShowFaculty',
         archive: 'btnShowArchive',
         delete: 'btnShowDelete'
     };
 
     document.getElementById(activeButtonMap[role])?.classList.add('active');
 
-    const containers = ['adminContainer', 'studentContainer', 'archiveContainer', 'deleteContainer'];
+    const containers = ['adminContainer', 'studentContainer', 'facultyContainer', 'archiveContainer', 'deleteContainer'];
     containers.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
@@ -2307,32 +2434,30 @@ function filterTable(role = 'admin') {
 
     populateSemesterFilterOptions();
     renderArchiveFolders();
+    renderTrashFolders();
 
     if (batchFilterContainer) {
         batchFilterContainer.style.display =
-            (role === 'admin' || role === 'student' || shouldShowArchiveFilters) ? 'flex' : 'none';
+            (role === 'admin' || role === 'student' || role === 'faculty' || shouldShowArchiveFilters) ? 'flex' : 'none';
     }
 
     if (batchFilterInput) {
-        batchFilterInput.style.display = role === 'student' ? 'inline-flex' : 'none';
-        if (role !== 'student') {
+        batchFilterInput.style.display = (role === 'student' || role === 'faculty') ? 'inline-flex' : 'none';
+        if (role !== 'student' && role !== 'faculty') {
             batchFilterInput.value = '';
             currentBatchFilter = '';
         }
     }
 
     if (semesterFilterContainer) {
-        semesterFilterContainer.style.display =
-            (role === 'student' || role === 'delete')
-                ? 'flex'
-                : 'none';
+        semesterFilterContainer.style.display = role === 'delete' ? 'flex' : 'none';
     }
 
     updateStudentYearEndTermLabel();
 
     if (selectAllControl) {
         selectAllControl.style.display =
-            (role === 'admin' || role === 'student' || role === 'archive' || role === 'delete')
+            (role === 'admin' || role === 'student' || role === 'faculty' || role === 'archive' || role === 'delete')
                 ? 'inline-flex'
                 : 'none';
     }
@@ -2343,7 +2468,7 @@ function filterTable(role = 'admin') {
 
     if (userCountBadge) {
         userCountBadge.style.display =
-            (role === 'admin' || role === 'student' || role === 'archive' || role === 'delete')
+            (role === 'admin' || role === 'student' || role === 'faculty' || role === 'archive' || role === 'delete')
                 ? 'inline-flex'
                 : 'none';
     }
@@ -2354,13 +2479,17 @@ function filterTable(role = 'admin') {
     if (deleteSelectedBtn) deleteSelectedBtn.style.display = 'none';
 
     let filtered = getFilteredUsersForRole(role);
-    if (role === 'student') {
+    if (role === 'student' || role === 'faculty') {
         filtered = applyBatchFilter(filtered);
     }
     if (role === 'archive') {
         syncArchiveFolderSelectionForUsers(filtered);
         filtered = applyArchiveFolderFilter(filtered);
-    } else if (role === 'student' || role === 'delete') {
+    } else if (role === 'delete') {
+        syncTrashFolderSelectionForUsers(filtered);
+        filtered = applyTrashFolderFilter(filtered);
+        filtered = applySemesterFilter(filtered);
+    } else if (role === 'student') {
         filtered = applySemesterFilter(filtered);
     }
 
@@ -2394,7 +2523,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
     const pageRows = isShowingAll ? data : data.slice(pageStart, pageStart + currentUserPageSize);
 
     if (!pageRows.length) {
-        const columnCount = currentRole === 'admin' || currentRole === 'student' || currentRole === 'archive' || currentRole === 'delete'
+        const columnCount = currentRole === 'admin' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete'
             ? 7
             : 6;
         tableBody.innerHTML = `<tr><td colspan="${columnCount}" style="text-align:center; padding:18px; color:#5b6f86; font-weight:700;">No records found.</td></tr>`;
@@ -2417,7 +2546,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
 
         // 2. SEGREGATED COLUMN: Show Course/Section for users, Dept for Admins
         let infoColumn = "";
-        if (currentRole === 'student') {
+        if (currentRole === 'student' || currentRole === 'faculty') {
             const userInfo = (user.course || user.section)
                 ? `${user.course || ''} ${user.section || ''}`.trim()
                 : (user.department || "N/A");
@@ -2442,33 +2571,34 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
             if (currentRole === 'delete') {
                 actionButtons = `
                     ${canArchiveUsers
-                        ? `<button class="action-btn restore-btn" onclick="toggleArchive(${user.id}, false, '${currentRole}')" style="background-color: #28a745; color: white;">Recover</button>`
+                        ? `<button class="action-btn action-icon-btn restore-btn" onclick="toggleArchive(${user.id}, false, '${currentRole}')" title="Recover" aria-label="Recover"><i class="fas fa-rotate-left" aria-hidden="true"></i></button>`
                         : `<button class="action-btn locked-btn" disabled>No Recover Access</button>`}
                     ${canDeleteUsers
-                        ? `<button class="action-btn delete-perm-btn" onclick="permanentDelete(${user.id}, '${currentRole}')" style="background-color: #dc3545; color: white; margin-left: 5px;">Delete</button>`
-                        : `<button class="action-btn locked-btn" disabled style="margin-left: 5px;">No Delete Access</button>`}
+                        ? `<button class="action-btn action-icon-btn delete-perm-btn" onclick="permanentDelete(${user.id}, '${currentRole}')" title="Delete permanently" aria-label="Delete permanently"><i class="fas fa-trash-can" aria-hidden="true"></i></button>`
+                        : `<button class="action-btn locked-btn" disabled>No Delete Access</button>`}
                 `;
             } else if (currentRole === 'archive') {
                 actionButtons = `
+                    <button class="action-btn action-icon-btn view-btn" onclick="openUserProfileModal(${user.id}, 'view')" title="View" aria-label="View"><i class="fas fa-eye" aria-hidden="true"></i></button>
                     ${canArchiveUsers
-                        ? `<button class="action-btn restore-btn" onclick="toggleArchive(${user.id}, false, '${currentRole}')" style="background-color: #28a745; color: white;">Recover</button>`
+                        ? `<button class="action-btn action-icon-btn restore-btn" onclick="toggleArchive(${user.id}, false, '${currentRole}')" title="Recover" aria-label="Recover"><i class="fas fa-rotate-left" aria-hidden="true"></i></button>`
                         : `<button class="action-btn locked-btn" disabled>No Recover Access</button>`}
                     ${canDeleteUsers
-                        ? `<button class="action-btn delete-perm-btn" onclick="moveToDelete(${user.id}, '${currentRole}')" style="background-color: #dc3545; color: white; margin-left: 5px;">Delete</button>`
-                        : `<button class="action-btn locked-btn" disabled style="margin-left: 5px;">No Delete Access</button>`}
+                        ? `<button class="action-btn action-icon-btn delete-perm-btn" onclick="moveToDelete(${user.id}, '${currentRole}')" title="Delete" aria-label="Delete"><i class="fas fa-trash-can" aria-hidden="true"></i></button>`
+                        : `<button class="action-btn locked-btn" disabled>No Delete Access</button>`}
                 `;
             } else {
-                const profileViewButton = `<button class="action-btn view-btn" onclick="openUserProfileModal(${user.id}, 'view')">View</button>`;
+                const profileViewButton = `<button class="action-btn action-icon-btn view-btn" onclick="openUserProfileModal(${user.id}, 'view')" title="View" aria-label="View"><i class="fas fa-eye" aria-hidden="true"></i></button>`;
                 const profileEditButton = Number(user.id) === Number(currentAdminId) || user.is_archived || user.is_pending_delete
                     ? ''
-                    : `<button class="action-btn edit-btn" onclick="openUserProfileModal(${user.id}, 'edit')">Edit</button>`;
+                    : `<button class="action-btn action-icon-btn edit-btn" onclick="openUserProfileModal(${user.id}, 'edit')" title="Edit" aria-label="Edit"><i class="fas fa-pen" aria-hidden="true"></i></button>`;
                 const deleteButton = Number(user.id) === Number(currentAdminId) || !canDeleteUsers
                     ? ''
-                    : `<button class="action-btn delete-perm-btn" onclick="${currentRole === 'student' ? 'moveToDelete' : 'permanentDelete'}(${user.id}, '${currentRole}')">Delete</button>`;
+                    : `<button class="action-btn action-icon-btn delete-perm-btn" onclick="${currentRole === 'student' || currentRole === 'faculty' ? 'moveToDelete' : 'permanentDelete'}(${user.id}, '${currentRole}')" title="Delete" aria-label="Delete"><i class="fas fa-trash-can" aria-hidden="true"></i></button>`;
                 const archiveButton = Number(user.id) === Number(currentAdminId)
                     ? ''
                     : (canArchiveUsers
-                        ? `<button class="action-btn archive-btn" onclick="toggleArchive(${user.id}, true, '${currentRole}')">Archive</button>`
+                        ? `<button class="action-btn action-icon-btn archive-btn" onclick="toggleArchive(${user.id}, true, '${currentRole}')" title="Archive" aria-label="Archive"><i class="fas fa-box-archive" aria-hidden="true"></i></button>`
                         : `<button class="action-btn locked-btn" disabled>No Archive Access</button>`);
 
                 actionButtons = isMe ? 
@@ -2481,7 +2611,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                     `;
             }
 
-        const canSelect = currentRole === 'admin' || currentRole === 'student' || currentRole === 'archive' || currentRole === 'delete';
+        const canSelect = currentRole === 'admin' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete';
         const selectColumn = canSelect
             ? `<td><input type="checkbox" class="row-select" ${isMe ? 'disabled title="You cannot select your own account."' : ''} ${selectedUserIds.has(user.id) ? 'checked' : ''} onchange="toggleUserSelection(${user.id}, this.checked)"></td>`
             : '';
@@ -2495,7 +2625,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                 <td style="font-size: 0.85rem; color: #555;">${loginDisplay}</td>
                 <td>
                     <span class="status-pill ${(user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'status-active' : 'status-deactivated'}">
-                        ${user.is_archived ? 'Archived' : ((user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'Active' : 'Deactivated')}
+                        ${user.is_archived ? 'Archived / Disabled' : ((user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'Active' : 'Deactivated')}
                     </span>
                 </td>
                 <td>
@@ -2561,25 +2691,26 @@ function updateSelectionActionButtons() {
     const hasInactiveStudentsSelected = selectedVisibleUsers.some(user => !user.is_admin && !user.is_archived && !user.is_student_active);
     const hasActiveStudentsSelected = selectedVisibleUsers.some(user => !user.is_admin && !user.is_archived && user.is_student_active);
     const hasActiveAdminsSelected = selectedVisibleUsers.some(user => user.is_admin && !user.is_archived);
+    const isStudentOrFacultyView = currentView === 'student' || currentView === 'faculty';
 
     if (archiveSelectedBtn) {
-        archiveSelectedBtn.style.display = ((currentView === 'admin' && hasActiveAdminsSelected) || (currentView === 'student' && selectedVisibleUsers.length > 0))
+        archiveSelectedBtn.style.display = ((currentView === 'admin' && hasActiveAdminsSelected) || (isStudentOrFacultyView && selectedVisibleUsers.length > 0))
             && hasAccessPermission('User-Management-Archive')
             ? 'inline-flex'
             : 'none';
     }
     if (activateSelectedBtn) {
-        activateSelectedBtn.style.display = currentView === 'student' && hasInactiveStudentsSelected && hasAccessPermission('User-Management-Edit') ? 'inline-flex' : 'none';
+        activateSelectedBtn.style.display = isStudentOrFacultyView && hasInactiveStudentsSelected && hasAccessPermission('User-Management-Edit') ? 'inline-flex' : 'none';
     }
     if (deactivateSelectedBtn) {
-        deactivateSelectedBtn.style.display = currentView === 'student' && hasActiveStudentsSelected && hasAccessPermission('User-Management-Edit') ? 'inline-flex' : 'none';
+        deactivateSelectedBtn.style.display = isStudentOrFacultyView && hasActiveStudentsSelected && hasAccessPermission('User-Management-Edit') ? 'inline-flex' : 'none';
     }
     if (recoverSelectedBtn) {
         recoverSelectedBtn.style.display = (currentView === 'archive' || currentView === 'delete') && selectedVisibleUsers.length > 0 && hasAccessPermission('User-Management-Archive') ? 'inline-flex' : 'none';
     }
     if (deleteSelectedBtn) {
         deleteSelectedBtn.style.display = selectedVisibleUsers.length > 0 && hasAccessPermission('User-Management-Delete') ? 'inline-flex' : 'none';
-        deleteSelectedBtn.innerHTML = currentView === 'student'
+        deleteSelectedBtn.innerHTML = isStudentOrFacultyView
             ? '<i class="fas fa-trash"></i> Delete'
             : '<i class="fas fa-trash"></i> Delete Permanently';
     }
@@ -2594,7 +2725,9 @@ async function archiveSelectedUsers() {
         selectedUserIds.has(user.id) &&
         !user.is_archived &&
         user.id !== currentAdminId &&
-        ((currentView === 'admin' && user.is_admin) || (currentView === 'student' && !user.is_admin))
+        ((currentView === 'admin' && user.is_admin) ||
+            (currentView === 'student' && !user.is_admin && !isFacultyUser(user)) ||
+            (currentView === 'faculty' && !user.is_admin && isFacultyUser(user)))
     );
     if (selected.length === 0) {
         await showUserManagementAlert(
@@ -2602,18 +2735,20 @@ async function archiveSelectedUsers() {
             'No users selected',
             currentView === 'admin'
                 ? 'Select at least one admin account first.'
-                : 'Select at least one active student first.'
+                : `Select at least one active ${currentView === 'faculty' ? 'faculty' : 'student'} account first.`
         );
         return;
     }
-    const selectedLabel = currentView === 'admin' ? 'admin account(s)' : 'student account(s)';
+    const selectedLabel = currentView === 'admin'
+        ? 'admin account(s)'
+        : `${currentView === 'faculty' ? 'faculty' : 'student'} account(s)`;
     if (!(await confirmUserManagementAction('Archive selected users?', `Archive ${selected.length} selected ${selectedLabel}?`, 'Archive selected'))) return;
 
     const archiveBtn = document.getElementById('btnArchiveSelected');
     const originalArchiveBtnHtml = setBatchActionButtonLoading(
         'btnArchiveSelected',
         true,
-        `<i class="fas fa-spinner fa-spin"></i> Archiving ${selected.length} ${currentView === 'admin' ? 'Admins' : 'Student/Faculty'}...`
+            `<i class="fas fa-spinner fa-spin"></i> Archiving ${selected.length} ${currentView === 'admin' ? 'Admins' : (currentView === 'faculty' ? 'Faculty' : 'Students')}...`
     );
 
     try {
@@ -2679,7 +2814,7 @@ async function activateSelectedUsers() {
         }
 
         selectedUserIds.clear();
-        await loadUsers('student');
+        await loadUsers(currentView === 'faculty' ? 'faculty' : 'student');
         await showUserManagementAlert('success', 'Student/Faculty activated', result.message || `${selected.length} selected student/faculty account(s) activated.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Activation failed', error.message || 'Failed to activate selected users.');
@@ -2732,7 +2867,7 @@ async function deactivateSelectedUsers() {
         }
 
         selectedUserIds.clear();
-        await loadUsers('student');
+        await loadUsers(currentView === 'faculty' ? 'faculty' : 'student');
         await showUserManagementAlert('success', 'Student/Faculty deactivated', result.message || `${selected.length} selected student/faculty account(s) deactivated.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Deactivation failed', error.message || 'Failed to deactivate selected users.');
@@ -2783,7 +2918,7 @@ async function toggleSingleStudentAccess(userId, shouldActivate) {
             throw new Error(result.detail || `Failed to ${actionLabel} user.`);
         }
 
-        await loadUsers('student');
+        await loadUsers(isFacultyUser(user) ? 'faculty' : 'student');
     } catch (error) {
         await showUserManagementAlert('error', `${shouldActivate ? 'Activation' : 'Deactivation'} failed`, error.message || `Failed to ${actionLabel} user.`);
     }
@@ -2892,7 +3027,7 @@ async function confirmGrantAdminAccess() {
 
         closeModal('grantAdminModal');
         closeModal('studentAccessModal');
-        await loadUsers('student');
+        await loadUsers('admin');
         await showUserManagementAlert('success', 'Admin access granted', result.message || 'Admin access granted successfully.');
     } catch (error) {
         await showUserManagementAlert('error', 'Grant failed', error.message || 'Failed to grant admin access.');
@@ -2960,8 +3095,9 @@ async function deleteSelectedUsers() {
         return;
     }
 
-    if (currentView === 'student') {
-        if (!(await confirmUserManagementAction('Move selected accounts to Trash?', `Move ${selected.length} selected student/faculty account(s) to Trash?`, 'Move to Trash'))) return;
+    if (currentView === 'student' || currentView === 'faculty') {
+        const accountType = currentView === 'faculty' ? 'faculty' : 'student';
+        if (!(await confirmUserManagementAction('Move selected accounts to Trash?', `Move ${selected.length} selected ${accountType} account(s) to Trash?`, 'Move to Trash'))) return;
 
         const originalDeleteBtnHtml = setBatchActionButtonLoading(
             'btnDeleteSelected',
@@ -3076,7 +3212,7 @@ async function moveToDelete(userId, currentRole, silent = false) {
 
         if (!silent) {
             await showUserManagementAlert('success', 'User moved', result.message);
-            loadUsers(currentRole === 'student' ? 'delete' : currentRole);
+            loadUsers(currentRole === 'student' || currentRole === 'faculty' ? 'delete' : currentRole);
         }
     } catch (error) {
         console.error("Move to delete failed:", error);
@@ -3142,7 +3278,7 @@ async function moveSingleUserToTrash(userId) {
     const activeTab = currentView;
 
     let visibleUsers = getFilteredUsersForRole(activeTab);
-    if (activeTab === 'student') {
+    if (activeTab === 'student' || activeTab === 'faculty') {
         visibleUsers = applyBatchFilter(visibleUsers);
     }
 
@@ -3163,7 +3299,11 @@ async function moveSingleUserToTrash(userId) {
     if (activeTab === 'archive') {
         syncArchiveFolderSelectionForUsers(visibleUsers);
         visibleUsers = applyArchiveFolderFilter(visibleUsers);
-    } else if (activeTab === 'student' || activeTab === 'delete') {
+    } else if (activeTab === 'delete') {
+        syncTrashFolderSelectionForUsers(visibleUsers);
+        visibleUsers = applyTrashFolderFilter(visibleUsers);
+        visibleUsers = applySemesterFilter(visibleUsers);
+    } else if (activeTab === 'student') {
         visibleUsers = applySemesterFilter(visibleUsers);
     }
 
@@ -3178,6 +3318,8 @@ async function moveSingleUserToTrash(userId) {
         ? 'adminTableBody'
         : activeTab === 'student'
             ? 'studentTableBody'
+            : activeTab === 'faculty'
+                ? 'facultyTableBody'
             : activeTab === 'archive'
                 ? 'archiveTableBody'
                 : 'deleteTableBody';
@@ -3317,6 +3459,33 @@ async function applyPermissions() {
 applyPermissions();
 syncCreateAdminGrantLocks();
 
+function fitCreateAdminModalToViewport() {
+    const modal = document.getElementById('createAdminModal');
+    const card = modal?.querySelector('.create-admin-content');
+    if (!modal || !card || modal.style.display !== 'flex') return;
+
+    if (window.innerWidth <= 760) {
+        card.style.setProperty('--create-admin-scale', '1');
+        card.style.removeProperty('max-height');
+        card.style.removeProperty('overflow-y');
+        return;
+    }
+
+    card.style.maxHeight = 'none';
+    card.style.overflowY = 'visible';
+    card.style.setProperty('--create-admin-scale', '1');
+    const availableWidth = Math.max(320, window.innerWidth - 48);
+    const availableHeight = Math.max(320, window.innerHeight - 32);
+    const widthScale = availableWidth / card.offsetWidth;
+    const heightScale = availableHeight / card.scrollHeight;
+    const scale = Math.min(1, widthScale, heightScale);
+    card.style.setProperty('--create-admin-scale', String(Math.max(0.6, scale)));
+}
+
+window.addEventListener('resize', () => {
+    requestAnimationFrame(fitCreateAdminModalToViewport);
+});
+
 function openModal(id) {
         if ((id === 'bulkRegisterModal' || id === 'createAdminModal') && !hasAccessPermission('User-Management-Create')) {
             showAccessDeniedPopup('User Management Create');
@@ -3334,6 +3503,7 @@ function openModal(id) {
             updateBatchPreview();
         } else if (id === 'createAdminModal') {
             syncCreateAdminGrantLocks();
+            requestAnimationFrame(fitCreateAdminModalToViewport);
         }
     }
 
@@ -3367,7 +3537,7 @@ function openModal(id) {
             cb.disabled = false;
             cb.closest('.perm-item')?.classList.remove('disabled-permission');
         });
-        ['adminLastName', 'adminFirstName', 'adminMiddleName', 'adminEmail', 'adminCourse']
+        ['adminEmployeeId', 'adminLastName', 'adminFirstName', 'adminMiddleName', 'adminEmail', 'adminCourse']
             .forEach(id => {
                 const field = document.getElementById(id);
                 if (field) field.value = '';
@@ -3396,24 +3566,166 @@ function openModal(id) {
 }
 
 function getDefaultAcademicYearRange() {
+    if (academicTermSetting?.current_academic_year) return academicTermSetting.current_academic_year;
     const now = new Date();
-    const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+    const startYear = now.getMonth() >= 5 ? now.getFullYear() : now.getFullYear() - 1;
     return `${startYear}-${startYear + 1}`;
 }
 
-function getBatchYearOptions(onlyYearsWithOpenStudentSemesters = false) {
+async function refreshAcademicTermSetting() {
+    const response = await fetch('/admin/academic-term', {
+        headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Failed to load academic term.');
+    academicTermSetting = result;
+    return result;
+}
+
+async function openAcademicTermModal() {
+    try {
+        const term = await refreshAcademicTermSetting();
+        const summary = document.getElementById('academicTermSummary');
+        const formatTermDate = value => {
+            if (!value) return 'Not scheduled';
+            return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        };
+        const isEnded = term.current_status === 'ended';
+        summary.innerHTML = `
+            <section class="academic-term-panel current">
+                <div class="academic-term-panel-heading">
+                    <span>Current semester</span>
+                    <span class="academic-term-status ${isEnded ? 'ended' : 'active'}">
+                        <i class="fas ${isEnded ? 'fa-circle-check' : 'fa-circle'}"></i>
+                        ${isEnded ? 'Ended' : 'Active'}
+                    </span>
+                </div>
+                <strong class="academic-term-name">${term.current_academic_year} · ${term.current_semester}</strong>
+                <div class="academic-term-date">
+                    <i class="far fa-calendar"></i>
+                    ${isEnded ? 'Ended' : 'Scheduled to end'} ${formatTermDate(term.current_end_date)}
+                </div>
+            </section>
+            <div class="academic-term-flow"><span></span><i class="fas fa-arrow-down"></i><span></span></div>
+            <section class="academic-term-panel next">
+                <div class="academic-term-panel-heading">
+                    <span>Next semester</span>
+                    <span class="academic-term-status upcoming"><i class="far fa-clock"></i> Upcoming</span>
+                </div>
+                <strong class="academic-term-name">${term.next_academic_year || 'Not configured'}${term.next_semester ? ` · ${term.next_semester}` : ''}</strong>
+                <div class="academic-term-date">
+                    <i class="far fa-calendar"></i>
+                    Starts ${formatTermDate(term.next_start_date)}
+                </div>
+            </section>
+        `;
+        document.getElementById('endAcademicTermBtn').disabled = term.current_status === 'ended';
+        document.getElementById('reactivateAcademicTermBtn').style.display =
+            term.can_reactivate ? 'inline-flex' : 'none';
+        document.getElementById('startAcademicTermBtn').disabled =
+            term.current_status !== 'ended' || !term.next_academic_year;
+        openModal('academicTermModal');
+    } catch (error) {
+        await showUserManagementAlert('error', 'Academic term unavailable', error.message);
+    }
+}
+
+async function runAcademicTermAction(action) {
+    const verb = action === 'end' ? 'end the current semester and archive its active students' : 'start the next semester';
+    if (!(await confirmUserManagementAction('Confirm academic term change?', `Are you sure you want to ${verb}?`, 'Confirm'))) return;
+    const response = await fetch(`/admin/academic-term/${action}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Academic term update failed.');
+    academicTermSetting = result.term;
+    closeModal('academicTermModal');
+    await loadUsers(currentView);
+    await showUserManagementAlert('success', 'Academic term updated', result.message);
+}
+
+async function endAcademicTerm() {
+    try { await runAcademicTermAction('end'); }
+    catch (error) { await showUserManagementAlert('error', 'Unable to end semester', error.message); }
+}
+
+async function startAcademicTerm() {
+    try { await runAcademicTermAction('start'); }
+    catch (error) { await showUserManagementAlert('error', 'Unable to start semester', error.message); }
+}
+
+async function reactivateAcademicTerm() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const toDateInput = value => {
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+    const inputAttributes = { min: toDateInput(tomorrow) };
+    if (academicTermSetting?.next_start_date) {
+        const latestEnd = new Date(`${academicTermSetting.next_start_date}T00:00:00`);
+        latestEnd.setDate(latestEnd.getDate() - 1);
+        inputAttributes.max = toDateInput(latestEnd);
+    }
+
+    const prompt = await Swal.fire({
+        icon: 'warning',
+        title: 'Reactivate ended semester?',
+        html: 'Students archived by this semester-ending action will be restored.<br><strong>Select a new end date.</strong>',
+        input: 'date',
+        inputAttributes,
+        inputValidator: value => !value ? 'A new end date is required.' : undefined,
+        showCancelButton: true,
+        confirmButtonText: 'Reactivate Semester',
+        confirmButtonColor: '#b77900',
+        cancelButtonText: 'Cancel'
+    });
+    if (!prompt.isConfirmed) return;
+
+    try {
+        const response = await fetch('/admin/academic-term/reactivate', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ new_end_date: prompt.value })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Semester reactivation failed.');
+        academicTermSetting = result.term;
+        closeModal('academicTermModal');
+        await loadUsers('student');
+        await showUserManagementAlert(
+            'success',
+            'Semester reactivated',
+            `${result.message} ${result.restored_count} student account(s) restored.`
+        );
+    } catch (error) {
+        await showUserManagementAlert('error', 'Unable to reactivate semester', error.message);
+    }
+}
+
+function getBatchYearOptions() {
     const currentAcademicYear = getDefaultAcademicYearRange();
     const currentStartYear = Number(currentAcademicYear.slice(0, 4));
-    const years = [
+    const registeredYears = allUsers
+        .map(user => parseBatchTerm(user.batch_id).yearEndTerm)
+        .filter(Boolean);
+    const years = [...new Set([
+        ...registeredYears,
         currentAcademicYear,
         `${currentStartYear + 1}-${currentStartYear + 2}`
-    ];
+    ])];
 
     return years
-        .filter(year => {
-            if (!onlyYearsWithOpenStudentSemesters) return true;
-            return getUsedStudentBatchTerms(year).size < 2;
-        })
         .sort((a, b) => b.localeCompare(a));
 }
 
@@ -3434,18 +3746,9 @@ function syncBatchYearOptions(preferredYear = '') {
     const batchYearSelect = document.getElementById('batchYear');
     if (!batchYearSelect) return;
 
-    const importType = document.getElementById('bulkImportType')?.value || 'college';
-    const normalizedPreferredYear = normalizeBatchYearRange(preferredYear || batchYearSelect.value);
     const defaultYear = getDefaultAcademicYearRange();
-    const options = getBatchYearOptions(isLearnerImportType(importType));
-    const selectedYear = options.includes(normalizedPreferredYear)
-        ? normalizedPreferredYear
-        : (options.includes(defaultYear) ? defaultYear : options[0]);
-
-    batchYearSelect.innerHTML = options.length
-        ? options.map(year => `<option value="${year}">${year}</option>`).join('')
-        : '<option value="">No available batch years</option>';
-    batchYearSelect.value = selectedYear || '';
+    batchYearSelect.innerHTML = `<option value="${defaultYear}">${defaultYear}</option>`;
+    batchYearSelect.value = defaultYear;
 }
 
 function normalizeBatchYearRange(value) {
@@ -3487,26 +3790,13 @@ function syncSemesterSequenceOptions() {
     const batchTermSelect = document.getElementById('batchTerm');
     if (!batchYearSelect || !batchTermSelect) return;
 
-    const currentValue = normalizeSemesterTerm(batchTermSelect.value);
-    const importType = document.getElementById('bulkImportType')?.value || 'college';
-    const selectedYear = normalizeBatchYearRange(batchYearSelect.value);
-    const usedTerms = isLearnerImportType(importType) ? getUsedStudentBatchTerms(selectedYear) : new Set();
     const termOptions = ['1st Semester', '2nd Semester'];
-    const availableTerms = termOptions.filter(term => !usedTerms.has(term));
-
-    const visibleTerms = isLearnerImportType(importType) ? availableTerms : termOptions;
+    const visibleTerms = termOptions;
     batchTermSelect.innerHTML = visibleTerms.length
         ? visibleTerms.map(term => `<option value="${term}">${term}</option>`).join('')
         : '<option value="">No available semesters</option>';
 
-    const defaultTerm = '2nd Semester';
-    if (visibleTerms.includes(currentValue)) {
-        batchTermSelect.value = currentValue;
-    } else if (visibleTerms.includes(defaultTerm)) {
-        batchTermSelect.value = defaultTerm;
-    } else {
-        batchTermSelect.value = visibleTerms[0] || '';
-    }
+    batchTermSelect.value = getDefaultSemesterTerm();
 }
 
 function normalizeSemesterTerm(value) {
@@ -3543,22 +3833,6 @@ async function submitBulk() {
 
     if (!batchId) {
         await showUserManagementAlert('warning', 'Batch required', 'Please select a valid batch year and term first.');
-        return;
-    }
-
-    const batchInfo = parseBatchTerm(batchId);
-    if (
-        isLearnerImportType(importType)
-        && batchInfo.yearEndTerm
-        && batchInfo.semester
-        && getUsedStudentBatchTerms(batchInfo.yearEndTerm).has(batchInfo.semester)
-    ) {
-        await showUserManagementAlert(
-            'warning',
-            'Batch already registered',
-            `${batchInfo.yearEndTerm} ${batchInfo.semester} already has registered students. Please select another available semester.`
-        );
-        updateBatchPreview();
         return;
     }
 
@@ -3776,6 +4050,7 @@ loadDepartments();
     const lastName = (document.getElementById('adminLastName')?.value || '').trim();
     const firstName = (document.getElementById('adminFirstName')?.value || '').trim();
     const middleName = (document.getElementById('adminMiddleName')?.value || '').trim();
+    const adminEmployeeId = (document.getElementById('adminEmployeeId')?.value || '').trim();
     const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
     const email = (document.getElementById('adminEmail')?.value || '').trim().toLowerCase();
     const department = (document.getElementById('adminCourse')?.value || '').trim();
@@ -3789,8 +4064,8 @@ loadDepartments();
     const normalizedPermissions = normalizePermissionSelection(selectedPermissions);
 
     // 3. Validation
-    if (!lastName || !firstName || !email || !department) {
-        await showUserManagementAlert('warning', 'Missing details', 'Please provide the last name, first name, STI email, and department.');
+    if (!adminEmployeeId || !lastName || !firstName || !email || !department) {
+        await showUserManagementAlert('warning', 'Missing details', 'Please provide the Admin/Employee ID, last name, first name, STI email, and department.');
         return;
     }
     if (normalizedPermissions.length === 0) {
@@ -3799,6 +4074,7 @@ loadDepartments();
     }
 
     const adminData = {
+        student_no: adminEmployeeId,
         full_name: fullName,
         last_name: lastName,
         first_name: firstName,
@@ -4386,7 +4662,7 @@ window.addEventListener('pageshow', () => {
 });
 </script>
 
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=10"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>

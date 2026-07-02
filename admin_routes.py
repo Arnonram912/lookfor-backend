@@ -39,6 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 class AdminCreate(BaseModel):
+    student_no: str
     full_name: Optional[str] = None
     last_name: str
     first_name: str
@@ -66,6 +67,20 @@ class StudentBulkImport(BaseModel):
 class BulkRegisterRequest(BaseModel):
     students: List[StudentBulkImport]
 
+
+class AcademicTermScheduleUpdate(BaseModel):
+    current_academic_year: str
+    current_semester: str
+    current_start_date: date
+    current_end_date: date
+    next_academic_year: str
+    next_semester: str
+    next_start_date: date
+    next_end_date: date
+
+
+class AcademicTermReactivateRequest(BaseModel):
+    new_end_date: date
 templates = Jinja2Templates(directory="templates")
 # Change your directory definition
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -283,6 +298,7 @@ def serialize_inventory_item(db: Session, item: models.Item) -> dict:
         "color": item.color,
         "approved_at": item.approved_at.isoformat() if item.approved_at else None,
         "archived": item.archived,
+        "deleted": bool(getattr(item, "deleted", False)),
         "location": item.location,
         "date": item.date.isoformat() if item.date else None,
         "time_found": item.time_found,
@@ -318,6 +334,7 @@ def serialize_pending_item(db: Session, item: models.PendingItem) -> dict:
         "matched_item_id": item.matched_item_id,
         "created_at": item.created_at.isoformat() if item.created_at else None,
         "archived": item.archived,
+        "deleted": bool(getattr(item, "deleted", False)),
         "user_id": item.user_id,
         "uploader_name": format_user_display_name(
             submitter,
@@ -469,6 +486,150 @@ def create_admin_notification(
     db.commit()
     db.refresh(notif) # This allows you to access the new notif.id immediately
     return notif
+
+
+def get_default_semester_dates(academic_year: str, semester: str) -> tuple[date, date]:
+    try:
+        start_year_text, end_year_text = academic_year.split("-", 1)
+        start_year = int(start_year_text)
+        end_year = int(end_year_text)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("Academic year must use the format YYYY-YYYY.") from exc
+
+    if end_year != start_year + 1:
+        raise ValueError("Academic year must contain two consecutive years.")
+    if semester == "1st Semester":
+        return date(start_year, 7, 28), date(start_year, 12, 5)
+    if semester == "2nd Semester":
+        return date(end_year, 1, 5), date(end_year, 6, 5)
+    raise ValueError("Invalid semester.")
+
+
+def get_following_semester(academic_year: str, semester: str) -> tuple[str, str, date, date]:
+    if semester == "1st Semester":
+        next_year = academic_year
+        next_semester = "2nd Semester"
+    else:
+        start_year = int(academic_year.split("-", 1)[0]) + 1
+        next_year = f"{start_year}-{start_year + 1}"
+        next_semester = "1st Semester"
+    start_date, end_date = get_default_semester_dates(next_year, next_semester)
+    return next_year, next_semester, start_date, end_date
+
+
+def get_or_create_academic_term_setting(db: Session) -> models.AcademicTermSetting:
+    setting = db.query(models.AcademicTermSetting).filter(models.AcademicTermSetting.id == 1).first()
+    if setting:
+        return setting
+
+    setting = models.AcademicTermSetting(
+        id=1,
+        current_academic_year="2025-2026",
+        current_semester="2nd Semester",
+        current_start_date=date(2026, 1, 5),
+        current_end_date=date(2026, 6, 5),
+        current_status="active",
+        next_academic_year="2026-2027",
+        next_semester="1st Semester",
+        next_start_date=date(2026, 7, 28),
+        next_end_date=date(2026, 12, 5),
+    )
+    db.add(setting)
+    db.commit()
+    db.refresh(setting)
+    return setting
+
+
+def serialize_academic_term_setting(setting: models.AcademicTermSetting) -> dict:
+    return {
+        "current_academic_year": setting.current_academic_year,
+        "current_semester": setting.current_semester,
+        "current_start_date": setting.current_start_date.isoformat() if setting.current_start_date else None,
+        "current_end_date": setting.current_end_date.isoformat() if setting.current_end_date else None,
+        "current_status": setting.current_status,
+        "next_academic_year": setting.next_academic_year,
+        "next_semester": setting.next_semester,
+        "next_start_date": setting.next_start_date.isoformat() if setting.next_start_date else None,
+        "next_end_date": setting.next_end_date.isoformat() if setting.next_end_date else None,
+        "can_reactivate": setting.current_status == "ended",
+    }
+
+
+def end_current_academic_term(
+    db: Session,
+    setting: models.AcademicTermSetting,
+    ended_by_admin_id: int | None = None,
+) -> int:
+    if setting.current_status == "ended":
+        return 0
+
+    candidates = db.query(models.User).filter(
+        models.User.is_admin == False,
+        models.User.is_archived == False,
+        models.User.batch_id.like(f"BATCH-{setting.current_academic_year} %"),
+    ).all()
+    students = [user for user in candidates if not user_is_faculty_account(user)]
+    transition = models.AcademicTermTransition(
+        academic_year=setting.current_academic_year,
+        semester=setting.current_semester,
+        archived_user_ids=json.dumps([user.id for user in students]),
+        ended_by_admin_id=ended_by_admin_id,
+    )
+    db.add(transition)
+    for student in students:
+        student.is_archived = True
+    setting.current_status = "ended"
+    db.commit()
+
+    create_admin_notification(
+        db,
+        f"{setting.current_academic_year} {setting.current_semester} ended. "
+        f"{len(students)} student account(s) were archived.",
+        "academic_term",
+        setting.id,
+        "/admin/User-Management?tab=archive",
+    )
+    return len(students)
+
+
+def start_next_academic_term(db: Session, setting: models.AcademicTermSetting) -> None:
+    if setting.current_status != "ended" or not setting.next_academic_year or not setting.next_semester:
+        raise ValueError("The current semester must be ended and a next semester must be configured.")
+
+    setting.current_academic_year = setting.next_academic_year
+    setting.current_semester = setting.next_semester
+    setting.current_start_date = setting.next_start_date
+    setting.current_end_date = setting.next_end_date
+    setting.current_status = "active"
+    (
+        setting.next_academic_year,
+        setting.next_semester,
+        setting.next_start_date,
+        setting.next_end_date,
+    ) = get_following_semester(setting.current_academic_year, setting.current_semester)
+    db.commit()
+
+    create_admin_notification(
+        db,
+        f"{setting.current_academic_year} {setting.current_semester} has started.",
+        "academic_term",
+        setting.id,
+        "/admin/User-Management?tab=student",
+    )
+
+
+def process_academic_term_schedule(db: Session, today: date | None = None) -> models.AcademicTermSetting:
+    setting = get_or_create_academic_term_setting(db)
+    current_date = today or date.today()
+    if setting.current_status == "active" and setting.current_end_date and current_date >= setting.current_end_date:
+        end_current_academic_term(db, setting)
+    if (
+        setting.current_status == "ended"
+        and setting.next_start_date
+        and current_date >= setting.next_start_date
+    ):
+        start_next_academic_term(db, setting)
+    return setting
 
 
 def update_bulk_job(job_id: str, **changes):
@@ -1627,7 +1788,8 @@ def get_found_items(
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
-        models.Item.archived == False
+        models.Item.archived == False,
+        models.Item.deleted == False,
     ).all()
     return [serialize_inventory_item(db, item) for item in items]
 
@@ -1638,7 +1800,19 @@ def get_archived_found_items(
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
-        models.Item.archived == True
+        models.Item.archived == True,
+        models.Item.deleted == False,
+    ).all()
+    return [serialize_inventory_item(db, item) for item in items]
+
+@router.get("/items/found/deleted")
+def get_deleted_found_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    items = db.query(models.Item).filter(
+        models.Item.status == "found",
+        models.Item.deleted == True,
     ).all()
     return [serialize_inventory_item(db, item) for item in items]
 
@@ -1649,7 +1823,8 @@ def get_lost_items(
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
-        models.Item.archived == False
+        models.Item.archived == False,
+        models.Item.deleted == False,
     ).all()
     return [serialize_inventory_item(db, item) for item in items]
 
@@ -1660,7 +1835,19 @@ def get_archived_lost_items(
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
-        models.Item.archived == True
+        models.Item.archived == True,
+        models.Item.deleted == False,
+    ).all()
+    return [serialize_inventory_item(db, item) for item in items]
+
+@router.get("/items/lost/deleted")
+def get_deleted_lost_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    items = db.query(models.Item).filter(
+        models.Item.status == "lost",
+        models.Item.deleted == True,
     ).all()
     return [serialize_inventory_item(db, item) for item in items]
 @router.get("/dashboard")
@@ -1858,7 +2045,8 @@ def get_pending_items(
     auto_archive_pending(db)
 
     items = db.query(models.PendingItem).filter(
-        models.PendingItem.archived == False
+        models.PendingItem.archived == False,
+        models.PendingItem.deleted == False,
     ).order_by(models.PendingItem.created_at.desc()).all()
 
     return [serialize_pending_item(db, item) for item in items]
@@ -1870,9 +2058,20 @@ def get_archived_pending_items(
     current_admin: models.User = Depends(get_current_admin)
 ):
     items = db.query(models.PendingItem).filter(
-        models.PendingItem.archived == True
+        models.PendingItem.archived == True,
+        models.PendingItem.deleted == False,
     ).order_by(models.PendingItem.created_at.desc()).all()
 
+    return [serialize_pending_item(db, item) for item in items]
+
+@router.get("/pending-items/deleted")
+def get_deleted_pending_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    items = db.query(models.PendingItem).filter(
+        models.PendingItem.deleted == True
+    ).order_by(models.PendingItem.created_at.desc()).all()
     return [serialize_pending_item(db, item) for item in items]
 
 @router.get("/departments")
@@ -2028,32 +2227,29 @@ async def create_new_admin(
         if admin_in.full_name and admin_in.full_name.strip()
         else f"{first_name} {middle_name} {last_name}".replace("  ", " ").strip()
     )
+    admin_id = admin_in.student_no.strip()
 
     if not first_name or not last_name:
-        raise HTTPException(
-            status_code=400,
-            detail="First name and last name are required"
-        )
+        raise HTTPException(status_code=400, detail="First name and last name are required")
+    if not admin_id:
+        raise HTTPException(status_code=400, detail="Admin / Employee ID is required")
     if not (admin_in.department or "").strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Department / Office is required"
-        )
+        raise HTTPException(status_code=400, detail="Department / Office is required")
 
     existing = db.query(models.User).filter(
-        models.User.email == admin_in.email
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=400,
-            detail="Admin email already registered"
+        or_(
+            models.User.email == admin_in.email,
+            models.User.student_no == admin_id,
         )
+    ).first()
+    if existing:
+        if existing.student_no == admin_id:
+            raise HTTPException(status_code=400, detail="Admin / Employee ID is already registered")
+        raise HTTPException(status_code=400, detail="Admin email already registered")
 
-    # Generate secure temporary password
     temp_password = secrets.token_urlsafe(8)
-
     new_admin = models.User(
+        student_no=admin_id,
         first_name=first_name,
         middle_name=middle_name,
         last_name=last_name,
@@ -2062,25 +2258,195 @@ async def create_new_admin(
         hashed_password=pwd_context.hash(temp_password),
         is_admin=True,
         permissions=json.dumps(requested_permissions),
-        department=admin_in.department.strip(), # Saves to the new column
+        department=admin_in.department.strip(),
         section=admin_in.section,
-        must_change_password=True
+        must_change_password=True,
     )
-
     db.add(new_admin)
     db.commit()
+    db.refresh(new_admin)
 
     create_admin_notification(
         db,
         f"New admin account created for {full_name}.",
         "user_management_admin",
         new_admin.id,
-        created_by_admin_id=current_admin.id
+        created_by_admin_id=current_admin.id,
     )
-
     return {
         "message": "Admin created successfully",
-        "temp_password": temp_password
+        "temp_password": temp_password,
+        "admin_id": admin_id,
+    }
+
+
+@router.get("/academic-term")
+def get_academic_term(
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(get_current_admin),
+):
+    permissions = parse_permissions(admin.permissions)
+    if not is_root_admin(admin) and not ({"User-Management", "Content-management"} & set(permissions)):
+        raise HTTPException(status_code=403, detail="Access denied.")
+    setting = process_academic_term_schedule(db)
+    return serialize_academic_term_setting(setting)
+
+
+@router.put("/academic-term")
+def update_academic_term(
+    data: AcademicTermScheduleUpdate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(check_permission("Content-management")),
+):
+    if data.current_end_date <= data.current_start_date:
+        raise HTTPException(status_code=400, detail="Current semester end date must be after its start date.")
+    if data.next_start_date <= data.current_end_date:
+        raise HTTPException(status_code=400, detail="Next semester must start after the current semester ends.")
+    if data.next_end_date <= data.next_start_date:
+        raise HTTPException(status_code=400, detail="Next semester end date must be after its start date.")
+    if data.current_semester not in {"1st Semester", "2nd Semester"} or data.next_semester not in {"1st Semester", "2nd Semester"}:
+        raise HTTPException(status_code=400, detail="Invalid semester.")
+
+    setting = get_or_create_academic_term_setting(db)
+    if setting.current_status == "active":
+        active_term_changed = any([
+            data.current_academic_year != setting.current_academic_year,
+            data.current_semester != setting.current_semester,
+            data.current_start_date != setting.current_start_date,
+            data.current_end_date != setting.current_end_date,
+        ])
+        if active_term_changed:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The current semester is already active and cannot be changed. "
+                    "End the semester before editing its academic year, semester, or dates."
+                ),
+            )
+
+    setting.current_academic_year = data.current_academic_year
+    setting.current_semester = data.current_semester
+    setting.current_start_date = data.current_start_date
+    setting.current_end_date = data.current_end_date
+    setting.next_academic_year = data.next_academic_year
+    setting.next_semester = data.next_semester
+    setting.next_start_date = data.next_start_date
+    setting.next_end_date = data.next_end_date
+    db.commit()
+
+    create_admin_notification(
+        db,
+        f"{data.current_academic_year} {data.current_semester} is scheduled to end on "
+        f"{data.current_end_date.strftime('%B %d, %Y')}. Its active student accounts will be archived. "
+        f"{data.next_academic_year} {data.next_semester} starts on {data.next_start_date.strftime('%B %d, %Y')}.",
+        "academic_term",
+        setting.id,
+        "/admin/User-Management",
+    )
+    return serialize_academic_term_setting(setting)
+
+
+@router.post("/academic-term/end")
+def manually_end_academic_term(
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(check_permission("User-Management-Archive")),
+):
+    setting = get_or_create_academic_term_setting(db)
+    archived_count = end_current_academic_term(db, setting, admin.id)
+    return {
+        "message": f"{setting.current_academic_year} {setting.current_semester} ended.",
+        "archived_count": archived_count,
+        "term": serialize_academic_term_setting(setting),
+    }
+
+
+@router.post("/academic-term/reactivate")
+def reactivate_academic_term(
+    data: AcademicTermReactivateRequest,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(check_permission("User-Management-Archive")),
+):
+    setting = get_or_create_academic_term_setting(db)
+    if setting.current_status != "ended":
+        raise HTTPException(status_code=409, detail="Only an ended semester can be reactivated.")
+    if data.new_end_date <= date.today():
+        raise HTTPException(status_code=400, detail="Choose a new end date after today.")
+    if setting.next_start_date and data.new_end_date >= setting.next_start_date:
+        raise HTTPException(
+            status_code=400,
+            detail="The new end date must be before the next semester starts.",
+        )
+
+    transition = (
+        db.query(models.AcademicTermTransition)
+        .filter(
+            models.AcademicTermTransition.academic_year == setting.current_academic_year,
+            models.AcademicTermTransition.semester == setting.current_semester,
+            models.AcademicTermTransition.reactivated_at == None,
+        )
+        .order_by(models.AcademicTermTransition.ended_at.desc())
+        .first()
+    )
+
+    archived_ids: list[int] = []
+    if transition:
+        try:
+            archived_ids = [int(user_id) for user_id in json.loads(transition.archived_user_ids or "[]")]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            archived_ids = []
+
+    query = db.query(models.User).filter(
+        models.User.is_admin == False,
+        models.User.is_archived == True,
+    )
+    if archived_ids:
+        candidates = query.filter(models.User.id.in_(archived_ids)).all()
+    else:
+        # Compatibility for a semester ended before transition tracking was installed.
+        candidates = query.filter(
+            models.User.batch_id.like(f"BATCH-{setting.current_academic_year} %")
+        ).all()
+
+    students = [user for user in candidates if not user_is_faculty_account(user)]
+    for student in students:
+        student.is_archived = False
+
+    setting.current_status = "active"
+    setting.current_end_date = data.new_end_date
+    if transition:
+        transition.reactivated_by_admin_id = admin.id
+        transition.reactivated_at = datetime.utcnow()
+        transition.replacement_end_date = data.new_end_date
+    db.commit()
+
+    create_admin_notification(
+        db,
+        f"{setting.current_academic_year} {setting.current_semester} was reactivated until "
+        f"{data.new_end_date.strftime('%B %d, %Y')}. {len(students)} student account(s) were restored.",
+        "academic_term",
+        setting.id,
+        "/admin/User-Management?tab=student",
+    )
+    return {
+        "message": f"{setting.current_academic_year} {setting.current_semester} is active again.",
+        "restored_count": len(students),
+        "term": serialize_academic_term_setting(setting),
+    }
+
+
+@router.post("/academic-term/start")
+def manually_start_academic_term(
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(check_permission("User-Management-Archive")),
+):
+    setting = get_or_create_academic_term_setting(db)
+    try:
+        start_next_academic_term(db, setting)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "message": f"{setting.current_academic_year} {setting.current_semester} started.",
+        "term": serialize_academic_term_setting(setting),
     }
 
 @router.post("/update-permissions/{user_id}")
@@ -2134,6 +2500,7 @@ async def get_all_users(
     # Ensure the person calling this is actually an admin with the right perms
     admin = Depends(check_permission("User-Management")) 
 ):
+    process_academic_term_schedule(db)
     users = db.query(models.User).all()
     user_list = []
     
@@ -2433,6 +2800,7 @@ async def delete_students_by_batch(
 @router.post("/bulk-register-students")
 async def bulk_register(
     data: dict,
+    db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("User-Management-Create"))
 ):
     students_list = data.get("students", []) or data.get("users", [])
@@ -2447,6 +2815,23 @@ async def bulk_register(
             status_code=413,
             detail=f"One bulk registration request can process up to {MAX_BULK_REGISTRATION_ROWS:,} users. Please split this upload."
         )
+
+    term_setting = process_academic_term_schedule(db)
+    if term_setting.current_status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail="The previous semester has ended and the next semester has not started yet."
+        )
+    automatic_batch_id = (
+        f"BATCH-{term_setting.current_academic_year} {term_setting.current_semester}"
+    )
+    students_list = [
+        {**student, "batch_id": automatic_batch_id}
+        for student in students_list
+        if isinstance(student, dict)
+    ]
+    if not students_list:
+        raise HTTPException(status_code=400, detail="No valid users were provided for registration.")
 
     job_id = uuid.uuid4().hex
     with BULK_JOB_LOCK:
@@ -2599,6 +2984,7 @@ def archive_pending(
         raise HTTPException(404, "Pending item not found")
 
     pending.archived = True # Just hide it
+    pending.deleted = False
     db.commit()
     create_admin_notification(
         db,
@@ -2673,6 +3059,7 @@ def archive_found_item(
 
     # 2. FIX: Change 'is_archived' to 'archived' to match your models.py
     item.archived = True 
+    item.deleted = False
     db.commit()
 
     return {"status": "success", "message": "Item moved to archives"}
@@ -2687,6 +3074,7 @@ def recover_pending(
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if pending:
         pending.archived = False
+        pending.deleted = False
         db.commit()
         create_admin_notification(
             db,
@@ -2703,6 +3091,7 @@ def recover_pending(
     item = db.query(models.Item).filter(models.Item.id == pending_id).first()
     if item:
         item.archived = False
+        item.deleted = False
         db.commit()
         create_admin_notification(
             db,
@@ -2716,6 +3105,20 @@ def recover_pending(
 
     raise HTTPException(status_code=404, detail="Pending item not found")
 
+@router.put("/pending-items/{pending_id}/delete")
+def move_pending_item_to_deleted(
+    pending_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_admin),
+):
+    pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
+    if not pending:
+        raise HTTPException(status_code=404, detail="Pending item not found")
+    pending.archived = True
+    pending.deleted = True
+    db.commit()
+    return {"status": "success", "message": "Pending item moved to Deleted Items"}
+
 @router.post("/recover-lost/{item_id}") # Change the path here
 def recover_lost_item(
     item_id: int,
@@ -2727,6 +3130,7 @@ def recover_lost_item(
         raise HTTPException(status_code=404, detail="Report not found")
 
     item.archived = False # This is the "magic" line that restores it
+    item.deleted = False
     db.commit()
     create_admin_notification(
         db,
@@ -2749,6 +3153,7 @@ def recover_found_item(
         raise HTTPException(status_code=404, detail="Item not found")
 
     item.archived = False
+    item.deleted = False
     db.commit()
     create_admin_notification(
         db,
@@ -3098,6 +3503,7 @@ async def archive_item(
 
     # 2. Update the status
     item.archived = True
+    item.deleted = False
     
     try:
         db.commit()
@@ -3107,6 +3513,20 @@ async def archive_item(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail="Could not archive item")
+
+@router.put("/items/{item_id}/delete")
+async def move_item_to_deleted(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_admin),
+):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    item.archived = True
+    item.deleted = True
+    db.commit()
+    return {"status": "success", "message": "Item moved to Deleted Items"}
 
 @router.delete("/items/{item_id}/dispose")
 async def dispose_item(
@@ -3385,16 +3805,99 @@ async def report_confiscated(
     db.add(new_item)
     db.commit()
     db.refresh(new_item)
+    create_admin_notification(
+        db,
+        f"Confiscated item #{new_item.id} was created.",
+        "confiscated_items",
+        new_item.id,
+        "/admin/Confiscated-items",
+        created_by_admin_id=current_admin.id,
+    )
     
     return {"message": "Success", "id": new_item.id}
 
 @router.get("/get-confiscated-items")
 async def get_confiscated_items(
+    view: str = "active",
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
-    items = db.query(models.ConfiscatedItem).order_by(models.ConfiscatedItem.created_at.desc()).all()
+    query = db.query(models.ConfiscatedItem)
+    if view == "disposal":
+        query = query.filter(models.ConfiscatedItem.disposal_status == "for_disposal")
+    elif view == "disposed":
+        query = query.filter(models.ConfiscatedItem.disposal_status == "disposed")
+    else:
+        query = query.filter(models.ConfiscatedItem.disposal_status == "active")
+    items = query.order_by(models.ConfiscatedItem.created_at.desc()).all()
     return items
+
+
+@router.put("/confiscated/{item_id}/disposal")
+def update_confiscated_disposal(
+    item_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Confiscated item not found")
+    action = str(payload.get("action") or "").strip().lower()
+    statuses = {
+        "schedule": "for_disposal",
+        "cancel": "active",
+        "complete": "disposed",
+    }
+    if action not in statuses:
+        raise HTTPException(status_code=400, detail="Invalid disposal action")
+    item.disposal_status = statuses[action]
+    item.disposal_note = str(payload.get("note") or "").strip()[:500] or None
+    item.disposal_updated_at = datetime.utcnow()
+    db.commit()
+    labels = {
+        "schedule": "marked for disposal",
+        "cancel": "returned to confiscated items",
+        "complete": "recorded as disposed",
+    }
+    create_admin_notification(
+        db,
+        f"Confiscated item #{item_id} was {labels[action]}.",
+        "confiscated_disposal",
+        item_id,
+        "/admin/Confiscated-items?view=disposal",
+        created_by_admin_id=current_admin.id,
+    )
+    return {"message": f"Item {labels[action]}", "status": item.disposal_status}
+
+
+@router.get("/audit-logs")
+def get_audit_logs(
+    search: str = "",
+    limit: int = 200,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    limit = max(1, min(limit, 500))
+    query = db.query(models.Notification).filter(
+        models.Notification.created_by_admin_id.isnot(None)
+    )
+    if search.strip():
+        query = query.filter(models.Notification.message.ilike(f"%{search.strip()}%"))
+    logs = query.order_by(models.Notification.created_at.desc()).limit(limit).all()
+    admin_ids = {log.created_by_admin_id for log in logs if log.created_by_admin_id}
+    admins = {
+        user.id: user
+        for user in db.query(models.User).filter(models.User.id.in_(admin_ids)).all()
+    } if admin_ids else {}
+    return [{
+        "id": log.id,
+        "admin": format_user_display_name(admins.get(log.created_by_admin_id), "Unknown admin"),
+        "action": log.message,
+        "module": (log.type or "system").replace("_", " ").title(),
+        "target_url": log.target_url,
+        "created_at": log.created_at.isoformat() if log.created_at else None,
+    } for log in logs]
 
 
 @router.get("/get-confiscated-item/{item_id}")
@@ -3454,6 +3957,14 @@ async def update_confiscated_item(
 
     db.commit()
     db.refresh(item)
+    create_admin_notification(
+        db,
+        f"Confiscated item #{item_id} was updated.",
+        "confiscated_items",
+        item_id,
+        "/admin/Confiscated-items",
+        created_by_admin_id=current_admin.id,
+    )
     return {"message": "Confiscated item updated", "item": item}
 
 
@@ -3467,6 +3978,15 @@ async def delete_confiscated_item(
     if not item:
         raise HTTPException(status_code=404, detail="Confiscated item not found")
 
+    item_label = item.category or f"Item #{item_id}"
     db.delete(item)
     db.commit()
+    create_admin_notification(
+        db,
+        f"Confiscated item '{item_label}' was permanently deleted.",
+        "confiscated_items",
+        item_id,
+        "/admin/Confiscated-items",
+        created_by_admin_id=current_admin.id,
+    )
     return {"message": "Confiscated item deleted"}

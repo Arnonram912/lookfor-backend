@@ -25,6 +25,36 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class AcademicTermSetting(Base):
+    __tablename__ = "academic_term_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    current_academic_year = Column(String(20), nullable=False, default="2025-2026")
+    current_semester = Column(String(30), nullable=False, default="2nd Semester")
+    current_start_date = Column(Date, nullable=True)
+    current_end_date = Column(Date, nullable=True)
+    current_status = Column(String(20), nullable=False, default="active")
+    next_academic_year = Column(String(20), nullable=True)
+    next_semester = Column(String(30), nullable=True)
+    next_start_date = Column(Date, nullable=True)
+    next_end_date = Column(Date, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AcademicTermTransition(Base):
+    __tablename__ = "academic_term_transitions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    academic_year = Column(String(20), nullable=False)
+    semester = Column(String(30), nullable=False)
+    archived_user_ids = Column(Text, nullable=False, default="[]")
+    ended_by_admin_id = Column(Integer, nullable=True)
+    ended_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    reactivated_by_admin_id = Column(Integer, nullable=True)
+    reactivated_at = Column(DateTime, nullable=True)
+    replacement_end_date = Column(Date, nullable=True)
+
+
 class Item(Base):
     __tablename__ = "items"
 
@@ -58,6 +88,7 @@ class Item(Base):
 
     approved_at = Column(DateTime, nullable=True)
     archived = Column(Boolean, default=False)
+    deleted = Column(Boolean, default=False, nullable=False)
     location = Column(String)     # NEW
     date = Column(Date) 
     time_found = Column(String, nullable=True)  
@@ -142,6 +173,7 @@ class PendingItem(Base):
     matched_item_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     archived = Column(Boolean, default=False)
+    deleted = Column(Boolean, default=False, nullable=False)
     time_found = Column(String, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     submitter = relationship("User", back_populates="pending_items")
@@ -260,6 +292,9 @@ class ConfiscatedItem(Base):
     estimated_time = Column(String)
     reason = Column(String)
     image_path = Column(String, nullable=True)
+    disposal_status = Column(String(30), nullable=False, default="active")
+    disposal_note = Column(String(500), nullable=True)
+    disposal_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now())
 
 class LandingContent(Base):

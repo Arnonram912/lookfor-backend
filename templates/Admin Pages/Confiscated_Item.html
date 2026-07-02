@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15"> 
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -424,8 +424,8 @@
         <section class="content-body">
             <div class="profile-page-card">
                 <div class="action-bar">
-        <h1 class="section-title">Confiscated <span>Items</span></h1>
-        <button class="upload-btn" onclick="openConfiscatedModal()" style="padding: 10px 20px;">
+        <h1 class="section-title" id="confiscatedPageTitle">Confiscated <span>Items</span></h1>
+        <button class="upload-btn" id="confiscatedUploadBtn" onclick="openConfiscatedModal()" style="padding: 10px 20px;">
             + Upload New Item
         </button>
     </div>
@@ -712,12 +712,19 @@ function showAccessDeniedPopup(permName) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    const disposalView = new URLSearchParams(window.location.search).get('view') === 'disposal';
+    if (disposalView) {
+        document.getElementById('confiscatedPageTitle').innerHTML = 'For <span>Disposal</span>';
+        document.getElementById('confiscatedUploadBtn').style.display = 'none';
+        document.getElementById('noDataMsg').textContent = 'No items are currently waiting for disposal.';
+    }
     loadConfiscatedItems();
 });
 
 async function loadConfiscatedItems() {
     try {
-        const response = await fetch('/admin/get-confiscated-items', {
+        const disposalView = new URLSearchParams(window.location.search).get('view') === 'disposal';
+        const response = await fetch(`/admin/get-confiscated-items?view=${disposalView ? 'disposal' : 'active'}`, {
             headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
         const items = await response.json();
@@ -734,6 +741,16 @@ async function loadConfiscatedItems() {
         }
 
         items.forEach(item => {
+            const disposalActions = disposalView
+                ? `
+                    <button onclick="updateDisposal(${item.id}, 'cancel')" class="btn-secondary" title="Return to Confiscated Items" style="padding:7px 10px;background:#6c757d;color:#fff;border-radius:8px;"><i class="fas fa-rotate-left"></i></button>
+                    <button onclick="updateDisposal(${item.id}, 'complete')" class="btn-secondary" title="Confirm Disposal" style="padding:7px 10px;background:#dc3545;color:#fff;border-radius:8px;"><i class="fas fa-trash-can"></i></button>
+                  `
+                : `
+                    <button onclick="viewDetails(${item.id})" class="btn-secondary" title="View" style="padding:7px 10px;border-radius:8px;"><i class="fas fa-eye"></i></button>
+                    <button onclick="editConfiscated(${item.id})" class="btn-secondary" title="Edit" style="padding:7px 10px;background:#0d6efd;color:#fff;border-radius:8px;"><i class="fas fa-pen"></i></button>
+                    <button onclick="updateDisposal(${item.id}, 'schedule')" class="btn-secondary" title="Move to For Disposal" style="padding:7px 10px;background:#f59f00;color:#fff;border-radius:8px;"><i class="fas fa-recycle"></i></button>
+                  `;
             const cleanPath = (item.image_path || '').replace(/\\/g, '/');
             const row = `
                 <tr>
@@ -748,9 +765,7 @@ async function loadConfiscatedItems() {
                     <td><span class="reason-pill">${item.reason}</span></td>
                     <td>
                         <div class="action-group">
-                            <button onclick="viewDetails(${item.id})" class="btn-secondary" style="padding: 5px 10px; border-radius: 10px;">View</button>
-                            <button onclick="editConfiscated(${item.id})" class="btn-secondary" style="padding: 5px 10px; background:#0d6efd; color:#fff; border-radius: 10px;">Edit</button>
-                            <button onclick="deleteConfiscated(${item.id})" class="btn-secondary" style="padding: 5px 10px; background:#dc3545; color:#fff; border-radius: 10px;">Delete</button>
+                            ${disposalActions}
                         </div>
                     </td>
                 </tr>
@@ -760,6 +775,31 @@ async function loadConfiscatedItems() {
     } catch (error) {
         console.error("Failed to load items:", error);
     }
+}
+
+async function updateDisposal(itemId, action) {
+    const wording = action === 'schedule'
+        ? 'move this item to For Disposal'
+        : action === 'complete'
+            ? 'confirm that this item has been physically disposed'
+            : 'return this item to Confiscated Items';
+    if (!(await confirmConfiscatedAction('Confirm action?', `Do you want to ${wording}?`, 'Confirm'))) return;
+    const note = action === 'schedule' ? (prompt('Optional disposal note:') || '') : '';
+    const response = await fetch(`/admin/confiscated/${itemId}/disposal`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action, note })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        await showConfiscatedAlert('error', 'Action failed', result.detail || 'Could not update disposal status.');
+        return;
+    }
+    await showConfiscatedAlert('success', 'Status updated', result.message);
+    loadConfiscatedItems();
 }
 
 function openConfiscatedModal() {
@@ -1011,7 +1051,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=11"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

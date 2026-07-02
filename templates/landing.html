@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LookFor - Lost and Found</title>
-    <link rel="stylesheet" href="/static/landing.css?v=5.2">
-    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/landing.css?v=5.6">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -24,14 +24,30 @@
     </header>
 
     <section class="hero">
-        <div class="hero-content">
-            <h1 id="cms-hero-title">Found something?<br>Lost something?</h1>
-            <p id="cms-hero-desc">Connect with your community to reunite people with their belongings</p>
-            <div class="hero-btns">
-                <a href="/login" class="btn-primary">Begin Reporting</a>
-                <a href="/explore" class="btn-secondary">Explore Features</a>
-
-            </div>
+        <div class="hero-content app-hero-content">
+            <span class="app-download-eyebrow" id="cms-app-eyebrow">LookFor on Android</span>
+            <h1 id="cms-hero-title">Lost Something?<br><span>Found Something?</span></h1>
+            <p id="cms-hero-desc">
+                Connect instantly with your student community. Report found items or locate
+                your missing belongings in seconds so you can get back to class.
+            </p>
+            <button
+                type="button"
+                class="app-download-button"
+                onclick="openAppDownloadModal()"
+                aria-label="Download the LookFor Android application"
+            >
+                <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span id="cms-app-button-label">Download Android App (APK)</span>
+            </button>
+            <p class="app-download-notice" id="cms-app-notice">
+                Installing the APK? Android may ask you to allow installation from your
+                browser or file manager. Only install apps from sources you trust.
+            </p>
         </div>
     </section>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
@@ -62,10 +78,10 @@
         // --- LOAD HERO SECTION ---
         if (data.hero) {
             if (document.getElementById('cms-hero-title')) {
-                document.getElementById('cms-hero-title').innerHTML = data.hero.title || "Found something?<br>Lost something?";
+                document.getElementById('cms-hero-title').innerHTML = data.hero.title || "Lost Something?<br><span>Found Something?</span>";
             }
             if (document.getElementById('cms-hero-desc')) {
-                document.getElementById('cms-hero-desc').innerText = data.hero.description || "Connect with your community to reunite people with their belongings";
+                document.getElementById('cms-hero-desc').innerText = data.hero.description || "Connect instantly with your student community. Report found items or locate your missing belongings in seconds.";
             }
 
             if (data.hero.image_path) {
@@ -75,6 +91,16 @@
                     heroSection.style.backgroundImage = `linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.7)), url('${path}')`;
                 }
             }
+        }
+
+        if (data.app_download) {
+            const appParts = String(data.app_download.description || '').split('|||');
+            document.getElementById('cms-app-eyebrow').innerText =
+                data.app_download.eyebrow || 'LookFor on Android';
+            document.getElementById('cms-app-button-label').innerText =
+                appParts[0] || 'Download Android App (APK)';
+            document.getElementById('cms-app-notice').innerText = appParts[1] || '';
+            window.lookForApkPath = appParts[2] || '/static/downloads/lookfor-app.apk';
         }
 
         // --- LOAD WHY CHOOSE US SECTION ---
@@ -172,6 +198,18 @@
                 }
             });
         }
+
+        if (data.faq) {
+            const faqParts = String(data.faq.description || '').split('|||');
+            document.getElementById('cms-faq-title').innerText =
+                data.faq.title || 'Frequently asked questions';
+            for (let index = 1; index <= 3; index++) {
+                document.getElementById(`cms-faq-${index}-question`).innerText =
+                    faqParts[(index - 1) * 2] || '';
+                document.getElementById(`cms-faq-${index}-answer`).innerText =
+                    faqParts[(index - 1) * 2 + 1] || '';
+            }
+        }
     } catch (err) {
         console.error("CMS Error:", err);
     }
@@ -185,7 +223,7 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
     <div class="feature-card animate__animated animate__zoomIn">
         <div class="feature-text">
             <h2 id="cms-cta-title" class="animate__animated animate__fadeInLeft animate__delay-1s">
-                Don't lose hope.<br>Find it with <span class="logo">Look<span>For</span></span>!</span>
+                Don't lose hope.<br>Find it with <span class="logo">Look<span>For</span></span>!
             </h2>
             <p id="cms-cta-desc" class="animate__animated animate__fadeInLeft animate__delay-1s">
                 Join our community and reunite with your lost items
@@ -201,6 +239,25 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
         </div>
     </div>
 </section>
+
+<div class="app-download-modal" id="appDownloadModal" role="dialog" aria-modal="true" aria-labelledby="app-modal-title" hidden>
+    <div class="app-download-modal-backdrop" onclick="closeAppDownloadModal()"></div>
+    <div class="app-download-modal-card">
+        <button type="button" class="app-download-modal-close" onclick="closeAppDownloadModal()" aria-label="Close download window">&times;</button>
+        <h2 id="app-modal-title">Download the<br>App!</h2>
+        <div class="app-download-scan-label">SCAN HERE!</div>
+        <div class="app-download-qr-frame">
+            <img id="appDownloadQr" src="" alt="QR code to download the LookFor Android app">
+        </div>
+        <p class="app-download-modal-copy">
+            Scan to download <strong>LookFor App</strong> or visit:
+        </p>
+        <a class="app-download-site-link" id="appDownloadSiteLink" href="/static/downloads/lookfor-app.apk" download="LookFor-Android.apk">
+            <span aria-hidden="true">&#127760;</span>
+            <span id="appDownloadSiteText">Download APK directly</span>
+        </a>
+    </div>
+</div>
 
 <section class="why-choose-us" data-aos="fade-up">
     <div class="container">
@@ -329,22 +386,22 @@ document.addEventListener('DOMContentLoaded', loadAllContent);
 
 <section class="faq-section" data-aos="fade-up">
     <div class="container">
-        <h2 class="section-title">Frequently asked questions</h2>
+        <h2 class="section-title" id="cms-faq-title">Frequently asked questions</h2>
         
         <div class="faq-container">
             <div class="faq-card">
-                <h3>Where is the Admin Office Located?</h3>
-                <p>You can find the admin at 3<sup>rd</sup> floor of the STI College Novaliches Building.</p>
+                <h3 id="cms-faq-1-question">Where is the Admin Office Located?</h3>
+                <p id="cms-faq-1-answer">You can find the admin at 3<sup>rd</sup> floor of the STI College Novaliches Building.</p>
             </div>
 
             <div class="faq-card">
-                <h3>How long do you keep unclaimed items?</h3>
-                <p>Items are kept for the entire semester. After this period the unclaimed items are disposed according to the school policy.</p>
+                <h3 id="cms-faq-2-question">How long do you keep unclaimed items?</h3>
+                <p id="cms-faq-2-answer">Items are kept for the entire semester. After this period the unclaimed items are disposed according to the school policy.</p>
             </div>
 
             <div class="faq-card">
-                <h3>What proof do I need to claim an item?</h3>
-                <p>You need to present your School ID and be able to describe the unique features of the item.</p>
+                <h3 id="cms-faq-3-question">What proof do I need to claim an item?</h3>
+                <p id="cms-faq-3-answer">You need to present your School ID and be able to describe the unique features of the item.</p>
             </div>
         </div>
     </div>
@@ -378,6 +435,40 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll('.step-card').forEach((card) => {
     observer.observe(card);
 });</script>
+
+<script>
+function getLookForApkUrl() {
+    const configuredPath = window.lookForApkPath || '/static/downloads/lookfor-app.apk';
+    return new URL(configuredPath, window.location.origin).href;
+}
+
+function openAppDownloadModal() {
+    const modal = document.getElementById('appDownloadModal');
+    const qrImage = document.getElementById('appDownloadQr');
+    const directLink = document.getElementById('appDownloadSiteLink');
+    const siteText = document.getElementById('appDownloadSiteText');
+    const apkUrl = getLookForApkUrl();
+
+    qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=8&data=${encodeURIComponent(apkUrl)}`;
+    directLink.href = apkUrl;
+    siteText.textContent = window.location.host || 'Download APK directly';
+    modal.hidden = false;
+    document.body.classList.add('app-download-modal-open');
+    modal.querySelector('.app-download-modal-close').focus();
+}
+
+function closeAppDownloadModal() {
+    const modal = document.getElementById('appDownloadModal');
+    modal.hidden = true;
+    document.body.classList.remove('app-download-modal-open');
+}
+
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !document.getElementById('appDownloadModal').hidden) {
+        closeAppDownloadModal();
+    }
+});
+</script>
 
 <script>// Highlight active nav link based on scroll position
 const sections = document.querySelectorAll("section");

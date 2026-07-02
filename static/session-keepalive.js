@@ -337,12 +337,90 @@
     window.getAdminPermissionsCached = getAdminPermissions;
     window.checkAccess = cachedCheckAccess;
 
+    function addAdminSidebarMenuItems() {
+        const nav = document.querySelector("body > .sidebar .nav-links");
+        if (!nav) return;
+
+        function insertAfterLink(matchPath, id, label, targetUrl, permission, iconPath) {
+            const parentLink = Array.from(nav.querySelectorAll("a")).find(link =>
+                String(link.getAttribute("onclick") || link.getAttribute("href") || "")
+                    .toLowerCase()
+                    .includes(matchPath.toLowerCase())
+            );
+            if (!parentLink?.closest("li")) return;
+
+            let item = document.getElementById(id);
+            if (!item) {
+                item = document.createElement("li");
+                item.id = id;
+                item.dataset.permission = permission;
+                item.innerHTML = `
+                    <a href="#" aria-label="${label}">
+                        <img src="${iconPath}" class="side-icon" alt=""> ${label}
+                    </a>
+                `;
+                item.querySelector("a").addEventListener("click", event => {
+                    event.preventDefault();
+                    cachedCheckAccess(targetUrl, permission);
+                });
+                parentLink.closest("li").insertAdjacentElement("afterend", item);
+            }
+
+            const target = new URL(targetUrl, window.location.origin);
+            const current = new URL(window.location.href);
+            if (
+                current.pathname.toLowerCase() === target.pathname.toLowerCase()
+                && current.searchParams.get("view") === target.searchParams.get("view")
+            ) {
+                const parentItem = parentLink.closest("li");
+                parentItem.classList.remove("active");
+                parentItem.style.setProperty("background-color", "transparent", "important");
+                parentItem.style.setProperty("color", "#ffffff", "important");
+                parentItem.style.setProperty("font-weight", "600", "important");
+                item.classList.add("active");
+                item.style.setProperty("background-color", "rgba(255, 255, 255, 0.1)", "important");
+                item.style.setProperty("color", "#ffe000", "important");
+                item.style.setProperty("font-weight", "800", "important");
+                item.querySelector("a").style.setProperty("font-weight", "800", "important");
+                item.querySelector("a").style.setProperty("color", "inherit", "important");
+            }
+        }
+
+        insertAfterLink(
+            "/admin/confiscated-items",
+            "adminForDisposalNav",
+            "For Disposal",
+            "/admin/Confiscated-items?view=disposal",
+            "Confiscated-items",
+            "/static/photos/handw.png"
+        );
+        insertAfterLink(
+            "/admin/reports",
+            "adminAuditLogsNav",
+            "Audit Logs",
+            "/admin/Reports?view=audit",
+            "Reports",
+            "/static/photos/folderw.png"
+        );
+
+        // Some legacy page scripts mark their parent menu active after DOMContentLoaded.
+        // Re-apply the query-specific submenu state after those handlers finish.
+        if (!addAdminSidebarMenuItems.activeStateQueued) {
+            addAdminSidebarMenuItems.activeStateQueued = true;
+            window.setTimeout(() => {
+                addAdminSidebarMenuItems();
+            }, 0);
+        }
+    }
+
     initializeSessionKeepAlive();
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", preloadAdminPermissions, { once: true });
         document.addEventListener("DOMContentLoaded", loadTopbarProfileAvatar, { once: true });
+        document.addEventListener("DOMContentLoaded", addAdminSidebarMenuItems, { once: true });
     } else {
         preloadAdminPermissions();
         loadTopbarProfileAvatar();
+        addAdminSidebarMenuItems();
     }
 })();

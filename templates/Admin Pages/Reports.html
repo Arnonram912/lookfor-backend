@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Admin Panel | LookFor STI</title>
-    <link rel="stylesheet" href="/static/admin2.o.css?v=15">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=16">
     <link rel="stylesheet" href="/static/report.css?v=3">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
@@ -74,7 +74,7 @@
 
         <div class="page-scroll-area">
         
-            <div class="profile-page-card">
+            <div class="profile-page-card" id="reportsPageCard">
                 <div class="action-bar">
                 <h1 class="section-title">Report<span>Module</span></h1>
 
@@ -222,11 +222,72 @@ let reportDataRequestController = null;
 let reportSearchDebounceTimer = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+    if (new URLSearchParams(window.location.search).get('view') === 'audit') {
+        initializeAuditLogsView();
+        return;
+    }
     document.getElementById('claimReportImageInput').addEventListener('change', previewClaimReportImage);
     bindReportFilters();
     initializeReportFiltersFromUrl();
     loadReportData();
 });
+
+function initializeAuditLogsView() {
+    const card = document.getElementById('reportsPageCard');
+    card.innerHTML = `
+        <div class="action-bar" style="align-items:center;gap:16px;">
+            <h1 class="section-title">Audit <span>Logs</span></h1>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin:20px 0;flex-wrap:wrap;">
+            <div style="position:relative;min-width:280px;flex:1;max-width:520px;">
+                <i class="fas fa-search" style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#64748b;"></i>
+                <input id="auditSearch" type="search" placeholder="Search admin actions..." style="width:100%;padding:11px 14px 11px 38px;border:1px solid #cbd5e1;border-radius:9px;">
+            </div>
+            <button type="button" onclick="loadAuditLogs()" style="padding:11px 16px;border:0;border-radius:9px;background:#005bab;color:#fff;font-weight:700;cursor:pointer;"><i class="fas fa-rotate"></i> Refresh</button>
+        </div>
+        <div style="overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+            <table class="report-table" style="margin:0;min-width:760px;">
+                <thead><tr><th>Date & Time</th><th>Administrator</th><th>Module</th><th>Action</th><th>Link</th></tr></thead>
+                <tbody id="auditLogBody"><tr><td colspan="5" style="text-align:center;padding:30px;">Loading audit logs...</td></tr></tbody>
+            </table>
+        </div>
+    `;
+    let debounce;
+    document.getElementById('auditSearch').addEventListener('input', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(loadAuditLogs, 300);
+    });
+    loadAuditLogs();
+}
+
+async function loadAuditLogs() {
+    const body = document.getElementById('auditLogBody');
+    if (!body) return;
+    const search = document.getElementById('auditSearch')?.value || '';
+    body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;">Loading audit logs...</td></tr>';
+    try {
+        const response = await fetch(`/admin/audit-logs?search=${encodeURIComponent(search)}`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` }
+        });
+        const logs = await response.json();
+        if (!response.ok) throw new Error(logs.detail || 'Could not load audit logs.');
+        if (!logs.length) {
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;">No matching audit activity found.</td></tr>';
+            return;
+        }
+        body.innerHTML = logs.map(log => `
+            <tr>
+                <td>${log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}</td>
+                <td><strong>${escapeHtml(log.admin || 'Unknown admin')}</strong></td>
+                <td><span style="display:inline-block;padding:5px 9px;border-radius:999px;background:#e8f1fb;color:#005bab;font-weight:700;font-size:12px;">${escapeHtml(log.module)}</span></td>
+                <td>${escapeHtml(log.action)}</td>
+                <td>${log.target_url ? `<a href="${escapeHtml(log.target_url)}" title="Open related page" style="color:#005bab;"><i class="fas fa-arrow-up-right-from-square"></i></a>` : '—'}</td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        body.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:#dc3545;">${escapeHtml(error.message)}</td></tr>`;
+    }
+}
 
 function bindReportFilters() {
     const filterIds = ['reportTypeSelect', 'dateRange', 'customStart', 'customEnd', 'categoryFilter', 'locationFilter'];
@@ -847,7 +908,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=11"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

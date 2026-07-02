@@ -108,6 +108,96 @@ body {
     color: var(--sti-yellow); 
 }
 
+/*
+ * Canonical LookFor sidebar
+ * Keep this block authoritative so page-specific styles cannot make the
+ * navigation look different from the Home dashboard.
+ */
+body > .sidebar {
+    width: 260px !important;
+    min-width: 260px !important;
+    height: 100vh !important;
+    padding: 0 !important;
+    background: var(--sti-blue) !important;
+    color: var(--white) !important;
+    font-family: 'Montserrat', sans-serif !important;
+    flex-shrink: 0 !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+body > .sidebar .logow {
+    width: 100% !important;
+    height: 100px !important;
+    min-height: 100px !important;
+    margin: 0 !important;
+    padding: 0 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    font-family: 'Great Vibes', cursive !important;
+    font-size: 40px !important;
+    line-height: 1 !important;
+    font-weight: 700 !important;
+    color: var(--white) !important;
+}
+
+body > .sidebar .logow span {
+    color: var(--sti-yellow) !important;
+}
+
+body > .sidebar .nav-links {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+}
+
+body > .sidebar .nav-links li {
+    width: 100% !important;
+    min-height: 50px !important;
+    margin: 0 !important;
+    padding: 15px 25px !important;
+    display: flex !important;
+    align-items: center !important;
+    background-color: transparent;
+    color: var(--white);
+    font-family: 'Montserrat', sans-serif !important;
+    font-size: 14px !important;
+    line-height: 20px !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease !important;
+}
+
+body > .sidebar .nav-links li:hover,
+body > .sidebar .nav-links li.active {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--sti-yellow) !important;
+}
+
+body > .sidebar .nav-links li > a {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    color: inherit !important;
+    font: inherit !important;
+    line-height: inherit !important;
+    text-decoration: none !important;
+    white-space: normal;
+}
+
+body > .sidebar .nav-links .side-icon {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    margin: 0 12px 0 0 !important;
+    object-fit: contain !important;
+    filter: brightness(0) invert(1) !important;
+}
+
 /* Dashboard Main Area */
 .main-content { 
     flex: 1; 
