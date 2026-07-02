@@ -990,11 +990,18 @@ def download_android_app():
 
     return FileResponse(
         path=apk_path,
-        media_type="application/vnd.android.package-archive",
+        # Some Android browsers inspect an APK's ZIP container and append
+        # ".zip" despite the APK MIME type. A generic binary attachment plus
+        # an explicit filename reliably preserves the .apk extension.
+        media_type="application/octet-stream",
         filename="LookFor-Android.apk",
         headers={
-            "Content-Disposition": 'attachment; filename="LookFor-Android.apk"',
+            "Content-Disposition": (
+                'attachment; filename="LookFor-Android.apk"; '
+                "filename*=UTF-8''LookFor-Android.apk"
+            ),
             "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-transform",
         },
     )
 

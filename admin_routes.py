@@ -783,10 +783,11 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
 
     # Tuning knobs
     lookup_chunk_size = 800      # SQL Server-safe lookup chunk for large 3k+ uploads
-    commit_chunk_size = 800      # fewer commits for faster large uploads, while keeping transactions bounded
-    # Bcrypt is CPU-intensive. Four workers keeps bulk registration moving
-    # without consuming every available server core.
-    hash_workers = min(4, max(2, (os.cpu_count() or 4)))
+    commit_chunk_size = 100      # keep each database transaction small and responsive
+    password_hash_chunk_size = 100
+    # Keep one CPU-heavy bcrypt worker so bulk registration cannot starve
+    # the single web process on a small Azure App Service plan.
+    hash_workers = 1
 
     def push_bulk_progress(processed_count: int, message: str | None = None):
         safe_processed = min(max(processed_count, 0), total_students)
@@ -1040,17 +1041,24 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                 rows_to_hash.append(row)
 
         if rows_to_hash:
-            update_bulk_job(
-                job_id,
-                message=f"Securely preparing passwords for {len(rows_to_hash):,} users..."
-            )
-            with ThreadPoolExecutor(max_workers=hash_workers) as executor:
-                futures = {
-                    executor.submit(hash_password, row): row
-                    for row in rows_to_hash
-                }
-                for future in as_completed(futures):
-                    futures[future]["hashed_password"] = future.result()
+            hashed_count = 0
+            for password_chunk in chunked(rows_to_hash, password_hash_chunk_size):
+                update_bulk_job(
+                    job_id,
+                    message=(
+                        f"Securely preparing passwords "
+                        f"{hashed_count + 1}-{hashed_count + len(password_chunk)} "
+                        f"of {len(rows_to_hash):,}..."
+                    )
+                )
+                with ThreadPoolExecutor(max_workers=hash_workers) as executor:
+                    futures = {
+                        executor.submit(hash_password, row): row
+                        for row in password_chunk
+                    }
+                    for future in as_completed(futures):
+                        futures[future]["hashed_password"] = future.result()
+                hashed_count += len(password_chunk)
 
         # ---------------------------------------------------------
         # PASS 4: write users in bounded transaction chunks
