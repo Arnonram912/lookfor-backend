@@ -3661,6 +3661,24 @@ async function openAcademicTermModal() {
     }
 }
 
+async function readApiResponse(response, fallbackMessage) {
+    const body = await response.text();
+    if (!body) return {};
+
+    try {
+        return JSON.parse(body);
+    } catch {
+        if (!response.ok) {
+            throw new Error(
+                response.status >= 500
+                    ? 'The server is temporarily unavailable. Please try again.'
+                    : (body || fallbackMessage)
+            );
+        }
+        throw new Error(fallbackMessage);
+    }
+}
+
 async function runAcademicTermAction(action) {
     const verb = action === 'end' ? 'end the current semester and archive its active students' : 'start the next semester';
     if (!(await confirmUserManagementAction('Confirm academic term change?', `Are you sure you want to ${verb}?`, 'Confirm'))) return;
@@ -3668,7 +3686,7 @@ async function runAcademicTermAction(action) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
     });
-    const result = await response.json();
+    const result = await readApiResponse(response, 'Academic term action failed.');
     if (!response.ok) throw new Error(result.detail || 'Academic term update failed.');
     academicTermSetting = result.term;
     closeModal('academicTermModal');
@@ -3725,7 +3743,7 @@ async function reactivateAcademicTerm() {
             },
             body: JSON.stringify({ new_end_date: prompt.value })
         });
-        const result = await response.json();
+        const result = await readApiResponse(response, 'Semester reactivation failed.');
         if (!response.ok) throw new Error(result.detail || 'Semester reactivation failed.');
         academicTermSetting = result.term;
         closeModal('academicTermModal');
