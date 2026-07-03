@@ -2434,7 +2434,16 @@ def reactivate_academic_term(
         models.User.is_archived == True,
     )
     if archived_ids:
-        candidates = query.filter(models.User.id.in_(archived_ids)).all()
+        # SQL Server limits a statement to 2,100 parameters. Large semesters can
+        # contain several thousand students, so restore the archived IDs in
+        # bounded queries instead of one oversized IN clause.
+        candidates = []
+        unique_archived_ids = list(dict.fromkeys(archived_ids))
+        for offset in range(0, len(unique_archived_ids), 1000):
+            id_chunk = unique_archived_ids[offset:offset + 1000]
+            candidates.extend(
+                query.filter(models.User.id.in_(id_chunk)).all()
+            )
     else:
         # Compatibility for a semester ended before transition tracking was installed.
         candidates = query.filter(
