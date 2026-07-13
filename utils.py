@@ -9,7 +9,11 @@ import models
 
 # CHANGE THIS: Point it inside the static directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join("static", "uploads") 
+UPLOAD_FOLDER = os.path.abspath(
+    os.getenv("UPLOAD_FOLDER", "").strip()
+    or os.path.join(BASE_DIR, "static", "uploads")
+)
+UPLOAD_URL_PREFIX = "/uploads"
 MAX_REPORT_IMAGE_BYTES = 5 * 1024 * 1024
 
 # Create folder if it doesn't exist
@@ -70,9 +74,9 @@ def save_file(file, category: str | None = None):
     with open(file_path, "wb") as buffer:
         buffer.write(file_bytes)
 
-    # IMPORTANT: Return the path starting with 'static/' 
-    # so the database stores a URL the browser can understand.
-    return file_path.replace("\\", "/")
+    # Store a public URL rather than a container filesystem path. The mounted
+    # upload directory may live outside /app (for example /home on Azure).
+    return f"{UPLOAD_URL_PREFIX}/{category_folder}/{filename}"
 
 
 def upload_to_cloudinary_if_configured(file_bytes: bytes, filename: str, category_folder: str) -> str | None:

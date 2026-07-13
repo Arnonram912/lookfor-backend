@@ -13,6 +13,9 @@ username = os.getenv("DB_USERNAME", "").strip()
 password = os.getenv("DB_PASSWORD", "").strip()
 encrypt = os.getenv("DB_ENCRYPT", "no")
 trust_server_certificate = os.getenv("DB_TRUST_SERVER_CERTIFICATE", "yes")
+is_azure_app_service = bool(os.getenv("WEBSITE_SITE_NAME") or os.getenv("WEBSITE_INSTANCE_ID"))
+default_pool_size = "2" if is_azure_app_service else "5"
+default_max_overflow = "1" if is_azure_app_service else "5"
 
 connection_parts = [
     f"DRIVER={{{driver}}}",
@@ -32,10 +35,11 @@ SQLALCHEMY_DATABASE_URL = f"mssql+pyodbc:///?odbc_connect={params}"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
+    fast_executemany=os.getenv("DB_FAST_EXECUTEMANY", "true").strip().lower() in {"1", "true", "yes", "on"},
     pool_pre_ping=True,  # Checks if connection is alive before using it
     pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "900")),
-    pool_size=int(os.getenv("DB_POOL_SIZE", "15")),
-    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "15")),
+    pool_size=int(os.getenv("DB_POOL_SIZE", default_pool_size)),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", default_max_overflow)),
     pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
     pool_use_lifo=True,
 )

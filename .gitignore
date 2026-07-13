@@ -1,5 +1,7 @@
 .env
 .azure-created.json
+.azure-*/
+*.zip
 .venv/
 __pycache__/
 *.py[cod]

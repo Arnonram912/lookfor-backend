@@ -89,6 +89,9 @@ class Item(Base):
     approved_at = Column(DateTime, nullable=True)
     archived = Column(Boolean, default=False)
     deleted = Column(Boolean, default=False, nullable=False)
+    disposal_status = Column(String(30), nullable=False, default="active")
+    disposal_note = Column(String(500), nullable=True)
+    disposal_updated_at = Column(DateTime, nullable=True)
     location = Column(String)     # NEW
     date = Column(Date) 
     time_found = Column(String, nullable=True)  
@@ -135,13 +138,16 @@ class User(Base):
     full_name = Column(String(255), nullable=True) 
 
     student_no = Column(String(50), unique=True, nullable=True)
+    archived_student_no = Column(String(50), nullable=True)
     course = Column(String(100), nullable=True)     # This is 'Program' (e.g., STEM, BSIT)
     department = Column(String(100), nullable=True) # For Admin Offices
+    personnel = Column(String(50), nullable=True)   # Faculty / Staff classification
     section = Column(String(100), nullable=True) 
     level = Column(String(50), nullable=True)       # NEW: For 'Level' (e.g., G11, G12)
     batch_id = Column(String(100), nullable=True, index=True) # Index makes deleting FAST
     profile_pic = Column(String(500), nullable=True, default="static/photos/default-student-avatar.jpg")
     email = Column(String(255), unique=True, index=True)
+    archived_email = Column(String(255), nullable=True)
     hashed_password = Column(String(255))
     is_admin = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False)
@@ -258,10 +264,30 @@ class ClaimDecisionReport(Base):
     claim_id = Column(Integer, ForeignKey("claims.id"), unique=True, nullable=False, index=True)
     decision_status = Column(String(50), nullable=False)
     report_image_path = Column(String(500), nullable=True)
+    claimant_name = Column(String(255), nullable=True)
+    claimant_student_no = Column(String(100), nullable=True)
+    claimant_department_course = Column(String(255), nullable=True)
+    id_verified = Column(Boolean, nullable=False, default=False)
+    verification_method = Column(String(100), nullable=True)
+    verification_note = Column(String(500), nullable=True)
     created_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     claim = relationship("Claim", foreign_keys=[claim_id])
+    created_by_admin = relationship("User", foreign_keys=[created_by_admin_id])
+
+class SavedReport(Base):
+    __tablename__ = "saved_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(String(500), nullable=True)
+    report_type = Column(String(50), nullable=False, default="all")
+    filters_json = Column(Text, nullable=False, default="{}")
+    created_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
     created_by_admin = relationship("User", foreign_keys=[created_by_admin_id])
 
 class Category(Base):
@@ -291,10 +317,38 @@ class ConfiscatedItem(Base):
     location = Column(String)
     estimated_time = Column(String)
     reason = Column(String)
+    student_name = Column(String(200), nullable=True)
+    student_number = Column(String(100), nullable=True)
     image_path = Column(String, nullable=True)
     disposal_status = Column(String(30), nullable=False, default="active")
     disposal_note = Column(String(500), nullable=True)
     disposal_updated_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+class DisposalReport(Base):
+    __tablename__ = "disposal_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_type = Column(String(50), nullable=False)
+    source_id = Column(Integer, nullable=False, index=True)
+    item_code = Column(String(50), nullable=True)
+    category = Column(String(100), nullable=True)
+    brand = Column(String(100), nullable=True)
+    color = Column(String(50), nullable=True)
+    description = Column(Text, nullable=True)
+    location = Column(String(255), nullable=True)
+    owner_name = Column(String(255), nullable=True)
+    disposal_note = Column(String(500), nullable=True)
+    disposed_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    disposed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    disposed_by_admin = relationship("User", foreign_keys=[disposed_by_admin_id])
+
+class ConfiscationReason(Base):
+    __tablename__ = "confiscation_reasons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), unique=True, nullable=False)
     created_at = Column(DateTime, default=func.now())
 
 class LandingContent(Base):

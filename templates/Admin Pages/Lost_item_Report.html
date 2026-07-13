@@ -6,8 +6,10 @@
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
     
     <link rel="stylesheet" href="/static/Lost_item_report.css?v=22">
+    <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/static/admin-item-bulk-actions.js?v=2"></script>
 </head> 
 <body> 
 
@@ -161,6 +163,7 @@
                             <option value="all">All Categories</option>
                         </select>
                         <input type="date" id="lostDateFilter" class="inventory-filter date-filter" onchange="resetLostPaginationAndRender()" title="Filter by date">
+                        <button type="button" class="upload-btn admin-bulk-mode-button" id="lostBulkModeButton" onclick="toggleAdminBulkMode('lost')"><i class="fas fa-check-square"></i> Select Multiple</button>
                         <button class="upload-btn archive-toggle-btn" id="lostArchiveToggleBtn" onclick="setLostLifecycleView('archive')">
                             Archive
                         </button>
@@ -171,6 +174,15 @@
                             <span class="plus">+ Upload Lost Item </span>
                         </button>
                     </div>
+                </div>
+
+                <div class="admin-bulk-toolbar" id="lostBulkToolbar">
+                    <label><input type="checkbox" id="lostBulkSelectAll" onchange="toggleAdminBulkVisible('lost', this.checked)"> Select visible</label>
+                    <span class="admin-bulk-count" id="lostBulkCount">0 selected</span>
+                    <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'archive')">Archive</button>
+                    <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'delete')">Delete</button>
+                    <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'dispose')">Dispose</button>
+                    <button type="button" class="upload-btn" onclick="clearAdminBulkSelection('lost'); renderLostItems();">Clear</button>
                 </div>
 
                 <div class="items-grid" id="lostItemsGrid">
@@ -254,14 +266,14 @@
                     <div class="image-upload-section">
                             <div class="image-placeholder image-preview-carousel" id="imagePreview">
                                 <button type="button" class="image-slide-btn prev" id="imagePreviewPrev" onclick="changePreviewSlide(-1)" style="display:none;">&#8249;</button>
-                                <div class="image-preview-stage" id="imagePreviewStage">Image Preview</div>
+                            <div class="image-preview-stage" id="imagePreviewStage"><img src="/static/photos/boxw.png" alt="Default item image" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
                                 <button type="button" class="image-slide-btn next" id="imagePreviewNext" onclick="changePreviewSlide(1)" style="display:none;">&#8250;</button>
                                 <div class="image-preview-status" id="imagePreviewStatus" style="display:none;"></div>
                             </div> 
                             
                             <input type="file" id="itemImage" hidden accept="image/*"> 
                             
-                            <button class="btn-upload-img" id="itemImageTrigger" onclick="document.getElementById('itemImage').click()">+ Upload Main Image <span class="required-asterisk">*</span></button>
+                            <button class="btn-upload-img" id="itemImageTrigger" onclick="document.getElementById('itemImage').click()">+ Upload Main Image (Optional)</button>
                             <p class="supporting-image-note">Add up to 2 more photos to help the AI build a more accurate embedding. The first image stays as the main display photo.</p>
                             <div class="supporting-image-grid">
                                 <div class="supporting-image-card">
@@ -499,7 +511,7 @@ function showAccessDeniedPopup(permName) {
 
     document.body.appendChild(overlay);
 }
-        const ITEM_IMAGE_FALLBACK = '/static/photos/placeholder.png';
+        const ITEM_IMAGE_FALLBACK = '/static/photos/boxw.png';
 
         function getItemImageUrl(imagePath) {
             const cleanPath = String(imagePath || "").replace(/\\/g, '/').trim();
@@ -559,6 +571,7 @@ function showAccessDeniedPopup(permName) {
     }
         let lostItemsCache = [];
         let lostLifecycleView = "active";
+        registerAdminItemBulkScope('lost', { getView: () => lostLifecycleView, reload: loadLostItems, render: renderLostItems, gridId: 'lostItemsGrid' });
         let currentLostPage = 1;
         let currentLostPageSize = 10;
         let reportOwnerUsersCache = [];
@@ -662,6 +675,7 @@ function showAccessDeniedPopup(permName) {
     }
 
     function setLostLifecycleView(view) {
+        clearAdminBulkSelection('lost');
         lostLifecycleView = lostLifecycleView === view ? "active" : view;
         const statusFilter = document.getElementById("lostStatusFilter");
         const categoryFilter = document.getElementById("lostCategoryFilter");
@@ -790,6 +804,7 @@ function showAccessDeniedPopup(permName) {
         updateLostPaginationControls(filteredItems.length);
         const pageStart = (currentLostPage - 1) * currentLostPageSize;
         const pageItems = filteredItems.slice(pageStart, pageStart + currentLostPageSize);
+        setAdminBulkVisibleItems('lost', pageItems);
 
         grid.innerHTML = pageItems.map(item => {
             const imageUrl = getItemImageUrl(item.image_path);
@@ -802,6 +817,7 @@ function showAccessDeniedPopup(permName) {
 
             return `
                 <div class="item-card">
+                    ${adminBulkCheckboxHtml('lost', item)}
                     <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
                         <img src="${imageUrl}" onerror="handleItemImageError(this)">
                         ${statusTag}
@@ -995,8 +1011,9 @@ function showAccessDeniedPopup(permName) {
         archiveBtn.style.display = lostLifecycleView === "archive" ? "inline-flex" : "none";
         archiveBtn.textContent = "Delete";
         archiveBtn.onclick = () => moveLostItemToDeleted(item.id);
-        disposeBtn.style.display = "none";
-        disposeBtn.onclick = null;
+        disposeBtn.style.display = lostLifecycleView === "archive" ? "inline-flex" : "none";
+        disposeBtn.textContent = "For Disposal";
+        disposeBtn.onclick = lostLifecycleView === "archive" ? () => moveArchivedItemToDisposal(item.id) : null;
         recoveryBtn.onclick = () => recoverArchivedLostItem(item.id);
         deleteBtn.style.display = lostLifecycleView === "deleted" ? "inline-flex" : "none";
         deleteBtn.textContent = "Delete Permanently";
@@ -1227,6 +1244,22 @@ async function moveLostItemToDeleted(itemId) {
     }
 }
 
+async function moveArchivedItemToDisposal(itemId) {
+    const confirmed = await confirmFoundReportAction("Move to For Disposal?", "Move this archived item to the For Disposals menu?", "Move Item");
+    if (!confirmed) return;
+    const note = prompt('Optional disposal note:') || '';
+    const response = await fetch(`/admin/items/${itemId}/disposal`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'schedule', note })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) return showLostUploadAlert('error', 'Action failed', result.detail || 'Could not move item.');
+    await showLostUploadAlert('success', 'Moved for disposal', result.message);
+    closeModal('itemDetailModal');
+    loadLostItems();
+}
+
         function showLostUploadAlert(icon, title, text) {
             if (window.Swal) {
                 return fireSwalOnTop({
@@ -1366,7 +1399,7 @@ async function moveLostItemToDeleted(itemId) {
             const itemImage = document.getElementById('itemImage').files[0];
             const itemName = document.getElementById('itemName').value;
             
-            if (!itemImage || !itemName) {
+            if (!itemName) {
                 alert("⚠️ Please upload an image and provide an item name!");
                 return;
             }
@@ -1416,7 +1449,7 @@ async function moveLostItemToDeleted(itemId) {
             const reportTime = document.getElementById('reportTime').value;
             const reportLocation = document.getElementById('reportLocation').value.trim();
 
-            if (!itemImage || !itemName || !category || !department || !owner || !reportDate || !reportTime || !reportLocation) {
+            if (!itemName || !category || !department || !owner || !reportDate || !reportTime || !reportLocation) {
                 await showLostUploadAlert('warning', 'Missing required details', 'Please complete all required fields marked with *.');
                 return;
             }
@@ -1475,7 +1508,7 @@ function renderPreviewCarousel() {
     if (!stage || !prevBtn || !nextBtn || !status) return;
 
     if (!availableSlides.length) {
-        stage.innerHTML = 'Image Preview';
+        stage.innerHTML = '<img src="/static/photos/boxw.png" alt="Default item image" style="max-width:100%;max-height:100%;object-fit:contain;">';
         prevBtn.style.display = 'none';
         nextBtn.style.display = 'none';
         status.style.display = 'none';
@@ -1578,7 +1611,7 @@ async function executeSubmitLegacy() {
     try {
         // STEP 1: AI Match Analysis
         const compareData = new FormData();
-        compareData.append("image", imageFile);
+        if (imageFile) compareData.append("image", imageFile);
         compareData.append("category", catName); // AI uses the name (e.g., "Electronics")
         compareData.append("location", document.getElementById('reportLocation').value);
         compareData.append("description", document.getElementById('itemDesc').value);
@@ -1639,7 +1672,7 @@ async function executeSubmitLegacy() {
         
         // STEP 2: Final Save to Database
         const saveData = new FormData();
-        saveData.append("file", imageFile);
+        if (imageFile) saveData.append("file", imageFile);
         saveData.append("item_name", document.getElementById('itemName').value);
         saveData.append("description", document.getElementById('itemDesc').value);
         saveData.append("color", document.getElementById('itemColor').value);
@@ -1705,7 +1738,7 @@ async function executeSubmit() {
 
     try {
         const compareData = new FormData();
-        compareData.append("image", imageFile);
+        if (imageFile) compareData.append("image", imageFile);
         compareData.append("category", catName);
         compareData.append("location", document.getElementById('reportLocation').value);
         compareData.append("description", document.getElementById('itemDesc').value);
@@ -1737,7 +1770,7 @@ async function executeSubmit() {
         }
 
         const saveData = new FormData();
-        saveData.append("file", imageFile);
+        if (imageFile) saveData.append("file", imageFile);
         saveData.append("item_name", document.getElementById('itemName').value);
         saveData.append("description", document.getElementById('itemDesc').value);
         saveData.append("color", document.getElementById('itemColor').value);
@@ -1866,7 +1899,7 @@ async function disposeItem(itemId) {
             document.getElementById('itemImageExtra2').value = "";
             uploadPreviewSlides = [null, null, null];
             currentPreviewSlideIndex = 0;
-            document.getElementById('itemImageTrigger').innerHTML = '+ Upload Main Image <span class="required-asterisk">*</span>';
+            document.getElementById('itemImageTrigger').textContent = '+ Upload Main Image (Optional)';
             document.getElementById('itemImageExtra1Trigger').textContent = '+ Add Optional Image 2';
             document.getElementById('itemImageExtra2Trigger').textContent = '+ Add Optional Image 3';
             renderPreviewCarousel();
@@ -1918,7 +1951,7 @@ async function disposeItem(itemId) {
         window.location.href = "/";
     }
     </script>
-<script src="/static/session-keepalive.js?v=10"></script>
+<script src="/static/session-keepalive.js?v=13"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

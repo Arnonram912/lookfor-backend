@@ -44,6 +44,9 @@ SECRET_KEY=replace-with-your-secret-key
 GMAIL_SENDER_EMAIL=your-email@example.com
 GMAIL_APP_PASSWORD=your-gmail-app-password
 MFA_CODE_EXPIRE_MINUTES=10
+LOOKFOR_LOGIN_URL=http://127.0.0.1:8000/login
+LOOKFOR_BASE_URL=http://127.0.0.1:8000
+ACCOUNT_EMAIL_QUEUE_SIZE=10000
 ```
 
 ## Database Setup
@@ -95,7 +98,7 @@ python main.py
 Or with uvicorn:
 
 ```powershell
-uvicorn main:app --reload
+python -m uvicorn main:app --reload --reload-exclude=.venv/**
 ```
 
 Then open:
@@ -112,16 +115,30 @@ Recommended setup:
 - Start command:
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
+uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --limit-concurrency 20 --backlog 64 --timeout-keep-alive 5
 ```
 
 A `Procfile` is included for hosts that support it:
 
 ```Procfile
-web: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+web: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --limit-concurrency 20 --backlog 64 --timeout-keep-alive 5
 ```
 
 Uploads are stored under `static/uploads/`. On hosts with temporary filesystems, use persistent disk storage or move uploads to cloud storage.
+
+### Azure App Service B1
+
+The Docker image uses B1-safe defaults: one Uvicorn worker, bounded request
+concurrency, a small SQL connection pool, and low-memory CLIP inference. In the
+App Service configuration:
+
+- set the Health check path to `/healthz`;
+- set `WEBSITES_ENABLE_APP_SERVICE_STORAGE=true` so the model cache under
+  `/home/data/huggingface` survives restarts;
+- configure Cloudinary for uploaded images, or set `UPLOAD_FOLDER` to a
+  persistent `/home/data/...` directory;
+- do not override the worker count above `1` on B1;
+- use the resource settings shown in `.env.example`.
 
 ## Notes
 

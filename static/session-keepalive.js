@@ -340,6 +340,49 @@
     function addAdminSidebarMenuItems() {
         const nav = document.querySelector("body > .sidebar .nav-links");
         if (!nav) return;
+        const adminPageAliases = {
+            "/admin/For-Disposal": "/c/9374b372-d94f-5fa4-a36d-e219bd12e3a6",
+            "/admin/Audit-Logs": "/c/3fbf5fb3-92b4-57c5-81ac-8e82ef0bce83",
+            "/admin/Confiscated-items": "/c/dd5c6fcb-8cb9-54c8-bb07-d8b3f6e2aa79",
+            "/admin/Reports": "/c/8c2dc56e-79ae-5939-890e-315c8a959b32"
+        };
+
+        function isAdminSubpageActive(targetUrl) {
+            const target = new URL(targetUrl, window.location.origin);
+            const current = new URL(window.location.href);
+            const currentPath = current.pathname.toLowerCase();
+            const targetPath = target.pathname.toLowerCase();
+            const aliasPath = (adminPageAliases[target.pathname] || "").toLowerCase();
+
+            if (targetPath === "/admin/for-disposal") {
+                return (
+                    currentPath === targetPath
+                    || currentPath === aliasPath
+                    || (
+                        (currentPath === "/admin/confiscated-items"
+                            || currentPath === (adminPageAliases["/admin/Confiscated-items"] || "").toLowerCase())
+                        && current.searchParams.get("view") === "disposal"
+                    )
+                );
+            }
+
+            if (targetPath === "/admin/audit-logs") {
+                return (
+                    currentPath === targetPath
+                    || currentPath === aliasPath
+                    || (
+                        (currentPath === "/admin/reports"
+                            || currentPath === (adminPageAliases["/admin/Reports"] || "").toLowerCase())
+                        && current.searchParams.get("view") === "audit"
+                    )
+                );
+            }
+
+            return (
+                currentPath === targetPath
+                || Boolean(aliasPath && currentPath === aliasPath)
+            );
+        }
 
         function insertAfterLink(matchPath, id, label, targetUrl, permission, iconPath) {
             const parentLink = Array.from(nav.querySelectorAll("a")).find(link =>
@@ -366,23 +409,13 @@
                 parentLink.closest("li").insertAdjacentElement("afterend", item);
             }
 
-            const target = new URL(targetUrl, window.location.origin);
-            const current = new URL(window.location.href);
-            if (
-                current.pathname.toLowerCase() === target.pathname.toLowerCase()
-                && current.searchParams.get("view") === target.searchParams.get("view")
-            ) {
+            if (isAdminSubpageActive(targetUrl)) {
                 const parentItem = parentLink.closest("li");
                 parentItem.classList.remove("active");
-                parentItem.style.setProperty("background-color", "transparent", "important");
-                parentItem.style.setProperty("color", "#ffffff", "important");
-                parentItem.style.setProperty("font-weight", "600", "important");
+                parentItem.removeAttribute("style");
                 item.classList.add("active");
-                item.style.setProperty("background-color", "rgba(255, 255, 255, 0.1)", "important");
-                item.style.setProperty("color", "#ffe000", "important");
-                item.style.setProperty("font-weight", "800", "important");
-                item.querySelector("a").style.setProperty("font-weight", "800", "important");
-                item.querySelector("a").style.setProperty("color", "inherit", "important");
+                item.removeAttribute("style");
+                item.querySelector("a").removeAttribute("style");
             }
         }
 
@@ -390,7 +423,7 @@
             "/admin/confiscated-items",
             "adminForDisposalNav",
             "For Disposal",
-            "/admin/Confiscated-items?view=disposal",
+            "/admin/For-Disposal",
             "Confiscated-items",
             "/static/photos/handw.png"
         );
@@ -398,7 +431,7 @@
             "/admin/reports",
             "adminAuditLogsNav",
             "Audit Logs",
-            "/admin/Reports?view=audit",
+            "/admin/Audit-Logs",
             "Reports",
             "/static/photos/folderw.png"
         );

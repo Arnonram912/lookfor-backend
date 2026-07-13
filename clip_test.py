@@ -2,6 +2,9 @@
 from PIL import Image
 import numpy as np
 import json
+import os
+import threading
+from functools import lru_cache
 # Load the model and processor only when an AI comparison endpoint needs them.
 # This keeps normal pages from failing during app startup when the CLIP weights
 # are not already cached locally.
@@ -12,6 +15,21 @@ model = None
 processor = None
 _model = None
 _processor = None
+_MODEL_NAME = os.getenv("CLIP_MODEL_NAME", "openai/clip-vit-base-patch32")
+_MODEL_LOAD_LOCK = threading.Lock()
+_INFERENCE_LOCK = threading.Lock()
+_MAX_INPUT_DIMENSION = max(224, int(os.getenv("CLIP_MAX_INPUT_DIMENSION", "1024")))
+_IMAGE_VIEW_COUNT = max(1, min(4, int(os.getenv("CLIP_IMAGE_VIEWS", "2"))))
+
+
+def _bounded_rgb_image(image: Image.Image) -> Image.Image:
+    bounded = image.convert("RGB")
+    if max(bounded.size) > _MAX_INPUT_DIMENSION:
+        bounded.thumbnail(
+            (_MAX_INPUT_DIMENSION, _MAX_INPUT_DIMENSION),
+            Image.Resampling.LANCZOS,
+        )
+    return bounded
 
 
 def _center_crop(image: Image.Image, crop_ratio: float = 0.85) -> Image.Image:
@@ -24,28 +42,38 @@ def _center_crop(image: Image.Image, crop_ratio: float = 0.85) -> Image.Image:
 
 
 def _build_image_views(image: Image.Image) -> list[Image.Image]:
-    base = image.convert("RGB")
+    base = _bounded_rgb_image(image)
     return [
         base,
         _center_crop(base, 0.9),
         _center_crop(base, 0.75),
         base.transpose(Image.FLIP_LEFT_RIGHT),
-    ]
+    ][:_IMAGE_VIEW_COUNT]
 
 
-def _encode_image_views(images: list[Image.Image]) -> np.ndarray:
+def _encode_images(images: list[Image.Image]) -> np.ndarray:
     model_obj, processor_obj = get_clip_components()
-    inputs = processor_obj(images=images, return_tensors="pt", padding=True)
 
-    with torch.no_grad():
+    with _INFERENCE_LOCK, torch.inference_mode():
+        # Serialize preprocessing too. Otherwise concurrent requests can each
+        # allocate a large tensor batch while waiting for model inference.
+        inputs = processor_obj(images=images, return_tensors="pt", padding=True)
         feat = model_obj.get_image_features(**inputs)
         if hasattr(feat, "pooler_output"):
             feat = feat.pooler_output
-        feat = feat / feat.norm(p=2, dim=-1, keepdim=True)
+        feat = feat / feat.norm(p=2, dim=-1, keepdim=True).clamp_min(1e-12)
 
-    averaged = feat.mean(dim=0, keepdim=True)
-    averaged = averaged / averaged.norm(p=2, dim=-1, keepdim=True)
-    return averaged.cpu().numpy().flatten()
+    return feat.cpu().numpy()
+
+
+def _average_normalized_features(features: np.ndarray) -> np.ndarray:
+    averaged = np.mean(features, axis=0)
+    norm = np.linalg.norm(averaged)
+    return averaged if norm == 0 else averaged / norm
+
+
+def _encode_image_views(images: list[Image.Image]) -> np.ndarray:
+    return _average_normalized_features(_encode_images(images))
 
 
 def get_image_embedding(image: Image.Image) -> np.ndarray:
@@ -66,7 +94,19 @@ def combine_embeddings(embeddings: list[np.ndarray]) -> np.ndarray:
 
 
 def get_multi_image_embedding(images: list[Image.Image]) -> np.ndarray:
-    image_embeddings = [get_image_embedding(image) for image in images if image is not None]
+    valid_images = [image for image in images if image is not None]
+    if not valid_images:
+        raise ValueError("At least one image is required.")
+
+    # Preserve the four-view averaging behavior, but execute every view from
+    # every uploaded image in one model pass.
+    views_per_image = [_build_image_views(image) for image in valid_images]
+    view_count = len(views_per_image[0])
+    features = _encode_images([view for views in views_per_image for view in views])
+    image_embeddings = [
+        _average_normalized_features(features[start:start + view_count])
+        for start in range(0, len(features), view_count)
+    ]
     return combine_embeddings(image_embeddings)
 
 def get_similarity_score(image_path1, image_path2):
@@ -102,13 +142,13 @@ def describe_item(image_path, categories=None):
     if not categories:
         categories = ["wallet", "bag", "id card", "umbrella", "keys"]
 
-    img = Image.open(image_path).convert("RGB")
+    img = _bounded_rgb_image(Image.open(image_path))
     model_obj, processor_obj = get_clip_components()
     
     # We provide the image AND the text labels to the processor
     inputs = processor_obj(text=categories, images=img, return_tensors="pt", padding=True)
 
-    with torch.no_grad():
+    with _INFERENCE_LOCK, torch.inference_mode():
         outputs = model_obj(**inputs)
         # CLIP calculates the "logits" (likelihood) for each text label
         logits_per_image = outputs.logits_per_image 
@@ -131,28 +171,34 @@ def find_matches_in_dataset(search_image_path, db_items):
     search_vec = get_image_embedding(search_img)
 
     matches = []
+    vectors = []
     for item in db_items:
         if item.image_embedding:
-            # 2. Convert stored JSON string back to a numpy array
-            dataset_vec = np.array(json.loads(item.image_embedding)).flatten()
-            
-            # 3. Calculate similarity (Dot product works because vectors are normalized)
-            score = float(np.dot(search_vec, dataset_vec))
-            
-            matches.append({
-                "id": item.id,
-                "category": item.category,
-                "score": float(score)
-            })
+            try:
+                dataset_vec = np.asarray(
+                    json.loads(item.image_embedding), dtype=np.float32
+                ).flatten()
+                if dataset_vec.shape != search_vec.shape:
+                    continue
+                vectors.append(dataset_vec)
+                matches.append({"id": item.id, "category": item.category})
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+
+    if vectors:
+        scores = np.asarray(vectors, dtype=np.float32) @ search_vec.astype(np.float32)
+        for match, score in zip(matches, scores):
+            match["score"] = float(score)
 
     # Sort by highest score first
     return sorted(matches, key=lambda x: x['score'], reverse=True)
 
-def get_text_embedding(text):
+@lru_cache(maxsize=256)
+def _get_text_embedding_cached(text: str) -> tuple[float, ...]:
     model_obj, processor_obj = get_clip_components()
     inputs = processor_obj(text=[text], return_tensors="pt", padding=True)
 
-    with torch.no_grad():
+    with _INFERENCE_LOCK, torch.inference_mode():
         outputs = model_obj.get_text_features(**inputs)
         
         # FIX: Ensure we are working with the Tensor, not the Output object
@@ -167,9 +213,16 @@ def get_text_embedding(text):
             text_features = text_features.pooler_output
 
     # Now .norm() will work because text_features is a torch.Tensor
-    text_features = text_features / text_features.norm(p=2, dim=-1, keepdim=True)
+    text_features = text_features / text_features.norm(
+        p=2, dim=-1, keepdim=True
+    ).clamp_min(1e-12)
+    return tuple(text_features.cpu().numpy().flatten())
 
-    return text_features.cpu().numpy().flatten()
+
+def get_text_embedding(text):
+    return np.asarray(
+        _get_text_embedding_cached(str(text)), dtype=np.float32
+    ).copy()
 
 def find_matches_by_text_details(category, location, date, db_items):
     text_query = f"A {category} found at {location} on {date}"
@@ -208,9 +261,20 @@ def get_clip_components():
         CLIPModel = clip_model_cls
         CLIPProcessor = clip_processor_cls
     if _model is None or _processor is None:
-        print("🚀 Loading CLIP Model (this happens only once)...")
-        _model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        _processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-        model = _model
-        processor = _processor
+        with _MODEL_LOAD_LOCK:
+            if _model is None or _processor is None:
+                thread_count = int(os.getenv(
+                    "CLIP_TORCH_THREADS", min(4, os.cpu_count() or 1)
+                ))
+                torch.set_num_threads(max(1, thread_count))
+                try:
+                    torch.set_num_interop_threads(1)
+                except RuntimeError:
+                    pass
+                print(f"Loading CLIP model {_MODEL_NAME}...")
+                _model = CLIPModel.from_pretrained(_MODEL_NAME)
+                _model.eval()
+                _processor = CLIPProcessor.from_pretrained(_MODEL_NAME)
+                model = _model
+                processor = _processor
     return _model, _processor

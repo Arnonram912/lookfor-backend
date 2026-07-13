@@ -880,7 +880,7 @@
                     <span>To:</span>
                     <div class="compose-recipient-box" onclick="document.getElementById('composeUserSearch')?.focus()">
                         <div id="composeRecipientChips" style="display:contents;"></div>
-                        <input id="composeUserSearch" class="compose-user-search" type="text" placeholder="Search students or administrators" oninput="filterComposeStudents()" onfocus="filterComposeStudents()">
+                        <input id="composeUserSearch" class="compose-user-search" type="text" placeholder="Search students or administrators" oninput="filterComposeStudents()">
                     </div>
                 </div>
                 <div id="composeUserSuggestions" class="compose-user-suggestions"></div>
@@ -1416,7 +1416,7 @@ function openNewMessagePage() {
     renderComposeRecipientChips();
     updateComposeRecipientCount();
     loadComposeRecipients().then(() => {
-        renderComposeSuggestions("");
+        hideComposeSuggestions();
         document.getElementById("composeUserSearch")?.focus();
     });
 }
@@ -1451,7 +1451,7 @@ function renderComposeRecipientChips() {
 function removeComposeRecipient(userId) {
     selectedComposeRecipients.delete(Number(userId));
     renderComposeRecipientChips();
-    filterComposeStudents();
+    hideComposeSuggestions();
 }
 
 function selectComposeRecipient(userId) {
@@ -1462,8 +1462,15 @@ function selectComposeRecipient(userId) {
     selectedComposeRecipients.set(id, user);
     document.getElementById("composeUserSearch").value = "";
     renderComposeRecipientChips();
-    renderComposeSuggestions("");
+    hideComposeSuggestions();
     document.getElementById("composeUserSearch")?.focus();
+}
+
+function hideComposeSuggestions() {
+    const list = document.getElementById("composeUserSuggestions");
+    if (!list) return;
+    list.innerHTML = "";
+    list.style.display = "none";
 }
 
 function renderComposeSuggestions(searchTerm = "") {
@@ -1471,6 +1478,11 @@ function renderComposeSuggestions(searchTerm = "") {
     if (!list) return;
 
     const filter = String(searchTerm || "").trim().toLowerCase();
+    if (!filter) {
+        hideComposeSuggestions();
+        return;
+    }
+
     const users = availableStudents
         .filter(user => !selectedComposeRecipients.has(Number(user.id)))
         .filter(user => {
@@ -1485,7 +1497,7 @@ function renderComposeSuggestions(searchTerm = "") {
             ].map(value => String(value || "").toLowerCase()).join(" ");
             return !filter || haystack.includes(filter);
         })
-        .slice(0, filter ? 12 : 8);
+        .slice(0, 12);
 
     if (!users.length) {
         list.innerHTML = `<div class="compose-empty-state">No users found.</div>`;
@@ -1512,8 +1524,15 @@ function renderComposeStudentList(searchTerm = "") {
 function filterComposeStudents() {
     const query = document.getElementById("composeUserSearch")?.value || document.getElementById("composeStudentSearch")?.value || "";
     const list = document.getElementById("composeUserSuggestions");
+    const trimmedQuery = query.trim();
 
     clearTimeout(composeSearchTimeout);
+    if (!trimmedQuery) {
+        composeSearchRequestId += 1;
+        hideComposeSuggestions();
+        return;
+    }
+
     if (list) {
         list.innerHTML = `<div class="compose-empty-state">Searching users...</div>`;
         list.style.display = "block";
@@ -1523,7 +1542,7 @@ function filterComposeStudents() {
     composeSearchTimeout = setTimeout(async () => {
         await loadComposeRecipients(query);
         if (requestId === composeSearchRequestId) {
-            renderComposeSuggestions(query);
+            renderComposeSuggestions(trimmedQuery);
         }
     }, 250);
 }
@@ -1757,7 +1776,7 @@ window.onload = () => {
 };
 </script>
 
-<script src="/static/session-keepalive.js?v=10"></script>
+<script src="/static/session-keepalive.js?v=13"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>

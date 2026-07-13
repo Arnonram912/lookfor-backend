@@ -230,6 +230,14 @@
                 </div>
 
                 <div class="info-card">
+                    <div class="info-icon"><i class="fas fa-id-badge"></i></div>
+                    <div class="info-text">
+                        <label>Personnel</label>
+                        <p id="label-personnel">---</p>
+                    </div>
+                </div>
+
+                <div class="info-card">
                     <div class="info-icon">🎓</div>
                     <div class="info-text">
                         <label>Account Type</label>
@@ -532,6 +540,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('display-email').innerText = user.email || "N/A";
     document.getElementById('label-name').innerText = user.full_name || "N/A";
     document.getElementById('label-department').innerText = user.department || user.course || "N/A";
+    document.getElementById('label-personnel').innerText = user.personnel || "N/A";
     document.getElementById('label-role').innerText = user.is_admin ? "Administrator" : "User";
     document.getElementById('label-email').innerText = user.email || "N/A";
 });
@@ -603,6 +612,10 @@ async function saveProfileChanges() {
         await showProfileAlert('info', 'No changes detected', 'Upload a profile image first before saving.');
         return;
     }
+    if (fileInput.files[0].size > 5 * 1024 * 1024) {
+        await showProfileAlert('warning', 'Image too large', 'Profile image must be 5 MB or smaller.');
+        return;
+    }
 
     const confirmed = await confirmProfileAction(
         'Apply profile changes?',
@@ -636,6 +649,12 @@ async function saveProfileChanges() {
 document.getElementById('imageUpload').onchange = () => {
     const [file] = document.getElementById('imageUpload').files;
     if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+            document.getElementById('imageUpload').value = '';
+            document.getElementById('applyProfileImageBtn').style.display = 'none';
+            showProfileAlert('warning', 'Image too large', 'Profile image must be 5 MB or smaller.');
+            return;
+        }
         const previewUrl = URL.createObjectURL(file);
         document.getElementById('display-pic').src = previewUrl;
         const topbarProfilePic = document.getElementById('topbar-profile-pic');
@@ -799,7 +818,7 @@ function logout() {
 
 </script>
 
-<script src="/static/session-keepalive.js?v=10"></script>
+<script src="/static/session-keepalive.js?v=13"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>

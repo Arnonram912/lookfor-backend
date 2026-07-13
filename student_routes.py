@@ -6,6 +6,7 @@ import models
 from database import get_db
 from security import get_current_user
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 import os
 import shutil
 import io
@@ -27,6 +28,7 @@ from utils import (
 )
 from clip_test import get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
+from account_email import queue_item_event_email
 
 
 router = APIRouter(prefix="/student", tags=["Student"])
@@ -89,6 +91,29 @@ def create_student_notification(
     )
     db.add(notif)
     return notif
+
+
+def queue_lost_item_match_email(
+    recipient: models.User | None,
+    lost_item: models.Item,
+    *,
+    subject: str = "A possible match was found for your lost item",
+    message_text: str | None = None,
+) -> bool:
+    if not recipient or not getattr(recipient, "email", None):
+        return False
+
+    target_url = f"/student/Lost-report?item_id={lost_item.id}&show_match=1"
+    return queue_item_event_email(
+        recipient.email,
+        format_user_display_name(recipient),
+        subject=subject,
+        message_text=(
+            message_text
+            or f"A found {lost_item.category} may match your lost-item report."
+        ),
+        action_url=target_url,
+    )
 
 
 def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | None:
@@ -260,7 +285,7 @@ def serialize_student_pending_found(item: models.PendingItem, owner: models.User
 
 
 @router.get("/notifications")
-async def get_student_notifications(
+def get_student_notifications(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
@@ -273,7 +298,7 @@ async def get_student_notifications(
 
 
 @router.get("/notifications/unread-count")
-async def get_student_notification_unread_count(
+def get_student_notification_unread_count(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
@@ -287,7 +312,7 @@ async def get_student_notification_unread_count(
 
 
 @router.post("/notifications/{notif_id}/read")
-async def mark_student_notification_read(
+def mark_student_notification_read(
     notif_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
@@ -306,7 +331,7 @@ async def mark_student_notification_read(
 
 
 @router.post("/notifications/mark-all-read")
-async def mark_all_student_notifications_read(
+def mark_all_student_notifications_read(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
@@ -387,7 +412,9 @@ async def report_found_item(
     is_auto_match = ai_score >= 0.55 and matched_item_id is not None
     computed_embedding = image_embedding or ""
     if query_images:
-        computed_embedding = json.dumps(get_multi_image_embedding(query_images).tolist())
+        computed_embedding = json.dumps(
+            (await run_in_threadpool(get_multi_image_embedding, query_images)).tolist()
+        )
 
     resolved_time_found = (time_found or time or "").strip() or None
 
@@ -413,6 +440,7 @@ async def report_found_item(
     db.flush()
 
     matched_lost_item = None
+    matched_lost_owner = None
     match_score = float(ai_score or 0)
     if is_auto_match:
         matched_lost_item = db.query(models.Item).filter(
@@ -437,11 +465,13 @@ async def report_found_item(
                 created_at=datetime.utcnow()
             ))
 
-            if matched_lost_item.user_id:
+            owner_id = matched_lost_item.report_owner_user_id or matched_lost_item.user_id
+            if owner_id:
+                matched_lost_owner = db.query(models.User).filter(models.User.id == owner_id).first()
                 reporter_name = current_user.full_name or current_user.email or "A student"
                 create_student_notification(
                     db,
-                    matched_lost_item.user_id,
+                    owner_id,
                     f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
                     "student_match",
                     f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1"
@@ -458,6 +488,16 @@ async def report_found_item(
 
     db.commit()
     db.refresh(pending_item)
+
+    if matched_lost_item and matched_lost_owner:
+        queue_lost_item_match_email(
+            matched_lost_owner,
+            matched_lost_item,
+            message_text=(
+                f"A found {category} may match your lost item. "
+                "The report is waiting for admin approval."
+            ),
+        )
 
     return {
         "message": "Item reported successfully",
@@ -485,6 +525,10 @@ async def update_student_profile(
 
     # Handle Image Upload
     if profile_img and profile_img.filename:
+        try:
+            validate_upload_file_size(profile_img, label="Profile image")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
         file_extension = os.path.splitext(profile_img.filename)[1]
         db_file_path = f"static/profile_pics/student_{user.id}{file_extension}"
@@ -596,7 +640,7 @@ def view_settings(
 
 
 @router.post("/update-settings")
-async def update_student_settings(
+def update_student_settings(
     data: SettingsUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user),
@@ -624,7 +668,7 @@ async def update_student_settings(
 
 # ... (your existing imports)
 @router.get("/items/found/me")
-async def get_my_found_items(
+def get_my_found_items(
     view: str = "active",
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
@@ -668,7 +712,7 @@ async def get_my_found_items(
 
 
 @router.get("/items/found/active-count")
-async def get_active_found_item_count(
+def get_active_found_item_count(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
@@ -743,7 +787,9 @@ async def submit_user_lost_report(
 
     computed_embedding = image_embedding or ""
     if query_images:
-        computed_embedding = json.dumps(get_multi_image_embedding(query_images).tolist())
+        computed_embedding = json.dumps(
+            (await run_in_threadpool(get_multi_image_embedding, query_images)).tolist()
+        )
 
     # 2. Date Parsing
     parsed_date = None
@@ -825,6 +871,14 @@ async def submit_user_lost_report(
 
         db.commit()
         db.refresh(new_report)
+
+        if new_report.is_matched:
+            queue_lost_item_match_email(
+                current_user,
+                new_report,
+                subject="A match was found for your lost item",
+                message_text=f"A found {category} was matched with your lost-item report.",
+            )
         
         return {
             "status": "success", 
@@ -838,7 +892,7 @@ async def submit_user_lost_report(
         print(f"Database Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to submit report")
 @router.get("/api/items/lost/me")
-async def get_my_lost_reports(
+def get_my_lost_reports(
     view: str = "active",
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)

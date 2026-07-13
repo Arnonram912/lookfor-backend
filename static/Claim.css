@@ -28,6 +28,70 @@
 .btn-approve:hover, .btn-reject:hover {
     opacity: 0.8;
 }
+
+.claim-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 18px 20px 0;
+}
+
+.claim-filter {
+    min-width: 170px;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #334155;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 14px;
+}
+
+.claim-date-filter {
+    min-width: 155px;
+}
+
+.claim-filter:focus {
+    border-color: #0b69b7;
+    outline: 2px solid rgba(11, 105, 183, 0.15);
+}
+
+.claim-filter-reset {
+    height: 42px;
+    padding: 0 16px;
+    border: 1px solid #0b69b7;
+    border-radius: 8px;
+    background: #fff;
+    color: #0b69b7;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.claim-filter-reset:hover {
+    background: #0b69b7;
+    color: #fff;
+}
+
+.claim-empty-state {
+    padding: 28px !important;
+    text-align: center;
+    color: #64748b;
+}
+
+@media (max-width: 720px) {
+    .claim-filter-bar {
+        align-items: stretch;
+    }
+
+    .claim-filter,
+    .claim-filter-reset {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}
 /* Ensure the main content takes full height and hides overflow */
 .main-content {
     margin-left: auto; /* Matches your sidebar width */

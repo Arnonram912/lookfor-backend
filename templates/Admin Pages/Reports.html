@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Admin Panel | LookFor STI</title>
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/report.css?v=3">
+    <link rel="stylesheet" href="/static/report.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -96,6 +96,12 @@
                         <option value="claim">Claim</option>
                         <option value="confiscated">Confiscated Items</option>
                         <option value="disposal">Disposed Items</option>
+                        <option value="pending">Pending Item Submissions</option>
+                        <option value="user">User Accounts</option>
+                        <option value="announcement">Announcements</option>
+                        <option value="message">Message Activity</option>
+                        <option value="notification">Notifications & Audit Activity</option>
+                        <option value="academic_term">Academic Term History</option>
                     </select>
 
                     <select id="dateRange" onchange="toggleCustomRange()">
@@ -117,15 +123,16 @@
                     <select id="categoryFilter"><option value="">All Categories</option></select>
                     <select id="locationFilter"><option value="">All Locations</option></select>
                     <input type="text" id="searchInput" placeholder="Search item or reporter" style="padding:10px 12px; min-width:220px;">
-                    <button onclick="generateReportPdf()">Generate Report</button>
+                    <button class="generate-report-button" onclick="generateReportPdf()"><i class="fas fa-file-pdf" aria-hidden="true"></i> Generate Report</button>
                 </div>
 
                
                 <div class="btn-multi-select">
                     <button class="selectall"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"> Select All</button>
-                    <button class="selectdelete" onclick="removeSelectedRows()">Remove Selected</button>
+                    <button class="selectdelete" onclick="removeSelectedRows()">Exclude Selected</button>
                 </div>
 
+                <div class="report-table-scroll" role="region" aria-label="Generated report records" tabindex="0">
                 <table class="report-table" id="reportTable">
                     <thead>
                         <tr>
@@ -142,6 +149,8 @@
                     </thead>
                     <tbody id="reportTableBody"><tr><td colspan="9" style="text-align:center;">Loading report data...</td></tr></tbody>
                 </table>
+                </div>
+                <div class="report-pagination" id="reportPagination" aria-label="Report table pagination"></div>
 
                 
             </div>
@@ -220,9 +229,14 @@ let printableClaimHtml = '';
 let pendingClaimFocusId = null;
 let reportDataRequestController = null;
 let reportSearchDebounceTimer = null;
+let currentReportPage = 1;
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (new URLSearchParams(window.location.search).get('view') === 'audit') {
+    const pagePath = window.location.pathname.toLowerCase();
+    const auditView = new URLSearchParams(window.location.search).get('view') === 'audit'
+        || pagePath === '/admin/audit-logs'
+        || pagePath === '/c/3fbf5fb3-92b4-57c5-81ac-8e82ef0bce83';
+    if (auditView) {
         initializeAuditLogsView();
         return;
     }
@@ -295,6 +309,7 @@ function bindReportFilters() {
         const element = document.getElementById(id);
         if (element) {
             element.addEventListener('change', () => {
+                currentReportPage = 1;
                 if (id === 'dateRange') {
                     toggleCustomRange();
                 }
@@ -306,6 +321,7 @@ function bindReportFilters() {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.addEventListener('input', () => {
+            currentReportPage = 1;
             clearTimeout(reportSearchDebounceTimer);
             reportSearchDebounceTimer = setTimeout(loadReportData, 350);
         });
@@ -356,6 +372,8 @@ async function loadReportData() {
             category: document.getElementById('categoryFilter').value || '',
             location: document.getElementById('locationFilter').value || '',
             search: document.getElementById('searchInput').value || '',
+            page: String(currentReportPage),
+            page_size: '250',
         });
 
         const response = await fetch(`/api/admin/report-module?${params.toString()}`, {
@@ -376,6 +394,7 @@ async function loadReportData() {
         updateSummaryCards(payload.summary || {});
         populateFilterOptions(payload.filters || {});
         renderReportTable(reportRowsCache);
+        renderReportPagination(payload.pagination || {});
         updateChartPlaceholders(payload.summary || {});
         focusRequestedClaimReport();
     } catch (error) {
@@ -389,6 +408,26 @@ async function loadReportData() {
             reportDataRequestController = null;
         }
     }
+}
+
+function renderReportPagination(pagination) {
+    const container = document.getElementById('reportPagination');
+    if (!container) return;
+    const page = Number(pagination.page || 1);
+    const totalPages = Number(pagination.total_pages || 1);
+    const totalRows = Number(pagination.total_rows || 0);
+    currentReportPage = page;
+    container.innerHTML = `
+        <button type="button" onclick="goToReportPage(${page - 1})" ${page <= 1 ? 'disabled' : ''} aria-label="Previous page"><i class="fas fa-chevron-left"></i></button>
+        <span>Page <strong>${page}</strong> of <strong>${totalPages}</strong> &middot; ${totalRows.toLocaleString()} records</span>
+        <button type="button" onclick="goToReportPage(${page + 1})" ${page >= totalPages ? 'disabled' : ''} aria-label="Next page"><i class="fas fa-chevron-right"></i></button>`;
+}
+
+function goToReportPage(page) {
+    if (page < 1 || page === currentReportPage) return;
+    currentReportPage = page;
+    loadReportData();
+    document.querySelector('.report-table-scroll')?.scrollTo({left: 0, top: 0});
 }
 
 function focusRequestedClaimReport() {
@@ -463,10 +502,12 @@ function renderReportTable(rows) {
     }
 
     tbody.innerHTML = rows.map((row, index) => {
-        const actionButtons = row.row_type === 'claim'
-            ? `<button type="button" onclick="openViewModal(${index})">View</button><button type="button" onclick="openEditModal(${index})">Edit</button>`
-            : `<button type="button" onclick="openViewModal(${index})">View</button><button type="button" onclick="openDeleteModal(${index})">Delete</button>`;
-        return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}"></td><td>${escapeHtml(row.item_code || row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td>${actionButtons}</td></tr>`;
+        const editLabel = row.row_type === 'claim' ? 'Edit claim decision' : 'Edit report record';
+        const actionButtons = `
+            <button type="button" class="report-action view" onclick="openViewModal(${index})" title="View report" aria-label="View report"><i class="fas fa-eye" aria-hidden="true"></i></button>
+            <button type="button" class="report-action edit" onclick="openEditModal(${index})" title="${editLabel}" aria-label="${editLabel}"><i class="fas fa-pen" aria-hidden="true"></i></button>
+            <button type="button" class="report-action delete" onclick="openDeleteModal(${index})" title="Exclude from this report" aria-label="Exclude from this report"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
+        return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}"></td><td>${escapeHtml(row.item_code || row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td class="report-actions">${actionButtons}</td></tr>`;
     }).join('');
 }
 
@@ -537,26 +578,6 @@ function buildPrintableReportHtml(rows) {
         </tr>
     `).join('');
 
-    const detailBlocks = rows.map((row, index) => {
-        const detailHtml = Object.entries(row.details || {})
-        .filter(([label]) => !String(label || '').toLowerCase().includes('item id'))
-        .map(([label, value]) => `
-            <tr>
-                <th>${escapeHtml(label)}</th>
-                <td>${escapeHtml(formatReportDetailValue(label, value))}</td>
-            </tr>
-        `).join('');
-
-        return `
-            <section class="detail-block">
-                <h3>${index + 1}. ${escapeHtml(row.item || 'Report Item')} <span>${escapeHtml(row.item_code || row.row_id || '-')}</span></h3>
-                <table class="detail-table">
-                    ${detailHtml}
-                </table>
-            </section>
-        `;
-    }).join('');
-
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -609,8 +630,6 @@ function buildPrintableReportHtml(rows) {
         <tbody>${summaryRows}</tbody>
     </table>
 
-    <h2>Record Details</h2>
-    ${detailBlocks}
 </body>
 </html>`;
 }
@@ -697,7 +716,7 @@ function openEditModal(index) {
         return;
     }
 
-    alert('Edit is only connected for claim rows right now.');
+    alert('This record is managed in its original module. Only claim decisions can be edited from Reports.');
 }
 function closeEditModal() {}
 function saveEdit() {}
@@ -707,10 +726,11 @@ function openDeleteModal(index) {
         return;
     }
 
-    activeViewRow = { index, row };
-    document.getElementById('deleteModal').style.display = 'flex';
+    if (!confirm('Exclude this record from the current generated report? The original system record will not be deleted.')) return;
+    reportRowsCache = reportRowsCache.filter((_, rowIndex) => rowIndex !== index);
+    renderReportTable(reportRowsCache);
 }
-function closeDeleteModal() { document.getElementById('deleteModal').style.display = 'none'; }
+function closeDeleteModal() {}
 function confirmDelete() {
     if (activeViewRow && typeof activeViewRow.index === 'number') {
         reportRowsCache = reportRowsCache.filter((_, idx) => idx !== activeViewRow.index);
@@ -908,7 +928,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=11"></script>
+<script src="/static/session-keepalive.js?v=13"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

@@ -174,7 +174,7 @@
         </div>
     </div>
     <div style="margin-top:12px; width:100%; height:10px; border-radius:999px; background:rgba(255,255,255,0.18); overflow:hidden; box-shadow:inset 0 1px 2px rgba(0,0,0,0.15);">
-            <div id="bulkJobProgressBar" class="bulk-progress-moving" style="width:0%; height:100%; background:linear-gradient(90deg, #f7b500 0%, #ffd95a 35%, #fff3b0 55%, #ffd95a 75%, #f7b500 100%); transition: width 0.35s ease; box-shadow:0 0 14px rgba(255,217,90,0.35);"></div>
+            <div id="bulkJobProgressBar" class="bulk-progress-moving" style="width:0%; height:100%; background:linear-gradient(90deg, #f7b500 0%, #ffd95a 35%, #fff3b0 55%, #ffd95a 75%, #f7b500 100%); transition: width 1.15s linear; box-shadow:0 0 14px rgba(255,217,90,0.35);"></div>
     </div>
     <div id="bulkJobMeta" style="margin-top:10px; font-size:13px; opacity:0.95;">No active background job.</div>
     <div id="bulkJobActions" style="display:none; margin-top:14px; gap:10px; flex-wrap:wrap;">
@@ -782,6 +782,15 @@
                         <option value="">-- Select Office --</option>
                     </select>
                 </div>
+
+                <div class="form-group">
+                    <label for="adminPersonnel">Personnel</label>
+                    <select id="adminPersonnel" class="admin-input" required>
+                        <option value="">-- Select Personnel --</option>
+                        <option value="Faculty">Faculty</option>
+                        <option value="Staff">Staff</option>
+                    </select>
+                </div>
             </div>
             <div class="permissions-container" style="margin-top: 10px;">
                 <p style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Module Access</p>
@@ -974,6 +983,7 @@ const BULK_JOB_AUTO_OPEN_STORAGE_KEY = "active_bulk_registration_job_auto_open";
 let currentAdminPermissions = [];
 let activeBulkJobId = null;
 let bulkJobPoller = null;
+let bulkJobPollInFlight = false;
 let bulkJobAutoOpenResult = false;
 let lastKnownBulkJobStatus = null;
 let lastCompletedBulkJob = null;
@@ -1097,7 +1107,11 @@ function renderBulkJobCard(job, options = {}) {
     const total = job.total || 0;
     const numericProgress = Number(job.progress || 0);
     const derivedProgress = total > 0 ? Math.round((processed / total) * 100) : numericProgress;
-    const visibleProgress = Math.max(0, Math.min(100, derivedProgress || numericProgress || 0));
+    const activeProgressFloor = ['queued', 'running'].includes(job.status) ? 2 : 0;
+    const visibleProgress = Math.max(
+        activeProgressFloor,
+        Math.min(100, Math.max(derivedProgress, numericProgress))
+    );
     const fillWidth = visibleProgress > 0 && visibleProgress < 4 ? 4 : visibleProgress;
     percentBadge.style.display = 'inline-flex';
     percentBadge.style.alignItems = 'center';
@@ -1194,11 +1208,12 @@ function showBulkResults(job) {
 }
 
 async function pollBulkJobStatus() {
-    if (!activeBulkJobId) return;
+    if (!activeBulkJobId || bulkJobPollInFlight) return;
 
     const token = sessionStorage.getItem("admin_token");
     if (!token) return;
 
+    bulkJobPollInFlight = true;
     try {
         const response = await fetch(`/admin/bulk-register-students/status/${activeBulkJobId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -1232,6 +1247,8 @@ async function pollBulkJobStatus() {
         }
         localStorage.removeItem(BULK_JOB_STORAGE_KEY);
         localStorage.removeItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY);
+    } finally {
+        bulkJobPollInFlight = false;
     }
 }
 
@@ -1250,7 +1267,9 @@ function startBulkJobPolling(jobId, options = {}) {
     }
 
     pollBulkJobStatus();
-    bulkJobPoller = setInterval(pollBulkJobStatus, 2000);
+    // The bar takes 1.15s to reach each target, so polling just ahead of that
+    // keeps it moving smoothly without stacking requests.
+    bulkJobPoller = setInterval(pollBulkJobStatus, 1000);
 }
 
 function resumePersistedBulkJob() {
@@ -1830,6 +1849,7 @@ let selectedUserIds = new Set();
 let currentUserPage = 1;
 let currentUserPageSize = 10;
 let academicTermSetting = null;
+let usersLoadPromise = null;
 
 function getUserPageSize() {
     const pageSizeInput = document.getElementById('userPageSize');
@@ -1910,9 +1930,11 @@ function applyBatchFilter(users) {
     return users.filter(user => {
         const batchId = String(user.batch_id || '').trim();
         const course = String(user.course || '').trim();
+        const department = String(user.department || '').trim();
 
         if (filterType === 'batch') return batchId === selectedValue;
         if (filterType === 'course') return course === selectedValue;
+        if (filterType === 'department') return department === selectedValue;
 
         if (filterType === 'type') {
             if (selectedValue === 'student') return !user.is_admin && !isFacultyUser(user);
@@ -1927,10 +1949,17 @@ function populateBatchFilterOptions() {
     const batchFilterInput = document.getElementById('batchFilterInput');
     if (!batchFilterInput) return;
 
+    const isStudentView = currentView === 'student';
+    const isFacultyView = currentView === 'faculty';
     const courseValues = [...new Set(
         allUsers
-            .filter(user => !user.is_admin && String(user.course || '').trim())
+            .filter(user => !user.is_admin && !isFacultyUser(user) && String(user.course || '').trim())
             .map(user => String(user.course || '').trim())
+    )].sort((a, b) => a.localeCompare(b));
+    const departmentValues = [...new Set(
+        allUsers
+            .filter(user => !user.is_admin && isFacultyUser(user) && String(user.department || '').trim())
+            .map(user => String(user.department || '').trim())
     )].sort((a, b) => a.localeCompare(b));
 
     batchFilterInput.innerHTML = '';
@@ -1958,20 +1987,21 @@ function populateBatchFilterOptions() {
         batchFilterInput.appendChild(group);
     };
 
-    // MAIN FILTERS
-    appendOption('', 'All Student/Faculty');
-    appendOption('type:student', 'Students Only');
-    appendOption('type:faculty', 'Faculty Only');
+    if (isStudentView) {
+        appendOption('', 'All Students');
+        appendGroup('Courses', courseValues, 'course');
+    } else if (isFacultyView) {
+        appendOption('', 'All Faculty');
+        appendGroup('Departments', departmentValues, 'department');
+    } else {
+        appendOption('', 'All Student/Faculty');
+    }
 
-    // OTHER GROUPS
-    appendGroup('Courses', courseValues, 'course');
-
-    const allOptionValues = [
-        '',
-        'type:student',
-        'type:faculty',
-        ...courseValues.map(value => `course:${value}`)
-    ];
+    const allOptionValues = isStudentView
+        ? ['', ...courseValues.map(value => `course:${value}`)]
+        : isFacultyView
+            ? ['', ...departmentValues.map(value => `department:${value}`)]
+            : [''];
 
     if (currentBatchFilter && allOptionValues.includes(currentBatchFilter)) {
         batchFilterInput.value = currentBatchFilter;
@@ -2365,21 +2395,41 @@ function toggleFullNameSort() {
 }
 
 async function loadUsers(currentRole = getInitialUserManagementTab()) {
+    // Coalesce simultaneous startup/refresh calls so one page never launches
+    // duplicate full-table database requests.
+    if (usersLoadPromise) return usersLoadPromise;
+
+    usersLoadPromise = loadUsersOnce(currentRole);
+    try {
+        return await usersLoadPromise;
+    } finally {
+        usersLoadPromise = null;
+    }
+}
+
+async function loadUsersOnce(currentRole) {
     const token = sessionStorage.getItem("admin_token");
     
     try {
+        if (!token) {
+            window.location.href = "/";
+            return;
+        }
         const payload = JSON.parse(atob(token.split('.')[1]));
         currentAdminId = payload.id || payload.sub;
 
-        const termResponse = await fetch('/admin/academic-term', {
+        const requestOptions = {
             headers: { 'Authorization': `Bearer ${token}` }
-        });
+        };
+        const [termResponse, response] = await Promise.all([
+            fetch('/admin/academic-term', requestOptions),
+            fetch('/admin/get-all-users', requestOptions)
+        ]);
         if (termResponse.ok) academicTermSetting = await termResponse.json();
 
-        const response = await fetch('/admin/get-all-users', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
+        if (!response.ok) {
+            throw new Error(`Unable to load users (${response.status})`);
+        }
         allUsers = await response.json();
         populateBatchFilterOptions();
         populateSemesterFilterOptions();
@@ -2417,6 +2467,7 @@ function filterTable(role = 'admin') {
     currentView = role;
     currentUserPage = 1;
     selectedUserIds.clear();
+    populateBatchFilterOptions();
     if (role === 'delete' && previousView !== 'delete') {
         selectedYearEndTerms.clear();
         selectedSemesterTerms.clear();
@@ -2668,8 +2719,6 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
     updateSelectionActionButtons();
 }
 
-// Initial Load
-document.addEventListener('DOMContentLoaded', loadUsers);
 document.addEventListener('DOMContentLoaded', () => {
     const batchYearInput = document.getElementById('batchYear');
     if (batchYearInput && !batchYearInput.value) {
@@ -3564,7 +3613,7 @@ function openModal(id) {
             cb.disabled = false;
             cb.closest('.perm-item')?.classList.remove('disabled-permission');
         });
-        ['adminEmployeeId', 'adminLastName', 'adminFirstName', 'adminMiddleName', 'adminEmail', 'adminCourse']
+        ['adminEmployeeId', 'adminLastName', 'adminFirstName', 'adminMiddleName', 'adminEmail', 'adminCourse', 'adminPersonnel']
             .forEach(id => {
                 const field = document.getElementById(id);
                 if (field) field.value = '';
@@ -3893,6 +3942,7 @@ async function submitBulk() {
                 last_name: String(s.last_name || "").trim(),
                 display_name: String(s.display_name || "").trim(),
                 department: String(s.department || "").trim(),
+                personnel: String(s.personnel || "").trim(),
                 course: '',
                 level: '',
                 batch_id: batchId
@@ -4099,6 +4149,7 @@ loadDepartments();
     const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
     const email = (document.getElementById('adminEmail')?.value || '').trim().toLowerCase();
     const department = (document.getElementById('adminCourse')?.value || '').trim();
+    const personnel = (document.getElementById('adminPersonnel')?.value || '').trim();
 
     // 2. Collect checked permissions
     toggleCreateAdminUserManagementActions();
@@ -4109,8 +4160,8 @@ loadDepartments();
     const normalizedPermissions = normalizePermissionSelection(selectedPermissions);
 
     // 3. Validation
-    if (!adminEmployeeId || !lastName || !firstName || !email || !department) {
-        await showUserManagementAlert('warning', 'Missing details', 'Please provide the Admin/Employee ID, last name, first name, STI email, and department.');
+    if (!adminEmployeeId || !lastName || !firstName || !email || !department || !personnel) {
+        await showUserManagementAlert('warning', 'Missing details', 'Please provide the Admin/Employee ID, last name, first name, STI email, department, and personnel type.');
         return;
     }
     if (normalizedPermissions.length === 0) {
@@ -4127,6 +4178,7 @@ loadDepartments();
         email: email,
         permissions: normalizedPermissions,
         department: department,
+        personnel: personnel,
         password: "AUTO_GENERATE"
     };
 
@@ -4250,6 +4302,7 @@ function handleExcel(input) {
             first_name: -1,
             middle_name: -1,
             display_name: -1,
+            personnel: -1,
             program: -1,
             level: -1
         };
@@ -4276,6 +4329,7 @@ function handleExcel(input) {
                     if (clean.includes("firstname")) colMap.first_name = idx;
                     if (clean.includes("middlename")) colMap.middle_name = idx;
                     if (clean.includes("displayname")) colMap.display_name = idx;
+                    if (clean === "personnel") colMap.personnel = idx;
                     if (clean.includes("program") || clean.includes("strand")) colMap.program = idx;
                     if (clean.includes("level") || clean.includes("gradelevel")) colMap.level = idx;
                 });
@@ -4318,7 +4372,8 @@ function handleExcel(input) {
                     first_name: String(row[colMap.first_name] || "").trim(),
                     middle_name: String(row[colMap.middle_name] || "").trim(),
                     display_name: String(row[colMap.display_name] || "").trim(),
-                    department: inferEmployeeDepartment(identifier)
+                    personnel: String(row[colMap.personnel] || "").trim(),
+                    department: inferEmployeeDepartment(identifier, String(row[colMap.personnel] || "").trim())
                 });
             } else {
                 users.push({
@@ -4485,7 +4540,10 @@ function handleBulkEntryModeChange() {
     handleBulkImportTypeChange();
 }
 
-function inferEmployeeDepartment(employeeNumber) {
+function inferEmployeeDepartment(employeeNumber, personnel = '') {
+    const personnelType = String(personnel || '').trim().toLowerCase();
+    if (personnelType === 'faculty') return 'Faculty / Teacher';
+    if (personnelType === 'staff') return 'Administrative Personnel';
     const suffix = String(employeeNumber || '').trim().toUpperCase().slice(-1);
     if (suffix === 'A') return 'Administrative Personnel';
     if (suffix === 'F' || suffix === 'P') return 'Faculty / Teacher';
@@ -4707,8 +4765,8 @@ window.addEventListener('pageshow', () => {
 });
 </script>
 
-<script src="/static/session-keepalive.js?v=10"></script>
-<script src="/static/admin-bulk-job-monitor.js?v=2"></script>
+<script src="/static/session-keepalive.js?v=13"></script>
+<script src="/static/admin-bulk-job-monitor.js?v=3"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 </body>

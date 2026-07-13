@@ -1,5 +1,6 @@
 import os
 import re
+import threading
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -16,6 +17,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_auth_hash_concurrency = max(
+    1, min(4, int(os.getenv("AUTH_HASH_CONCURRENCY", "1")))
+)
+_auth_hash_semaphore = threading.BoundedSemaphore(_auth_hash_concurrency)
 
 
 def normalize_login_identifier(value: str) -> str:
@@ -84,7 +89,7 @@ def get_current_user(authorization: str = Header(None), db: Session = Depends(ge
 
 
 # Admin Only
-async def get_current_admin(
+def get_current_admin(
     authorization: str = Header(None), 
     db: Session = Depends(get_db)
 ):
@@ -133,10 +138,12 @@ def verify_password(plain_password, hashed_password):
     Checks if the plain text password from the login form 
     matches the hashed version stored in SSMS.
         """
-        return pwd_context.verify(plain_password, hashed_password)
+        with _auth_hash_semaphore:
+            return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
         """
         Used when registering new students or admins.
         """
-        return pwd_context.hash(password)
+        with _auth_hash_semaphore:
+            return pwd_context.hash(password)

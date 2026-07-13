@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session, joinedload, load_only
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -21,7 +22,7 @@ import bcrypt
 import uuid
 from uuid import uuid4
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 import models  # This is already there
 from database import engine, get_db
 from utils import UPLOAD_FOLDER, public_file_url, save_file, resolve_category_name, validate_upload_file_size, format_item_code
@@ -49,6 +50,7 @@ from security import (
     get_password_hash,
     get_login_email_candidates,
 )
+from account_email import queue_item_event_email
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -74,18 +76,23 @@ archive_items = []
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-STATIC_UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
 STATIC_PROFILE_PICS_DIR = os.path.join(STATIC_DIR, "profile_pics")
 DEFAULT_PROFILE_PIC = "static/photos/default-student-avatar.jpg"
 
-os.makedirs(STATIC_UPLOADS_DIR, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-app.mount("/uploads", StaticFiles(directory=STATIC_UPLOADS_DIR), name="uploads")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_FOLDER), name="uploads")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 # This makes sure we always use the SAME folder at the very top of your project
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads") # No "static/" prefix here
+
+
+@app.get("/healthz", include_in_schema=False)
+def health_check():
+    """Lightweight App Service health probe; intentionally avoids SQL and CLIP."""
+    return {"status": "ok"}
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -146,6 +153,11 @@ PAGE_ALIASES = {
         "template": "Admin Pages/Reports.html",
         "label": "Reports",
     },
+    "/admin/Audit-Logs": {
+        "alias": "3fbf5fb3-92b4-57c5-81ac-8e82ef0bce83",
+        "template": "Admin Pages/Reports.html",
+        "label": "Audit Logs",
+    },
     "/admin/Profile": {
         "alias": "0e9d22b0-07ed-5a24-aa20-6063d5c9ebfa",
         "template": "Admin Pages/Admin_Profile.html",
@@ -162,6 +174,11 @@ PAGE_ALIASES = {
         "alias": "dd5c6fcb-8cb9-54c8-bb07-d8b3f6e2aa79",
         "template": "Admin Pages/Confiscated_Item.html",
         "label": "Confiscated Items",
+    },
+    "/admin/For-Disposal": {
+        "alias": "9374b372-d94f-5fa4-a36d-e219bd12e3a6",
+        "template": "Admin Pages/Confiscated_Item.html",
+        "label": "For Disposal",
     },
     "/admin/Content-management": {
         "alias": "ab3bc951-819c-5bd7-aa04-2740b55a64a4",
@@ -290,6 +307,18 @@ class ChangePasswordRequest(BaseModel):
 def ensure_user_settings_columns():
     statements = [
         """
+        IF COL_LENGTH('users', 'archived_student_no') IS NULL
+        BEGIN
+            ALTER TABLE users ADD archived_student_no NVARCHAR(50) NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('users', 'archived_email') IS NULL
+        BEGIN
+            ALTER TABLE users ADD archived_email NVARCHAR(255) NULL
+        END
+        """,
+        """
         IF COL_LENGTH('users', 'two_factor_enabled') IS NULL
         BEGIN
             ALTER TABLE users ADD two_factor_enabled BIT NOT NULL CONSTRAINT DF_users_two_factor_enabled DEFAULT 0
@@ -311,6 +340,12 @@ def ensure_user_settings_columns():
         IF COL_LENGTH('users', 'font_size') IS NULL
         BEGIN
             ALTER TABLE users ADD font_size INT NOT NULL CONSTRAINT DF_users_font_size DEFAULT 16
+        END
+        """,
+        """
+        IF COL_LENGTH('users', 'personnel') IS NULL
+        BEGIN
+            ALTER TABLE users ADD personnel NVARCHAR(50) NULL
         END
         """,
     ]
@@ -340,6 +375,24 @@ def ensure_item_lifecycle_columns():
         END
         """,
         """
+        IF COL_LENGTH('items', 'disposal_status') IS NULL
+        BEGIN
+            ALTER TABLE items ADD disposal_status NVARCHAR(30) NOT NULL CONSTRAINT DF_items_disposal_status DEFAULT 'active'
+        END
+        """,
+        """
+        IF COL_LENGTH('items', 'disposal_note') IS NULL
+        BEGIN
+            ALTER TABLE items ADD disposal_note NVARCHAR(500) NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('items', 'disposal_updated_at') IS NULL
+        BEGIN
+            ALTER TABLE items ADD disposal_updated_at DATETIME NULL
+        END
+        """,
+        """
         IF COL_LENGTH('pending_items', 'deleted') IS NULL
         BEGIN
             ALTER TABLE pending_items ADD deleted BIT NOT NULL CONSTRAINT DF_pending_items_deleted DEFAULT 0
@@ -353,6 +406,18 @@ def ensure_item_lifecycle_columns():
 
 def ensure_confiscated_disposal_columns():
     statements = [
+        """
+        IF COL_LENGTH('confiscated_items', 'student_name') IS NULL
+        BEGIN
+            ALTER TABLE confiscated_items ADD student_name NVARCHAR(200) NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('confiscated_items', 'student_number') IS NULL
+        BEGIN
+            ALTER TABLE confiscated_items ADD student_number NVARCHAR(100) NULL
+        END
+        """,
         """
         IF COL_LENGTH('confiscated_items', 'disposal_status') IS NULL
         BEGIN
@@ -508,11 +573,45 @@ def ensure_report_module_indexes():
             CREATE INDEX ix_confiscated_items_created_at ON confiscated_items (created_at)
         END
         """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_notifications_audit_latest' AND object_id = OBJECT_ID('notifications'))
+        BEGIN
+            CREATE INDEX ix_notifications_audit_latest
+            ON notifications (created_at DESC)
+            WHERE created_by_admin_id IS NOT NULL
+        END
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_notifications_created_at' AND object_id = OBJECT_ID('notifications'))
+        BEGIN
+            CREATE INDEX ix_notifications_created_at
+            ON notifications (created_at DESC)
+        END
+        """,
     ]
 
     with engine.begin() as connection:
         for statement in statements:
             connection.execute(text(statement))
+
+
+def ensure_claim_verification_columns():
+    statements = [
+        ("claimant_name", "NVARCHAR(255) NULL"),
+        ("claimant_student_no", "NVARCHAR(100) NULL"),
+        ("claimant_department_course", "NVARCHAR(255) NULL"),
+        ("id_verified", "BIT NOT NULL CONSTRAINT DF_claim_reports_id_verified DEFAULT 0"),
+        ("verification_method", "NVARCHAR(100) NULL"),
+        ("verification_note", "NVARCHAR(500) NULL"),
+    ]
+    with engine.begin() as connection:
+        for column_name, definition in statements:
+            connection.execute(text(f"""
+                IF COL_LENGTH('claim_decision_reports', '{column_name}') IS NULL
+                BEGIN
+                    ALTER TABLE claim_decision_reports ADD {column_name} {definition}
+                END
+            """))
 
 
 def cleanup_expired_mfa_codes():
@@ -691,6 +790,7 @@ def create_default_admin():
     ensure_item_report_owner_columns()
     ensure_notification_columns()
     ensure_report_module_indexes()
+    ensure_claim_verification_columns()
     db = next(get_db())
     try:
         process_academic_term_schedule(db)
@@ -753,7 +853,7 @@ def create_default_admin():
 from fastapi.security import OAuth2PasswordRequestForm
 
 @app.post("/token")
-async def login_for_access_token(
+def login_for_access_token(
     db: Session = Depends(get_db), 
     form_data: OAuth2PasswordRequestForm = Depends()
 ):
@@ -793,7 +893,7 @@ async def login_for_access_token(
 
 
 @app.post("/auth/verify-mfa")
-async def verify_mfa_code(
+def verify_mfa_code(
     payload: MFAVerifyRequest,
     db: Session = Depends(get_db),
 ):
@@ -825,7 +925,7 @@ async def verify_mfa_code(
 
 
 @app.post("/auth/request-password-reset")
-async def request_password_reset(
+def request_password_reset(
     payload: PasswordResetRequest,
     db: Session = Depends(get_db),
 ):
@@ -862,7 +962,7 @@ async def request_password_reset(
 
 
 @app.post("/auth/reset-password")
-async def reset_password_with_code(
+def reset_password_with_code(
     payload: PasswordResetConfirmRequest,
     db: Session = Depends(get_db),
 ):
@@ -901,7 +1001,7 @@ async def reset_password_with_code(
 
 
 @app.get("/auth/settings")
-async def get_auth_settings(
+def get_auth_settings(
     current_user: models.User = Depends(get_current_user),
 ):
     return {
@@ -913,7 +1013,7 @@ async def get_auth_settings(
 
 
 @app.post("/auth/settings")
-async def update_auth_settings(
+def update_auth_settings(
     payload: MFASettingsUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -935,7 +1035,7 @@ async def update_auth_settings(
 
 
 @app.post("/auth/refresh")
-async def refresh_access_token(
+def refresh_access_token(
     current_user: models.User = Depends(get_current_user),
 ):
     access_token = create_access_token(
@@ -1008,7 +1108,7 @@ def download_android_app():
 
 
 @app.post("/auth/change-password")
-async def change_password(
+def change_password(
     data: ChangePasswordRequest,
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
@@ -1118,6 +1218,7 @@ def get_current_user_profile(current_user: models.User = Depends(get_current_use
         "section": current_user.section,
         "level": getattr(current_user, "level", None),
         "department": current_user.department,
+        "personnel": getattr(current_user, "personnel", None),
         "profile_pic": deployed_static_path(current_user.profile_pic),
         "is_admin": bool(current_user.is_admin),
         "role_label": role_label,
@@ -1139,7 +1240,7 @@ def search_users(
 ):
     search_text = (q or "").strip().lower()
     search_terms = [term for term in search_text.split() if term]
-    query = db.query(models.User)
+    query = db.query(models.User).filter(models.User.is_archived == False)
 
     for term in search_terms:
         query = query.filter(
@@ -1175,7 +1276,7 @@ def search_users(
     ]
 
 @app.get("/api/quick-search")
-async def quick_search(
+def quick_search(
     q: str = Query(...),
     category: str = Query(None),
     db: Session = Depends(get_db)
@@ -1225,18 +1326,7 @@ async def quick_compare(
     # Process image
     image_bytes = await file.read()
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    model_obj, processor_obj = get_clip_components()
-    inputs = processor_obj(images=img, return_tensors="pt")
-
-    import torch
-    with torch.no_grad():
-        outputs = model_obj.get_image_features(**inputs)
-        if hasattr(outputs, "pooler_output"):
-            feat = outputs.pooler_output
-        else:
-            feat = outputs
-        feat = feat / feat.norm(p=2, dim=-1, keepdim=True)
-        search_vec = feat.cpu().numpy().flatten()
+    search_vec = await run_in_threadpool(get_image_embedding, img)
 
     # Fetch Found items
     items = db.query(models.Item).filter(
@@ -1469,7 +1559,7 @@ async def compare_text_details(
     brand: str = Form(None),
     color: str = Form(None),
     status: str = Form(...),
-    image: UploadFile = File(...),
+    image: UploadFile = File(None),
     extra_image_1: UploadFile = File(None),
     extra_image_2: UploadFile = File(None),
     db: Session = Depends(get_db)
@@ -1502,27 +1592,28 @@ async def compare_text_details(
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Invalid uploaded image: {upload.filename}") from exc
 
-    if not query_images:
-        raise HTTPException(status_code=400, detail="At least one image is required.")
-
-    image_vec = get_multi_image_embedding(query_images)
-    query_text_vec = get_text_embedding(text_query)
-
-    search_vec = (image_vec * 0.6) + (query_text_vec * 0.4)
+    query_text_vec = await run_in_threadpool(get_text_embedding, text_query)
+    if query_images:
+        image_vec = await run_in_threadpool(get_multi_image_embedding, query_images)
+        search_vec = (image_vec * 0.6) + (query_text_vec * 0.4)
+    else:
+        search_vec = query_text_vec
     search_norm = np.linalg.norm(search_vec)
     if search_norm != 0:
         search_vec = search_vec / search_norm
 
-    return compute_text_detail_matches(
-        db,
-        category=category,
-        location=location,
-        description=description,
-        brand=brand,
-        color=color,
-        status=status,
-        search_vec=search_vec,
-        query_text_vec=query_text_vec,
+    return await run_in_threadpool(
+        lambda: compute_text_detail_matches(
+            db,
+            category=category,
+            location=location,
+            description=description,
+            brand=brand,
+            color=color,
+            status=status,
+            search_vec=search_vec,
+            query_text_vec=query_text_vec,
+        )
     )
 
 
@@ -1641,12 +1732,20 @@ def get_conversation_partners(db: Session = Depends(get_db), current_user: model
     # 3. If a student has NO history yet, we manually add the Admin 
     # so they have someone to talk to for the first time.
     if not current_user.is_admin and not partner_ids:
-        admin = db.query(models.User).filter(models.User.is_admin == True).first()
+        admin = db.query(models.User).filter(
+            models.User.is_admin == True,
+            models.User.is_archived == False,
+        ).first()
         if admin:
             partner_ids.add(admin.id)
 
     # 4. Fetch the User objects
-    users = db.query(models.User).filter(models.User.is_admin == True if not current_user.is_admin else models.User.id.in_(partner_ids)).all()
+    users_query = db.query(models.User).filter(models.User.is_archived == False)
+    if current_user.is_admin:
+        users_query = users_query.filter(models.User.id.in_(partner_ids))
+    else:
+        users_query = users_query.filter(models.User.is_admin == True)
+    users = users_query.all()
     # Note: The logic above ensures students see Admins, and Admins see their history.
 
     if partner_ids:
@@ -1823,7 +1922,9 @@ async def save_found_item(
     # 2. SAVE TO PENDING
     try:
         search_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        normalized_image_embedding = json.dumps(get_image_embedding(search_img).tolist())
+        normalized_image_embedding = json.dumps(
+            (await run_in_threadpool(get_image_embedding, search_img)).tolist()
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Image Error: {str(e)}")
 
@@ -1846,6 +1947,14 @@ async def save_found_item(
 
     db.commit()
     db.refresh(new_pending)
+
+    queue_item_event_email(
+        current_user.email,
+        format_user_display_name(current_user),
+        subject="Your found-item report was received",
+        message_text=f"We received your found {category} report. It is waiting for admin approval.",
+        action_url="/student/Found-report",
+    )
 
     # 4. NOTIFICATION
     notif_msg = f"Match Found! A {category} matches Lost Item #{matched_item_id}." if matched_item_id else f"New {category} reported at {location}."
@@ -1877,6 +1986,9 @@ async def save_found_item(
 
             if matched_lost_item.user_id:
                 reporter_name = format_user_display_name(current_user)
+                lost_owner = db.query(models.User).filter(
+                    models.User.id == matched_lost_item.user_id
+                ).first()
                 db.add(models.Notification(
                     message=f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
                     type="student_match",
@@ -1885,6 +1997,14 @@ async def save_found_item(
                     is_read=False,
                     created_at=datetime.utcnow()
                 ))
+                if lost_owner:
+                    queue_item_event_email(
+                        lost_owner.email,
+                        format_user_display_name(lost_owner),
+                        subject="A possible match was found for your lost item",
+                        message_text=f"A found {category} may match your lost item. The report is waiting for admin approval.",
+                        action_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
+                    )
 
     db.commit()
     
@@ -1928,7 +2048,7 @@ async def lost_report_upload(
     # 2. Generate Image Embedding
     try:
         img = Image.open(io.BytesIO(image_content)).convert("RGB")
-        image_vec = get_image_embedding(img)
+        image_vec = await run_in_threadpool(get_image_embedding, img)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Image Error: {str(e)}")
 
@@ -1936,7 +2056,7 @@ async def lost_report_upload(
     # Added brand and color to the AI's "understanding" of the item
     description_text = (description or "").strip()
     text_query = f"a {color or ''} {brand or ''} {category} described as {description_text}".strip()
-    text_vec = get_text_embedding(text_query)
+    text_vec = await run_in_threadpool(get_text_embedding, text_query)
 
     def normalize_match_value(value):
         return " ".join(str(value or "").strip().lower().split())
@@ -2036,6 +2156,14 @@ async def lost_report_upload(
             is_read=False
         )
         db.add(admin_notif)
+        db.add(models.Notification(
+            message=f"Possible match found for your lost {category}.",
+            type="student_match",
+            related_id=current_user.id,
+            target_url=f"/student/Lost-report?item_id={new_lost_report.id}&show_match=1",
+            is_read=False,
+            created_at=datetime.utcnow(),
+        ))
     else:
         # Standard Admin Notification for new submission
         report_notif = models.Notification(
@@ -2049,6 +2177,22 @@ async def lost_report_upload(
 
     db.commit()
     db.refresh(new_lost_report)
+
+    queue_item_event_email(
+        current_user.email,
+        format_user_display_name(current_user),
+        subject=(
+            "A possible match was found for your lost item"
+            if ai_match_found else "Your lost-item report was created"
+        ),
+        message_text=(
+            f"We created your lost {category} report and found a possible match ({final_score * 100:.1f}%)."
+            if ai_match_found
+            else f"We created your lost {category} report successfully."
+        ),
+        action_url=f"/student/Lost-report?item_id={new_lost_report.id}"
+        + ("&show_match=1" if ai_match_found else ""),
+    )
     
     return {
         "status": "success", 
@@ -2062,7 +2206,7 @@ async def lost_report_upload(
     
 
 @app.get("/api/messages/history/{other_user_id}")
-async def get_chat_history(
+def get_chat_history(
     other_user_id: int, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -2091,7 +2235,7 @@ async def get_chat_history(
     return messages
 
 @app.post("/api/messages/read/{other_user_id}")
-async def mark_chat_as_read(
+def mark_chat_as_read(
     other_user_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -2109,7 +2253,7 @@ async def mark_chat_as_read(
     return {"success": True, "updated": len(unread_messages)}
 
 @app.delete("/api/messages/conversation/{other_user_id}")
-async def delete_conversation(
+def delete_conversation(
     other_user_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
@@ -2125,7 +2269,7 @@ async def delete_conversation(
     return {"success": True, "deleted": deleted_count}
 
 @app.post("/api/messages/send")
-async def send_message(
+def send_message(
     recipient_id: int = Form(...),
     content: str = Form(...),
     db: Session = Depends(get_db),
@@ -2304,14 +2448,24 @@ def build_claim_report_payload(
         ).first()
 
     claimant = claim.claimant
-    claimant_name = format_user_display_name(claimant)
+    claimant_name = (
+        str(report.claimant_name or "").strip()
+        if report and report.claimant_name
+        else format_user_display_name(claimant)
+    )
     claimant_student_no = (
-        proof.claimant_student_no
+        str(report.claimant_student_no or "").strip()
+        if report and report.claimant_student_no
+        else proof.claimant_student_no
         if proof and proof.claimant_student_no
         else (claimant.student_no if claimant else None)
     )
-    claimant_department_or_course = None
-    if claimant:
+    claimant_department_or_course = (
+        str(report.claimant_department_course or "").strip()
+        if report and report.claimant_department_course
+        else None
+    )
+    if not claimant_department_or_course and claimant:
         claimant_department_or_course = claimant.course or claimant.department
 
     item_name = None
@@ -2338,8 +2492,14 @@ def build_claim_report_payload(
         "claimant": {
             "full_name": claimant_name,
             "student_employee_id": claimant_student_no or "Not available",
+            "account_student_employee_id": claimant.student_no if claimant and claimant.student_no else None,
             "department_course": claimant_department_or_course or "Not available",
             "proof_id_image": public_file_url(proof.id_image_path) if proof else None,
+        },
+        "id_verification": {
+            "verified": bool(report and report.id_verified),
+            "method": report.verification_method if report else None,
+            "note": report.verification_note if report else None,
         },
         "item_description": {
             "item_id": lost_item_id or found_item_id,
@@ -2417,6 +2577,13 @@ async def create_claim_decision_report(
     claim_id: int,
     action: str = Form(...),
     report_image: UploadFile = File(None),
+    claim_id_image: UploadFile = File(None),
+    claimant_name: str = Form(""),
+    claimant_student_no: str = Form(""),
+    claimant_department_course: str = Form(""),
+    id_verified: bool = Form(False),
+    verification_method: str = Form(""),
+    verification_note: str = Form(""),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
@@ -2427,6 +2594,27 @@ async def create_claim_decision_report(
     action = (action or "").strip().lower()
     if action not in {"approve", "reject"}:
         raise HTTPException(status_code=400, detail="Action must be approve or reject")
+
+    claimant_name = " ".join((claimant_name or "").split())[:255]
+    claimant_student_no = " ".join((claimant_student_no or "").split())[:100]
+    claimant_department_course = " ".join((claimant_department_course or "").split())[:255]
+    verification_method = " ".join((verification_method or "").split())[:100]
+    verification_note = (verification_note or "").strip()[:500]
+    existing_proof = claim.proof or db.query(models.ClaimProof).filter(models.ClaimProof.claim_id == claim.id).first()
+    has_new_id_image = bool(claim_id_image and claim_id_image.filename)
+
+    if action == "approve":
+        if not claimant_name or not claimant_student_no:
+            raise HTTPException(status_code=400, detail="Claimant name and Student/Employee ID are required for approval")
+        if not id_verified:
+            raise HTTPException(status_code=400, detail="Confirm that the claimant ID has been verified before approval")
+        if not verification_method:
+            raise HTTPException(status_code=400, detail="Select an ID verification method")
+        if not existing_proof and not has_new_id_image:
+            raise HTTPException(status_code=400, detail="Upload the claimant ID image before approval")
+        account_student_no = str(claim.claimant.student_no or "").strip() if claim.claimant else ""
+        if account_student_no and account_student_no.casefold() != claimant_student_no.casefold() and not verification_note:
+            raise HTTPException(status_code=400, detail="The entered ID differs from the claimant account. Add a verification note to approve the manual correction")
 
     report = db.query(models.ClaimDecisionReport).filter(
         models.ClaimDecisionReport.claim_id == claim_id
@@ -2439,7 +2627,37 @@ async def create_claim_decision_report(
         db.add(report)
 
     if report_image and report_image.filename:
+        try:
+            validate_upload_file_size(report_image, label="Claim report image")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         report.report_image_path = save_file(report_image, "claim-reports")
+
+    if has_new_id_image:
+        try:
+            validate_upload_file_size(claim_id_image, label="Claimant ID image")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        id_image_path = save_file(claim_id_image, "claim-proofs")
+        if existing_proof:
+            existing_proof.id_image_path = id_image_path
+            existing_proof.claimant_user_id = claim.claimant_id
+            existing_proof.claimant_student_no = claimant_student_no or None
+        else:
+            existing_proof = models.ClaimProof(
+                claim_id=claim.id,
+                claimant_user_id=claim.claimant_id,
+                claimant_student_no=claimant_student_no or None,
+                id_image_path=id_image_path,
+            )
+            db.add(existing_proof)
+
+    report.claimant_name = claimant_name or None
+    report.claimant_student_no = claimant_student_no or None
+    report.claimant_department_course = claimant_department_course or None
+    report.id_verified = bool(id_verified) if action == "approve" else False
+    report.verification_method = verification_method or None
+    report.verification_note = verification_note or None
 
     report.decision_status = "approved" if action == "approve" else "rejected"
     report.created_by_admin_id = current_admin.id
@@ -2457,6 +2675,107 @@ async def create_claim_decision_report(
     }
 
 
+class SavedReportRequest(BaseModel):
+    name: str
+    description: str | None = None
+    report_type: str = "all"
+    filters: dict = Field(default_factory=dict)
+
+
+def saved_report_payload(report: models.SavedReport) -> dict:
+    try:
+        filters = json.loads(report.filters_json or "{}")
+    except (TypeError, ValueError):
+        filters = {}
+    return {
+        "id": report.id,
+        "name": report.name,
+        "description": report.description or "",
+        "report_type": report.report_type,
+        "filters": filters,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "updated_at": report.updated_at.isoformat() if report.updated_at else None,
+    }
+
+
+@app.get("/api/admin/saved-reports")
+def list_saved_reports(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    reports = db.query(models.SavedReport).filter(
+        models.SavedReport.created_by_admin_id == current_admin.id
+    ).order_by(models.SavedReport.updated_at.desc()).all()
+    return [saved_report_payload(report) for report in reports]
+
+
+@app.post("/api/admin/saved-reports", status_code=201)
+def create_saved_report(
+    payload: SavedReportRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    name = " ".join(payload.name.split())
+    if not name:
+        raise HTTPException(status_code=400, detail="Report name is required")
+    if len(name) > 150:
+        raise HTTPException(status_code=400, detail="Report name must be 150 characters or fewer")
+    report = models.SavedReport(
+        name=name,
+        description=(payload.description or "").strip()[:500] or None,
+        report_type=(payload.report_type or "all")[:50],
+        filters_json=json.dumps(payload.filters or {}),
+        created_by_admin_id=current_admin.id,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return saved_report_payload(report)
+
+
+@app.put("/api/admin/saved-reports/{report_id}")
+def update_saved_report(
+    report_id: int,
+    payload: SavedReportRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    report = db.query(models.SavedReport).filter(
+        models.SavedReport.id == report_id,
+        models.SavedReport.created_by_admin_id == current_admin.id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Saved report not found")
+    name = " ".join(payload.name.split())
+    if not name:
+        raise HTTPException(status_code=400, detail="Report name is required")
+    report.name = name[:150]
+    report.description = (payload.description or "").strip()[:500] or None
+    report.report_type = (payload.report_type or "all")[:50]
+    report.filters_json = json.dumps(payload.filters or {})
+    report.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(report)
+    return saved_report_payload(report)
+
+
+@app.delete("/api/admin/saved-reports/{report_id}", status_code=204)
+def delete_saved_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    report = db.query(models.SavedReport).filter(
+        models.SavedReport.id == report_id,
+        models.SavedReport.created_by_admin_id == current_admin.id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Saved report not found")
+    db.delete(report)
+    db.commit()
+    return Response(status_code=204)
+
+
 @app.get("/api/admin/report-module")
 def get_report_module_data(
     report_type: str = Query("all"),
@@ -2466,6 +2785,8 @@ def get_report_module_data(
     category: str = Query(""),
     location: str = Query(""),
     search: str = Query(""),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(250, ge=25, le=500),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
@@ -2477,7 +2798,10 @@ def get_report_module_data(
         "lost_found_items": "lost_found",
     }
     report_type = report_type_aliases.get(normalized_report_type, normalized_report_type)
-    valid_report_types = {"all", "lost", "found", "lost_found", "claim", "confiscated", "disposal"}
+    valid_report_types = {
+        "all", "lost", "found", "lost_found", "claim", "confiscated", "disposal",
+        "user", "pending", "announcement", "message", "notification", "academic_term",
+    }
     if report_type not in valid_report_types:
         report_type = "all"
 
@@ -2539,6 +2863,7 @@ def get_report_module_data(
         return True
 
     rows: list[dict] = []
+    database_paginated_total: int | None = None
 
     if report_type in {"all", "lost", "found", "lost_found"}:
         item_query = (
@@ -2761,6 +3086,37 @@ def get_report_module_data(
             })
 
     if report_type in {"all", "disposal"}:
+        disposal_reports = db.query(models.DisposalReport).options(
+            joinedload(models.DisposalReport.disposed_by_admin)
+        ).order_by(models.DisposalReport.disposed_at.desc()).all()
+        for disposal in disposal_reports:
+            rows.append({
+                "row_type": "disposal",
+                "row_id": f"DISP-{disposal.id:06d}",
+                "item_id": disposal.source_id,
+                "item_code": disposal.item_code or f"DISP-{disposal.id:06d}",
+                "item": disposal.category or "Disposed Item",
+                "category": disposal.category or "Uncategorized",
+                "location": disposal.location or "Not specified",
+                "status": "Disposed",
+                "date": disposal.disposed_at.isoformat() if disposal.disposed_at else None,
+                "reported_by": display_name(disposal.disposed_by_admin),
+                "image_path": None,
+                "details": {
+                    "Disposal Report": f"DISP-{disposal.id:06d}",
+                    "Original Item Code": disposal.item_code or "Not specified",
+                    "Source": disposal.source_type.title(),
+                    "Category": disposal.category or "Not specified",
+                    "Brand": disposal.brand or "Not specified",
+                    "Color": disposal.color or "Not specified",
+                    "Location": disposal.location or "Not specified",
+                    "Owner / Student": disposal.owner_name or "Not specified",
+                    "Disposal Note": disposal.disposal_note or "Not specified",
+                    "Confirmed At": disposal.disposed_at.isoformat() if disposal.disposed_at else "Not specified",
+                    "Confirmed By": display_name(disposal.disposed_by_admin),
+                },
+                "claim_payload": None,
+            })
         reference_items = (
             db.query(models.ReferenceItem)
             .options(
@@ -2816,6 +3172,129 @@ def get_report_module_data(
                 "claim_payload": None,
             })
 
+    if report_type == "user":
+        for user in db.query(models.User).order_by(models.User.id.desc()).all():
+            role = "Administrator" if user.is_admin else (user.personnel or "Student")
+            rows.append({
+                "row_type": "user", "row_id": f"USER-{user.id:06d}", "item_id": user.id,
+                "item_code": f"USER-{user.id:06d}", "item": display_name(user),
+                "category": role, "location": user.department or user.course or "Not specified",
+                "status": "Archived" if user.is_archived else "Active",
+                "date": user.last_login.isoformat() if user.last_login else None,
+                "reported_by": "System", "image_path": public_file_url(user.profile_pic),
+                "details": {"User Code": f"USER-{user.id:06d}", "Name": display_name(user),
+                    "Email": user.email or "Not specified", "Student/Employee No.": user.student_no or user.archived_student_no or "Not specified",
+                    "Role": role, "Course/Department": user.course or user.department or "Not specified",
+                    "Section": user.section or "Not specified", "Account Status": "Archived" if user.is_archived else "Active",
+                    "Last Login": user.last_login.isoformat() if user.last_login else "Never"},
+                "claim_payload": None,
+            })
+
+    if report_type == "pending":
+        pending_records = db.query(models.PendingItem).options(joinedload(models.PendingItem.submitter)).order_by(models.PendingItem.created_at.desc()).all()
+        for pending in pending_records:
+            rows.append({
+                "row_type": "pending", "row_id": f"PENDING-{pending.id:06d}", "item_id": pending.id,
+                "item_code": f"PENDING-{pending.id:06d}", "item": pending.item_name or pending.category or "Pending Item",
+                "category": pending.category or "Uncategorized", "location": pending.location or "Not specified",
+                "status": "Deleted" if pending.deleted else ("Archived" if pending.archived else "Pending Approval"),
+                "date": pending.created_at.isoformat() if pending.created_at else None,
+                "reported_by": display_name(pending.submitter), "image_path": public_file_url(pending.image_path),
+                "details": {"Pending Code": f"PENDING-{pending.id:06d}", "Item": pending.item_name or "Not specified",
+                    "Category": pending.category or "Not specified", "Brand": pending.brand or "Not specified",
+                    "Color": pending.color or "Not specified", "Location": pending.location or "Not specified",
+                    "Description": pending.description or "Not specified", "Submitted At": pending.created_at.isoformat() if pending.created_at else "Not specified"},
+                "claim_payload": None,
+            })
+
+    if report_type == "announcement":
+        for announcement in db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).all():
+            rows.append({
+                "row_type": "announcement", "row_id": f"ANN-{announcement.id:06d}", "item_id": announcement.id,
+                "item_code": f"ANN-{announcement.id:06d}", "item": announcement.title,
+                "category": "Announcement", "location": "System-wide", "status": "Published",
+                "date": announcement.created_at.isoformat() if announcement.created_at else None,
+                "reported_by": "Administrator", "image_path": public_file_url(announcement.image_url),
+                "details": {"Announcement Code": f"ANN-{announcement.id:06d}", "Title": announcement.title,
+                    "Content": announcement.content, "Published At": announcement.created_at.isoformat() if announcement.created_at else "Not specified"},
+                "claim_payload": None,
+            })
+
+    if report_type == "message":
+        message_records = db.query(models.Message).options(joinedload(models.Message.sender), joinedload(models.Message.recipient)).order_by(models.Message.created_at.desc()).all()
+        for message in message_records:
+            rows.append({
+                "row_type": "message", "row_id": f"MSG-{message.id:06d}", "item_id": message.id,
+                "item_code": f"MSG-{message.id:06d}", "item": message.subject or "No subject",
+                "category": "Message", "location": "Messaging", "status": message.status or "Unknown",
+                "date": message.created_at.isoformat() if message.created_at else None,
+                "reported_by": display_name(message.sender), "image_path": None,
+                "details": {"Message Code": f"MSG-{message.id:06d}", "Subject": message.subject or "No subject",
+                    "Sender": display_name(message.sender), "Recipient": display_name(message.recipient),
+                    "Status": message.status or "Unknown", "Sent At": message.created_at.isoformat() if message.created_at else "Not specified"},
+                "claim_payload": None,
+            })
+
+    if report_type == "notification":
+        notification_query = db.query(models.Notification)
+        if category:
+            notification_query = notification_query.filter(func.lower(models.Notification.type) == normalize(category))
+        if location and "notifications" not in normalize(location):
+            notification_query = notification_query.filter(models.Notification.id == -1)
+        if search:
+            search_pattern = f"%{normalize(search)}%"
+            notification_query = notification_query.filter(or_(
+                func.lower(models.Notification.message).like(search_pattern),
+                func.lower(models.Notification.type).like(search_pattern),
+            ))
+        today_start = datetime.combine(datetime.utcnow().date(), datetime.min.time())
+        if date_range == "today":
+            notification_query = notification_query.filter(models.Notification.created_at >= today_start)
+        elif date_range == "7days":
+            notification_query = notification_query.filter(models.Notification.created_at >= today_start - timedelta(days=7))
+        elif date_range == "30days":
+            notification_query = notification_query.filter(models.Notification.created_at >= today_start - timedelta(days=30))
+        elif date_range == "3months":
+            notification_query = notification_query.filter(models.Notification.created_at >= today_start - timedelta(days=90))
+        elif date_range == "custom":
+            parsed_start, parsed_end = parse_date(start_date), parse_date(end_date)
+            if parsed_start:
+                notification_query = notification_query.filter(models.Notification.created_at >= datetime.combine(parsed_start, datetime.min.time()))
+            if parsed_end:
+                notification_query = notification_query.filter(models.Notification.created_at < datetime.combine(parsed_end + timedelta(days=1), datetime.min.time()))
+        database_paginated_total = notification_query.count()
+        notifications = notification_query.order_by(models.Notification.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        admin_ids = {notification.created_by_admin_id for notification in notifications if notification.created_by_admin_id}
+        admins = {u.id: u for u in db.query(models.User).filter(models.User.id.in_(admin_ids)).all()} if admin_ids else {}
+        for notification in notifications:
+            creator = admins.get(notification.created_by_admin_id)
+            rows.append({
+                "row_type": "notification", "row_id": f"NOTIF-{notification.id:06d}", "item_id": notification.id,
+                "item_code": f"NOTIF-{notification.id:06d}", "item": notification.message,
+                "category": notification.type or "Notification", "location": "Notifications",
+                "status": "Read" if notification.is_read else "Unread",
+                "date": notification.created_at.isoformat() if notification.created_at else None,
+                "reported_by": display_name(creator) if creator else "System", "image_path": None,
+                "details": {"Notification Code": f"NOTIF-{notification.id:06d}", "Type": notification.type or "Not specified",
+                    "Message": notification.message, "Read Status": "Read" if notification.is_read else "Unread",
+                    "Created At": notification.created_at.isoformat() if notification.created_at else "Not specified"},
+                "claim_payload": None,
+            })
+
+    if report_type == "academic_term":
+        for transition in db.query(models.AcademicTermTransition).order_by(models.AcademicTermTransition.ended_at.desc()).all():
+            rows.append({
+                "row_type": "academic_term", "row_id": f"TERM-{transition.id:06d}", "item_id": transition.id,
+                "item_code": f"TERM-{transition.id:06d}", "item": f"{transition.academic_year} - {transition.semester}",
+                "category": "Academic Term", "location": "System", "status": "Reactivated" if transition.reactivated_at else "Ended",
+                "date": transition.ended_at.isoformat() if transition.ended_at else None,
+                "reported_by": f"Admin #{transition.ended_by_admin_id}" if transition.ended_by_admin_id else "System", "image_path": None,
+                "details": {"Term Code": f"TERM-{transition.id:06d}", "Academic Year": transition.academic_year,
+                    "Semester": transition.semester, "Ended At": transition.ended_at.isoformat() if transition.ended_at else "Not specified",
+                    "Reactivated At": transition.reactivated_at.isoformat() if transition.reactivated_at else "Not reactivated"},
+                "claim_payload": None,
+            })
+
     filtered_rows = []
     normalized_category = normalize(category)
     normalized_location = normalize(location)
@@ -2853,9 +3332,21 @@ def get_report_module_data(
     category_options = sorted({row["category"] for row in rows if row["category"] and row["category"] != "Uncategorized"})
     location_options = sorted({row["location"] for row in rows if row["location"] and row["location"] != "Not specified"})
 
+    total_rows = database_paginated_total if database_paginated_total is not None else len(filtered_rows)
+    summary["total"] = total_rows
+    total_pages = max(1, (total_rows + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    page_start = (page - 1) * page_size
+
     return {
         "summary": summary,
-        "rows": filtered_rows,
+        "rows": filtered_rows if database_paginated_total is not None else filtered_rows[page_start:page_start + page_size],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_rows": total_rows,
+            "total_pages": total_pages,
+        },
         "filters": {
             "categories": category_options,
             "locations": location_options,
@@ -2952,6 +3443,10 @@ def create_direct_claim(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
+    try:
+        validate_upload_file_size(claim_id_image, label="Claim ID image")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     found_item = db.query(models.Item).filter(models.Item.id == found_item_id).first()
     claimant = db.query(models.User).filter(models.User.id == claimant_user_id).first()
 
@@ -3026,7 +3521,7 @@ def get_categories(db: Session = Depends(get_db)):
     categories = db.query(models.Category).all()
     return [{"id": c.id, "name": c.name} for c in categories]
 @app.get("/api/announcements")
-async def get_announcements(db: Session = Depends(get_db)):
+def get_announcements(db: Session = Depends(get_db)):
     # Return only the current active announcement.
     latest = db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).first()
     if not latest:
@@ -3064,6 +3559,10 @@ def get_students(
     
 def save_and_replace_file(new_file: UploadFile, old_path: str = None):
     """Saves new file and deletes the old one from the system."""
+    try:
+        validate_upload_file_size(new_file, label="Content image")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     
     # 1. Delete the old file if it exists
     if old_path:
@@ -3201,6 +3700,10 @@ async def update_bulk_content(
             section.description = description
 
             if image and image.filename:
+                try:
+                    validate_upload_file_size(image, label="Content image")
+                except ValueError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
                 if section.image_path:
                     old_physical_path = os.path.join(BASE_DIR, section.image_path.replace("/", os.sep))
                     if os.path.exists(old_physical_path):
@@ -3276,7 +3779,7 @@ async def update_bulk_content(
         raise HTTPException(status_code=500, detail="Internal Server Error")
 # Make sure this is flush with the left margin (or aligned with your other routes)
 @app.get("/api/content/landing")
-async def get_landing_content(db: Session = Depends(get_db)):
+def get_landing_content(db: Session = Depends(get_db)):
     content_by_key = {
         content.section_key: content
         for content in db.query(models.LandingContent).all()

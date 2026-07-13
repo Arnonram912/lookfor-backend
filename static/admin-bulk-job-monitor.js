@@ -1,6 +1,6 @@
 (function () {
     const STORAGE_KEY = "active_bulk_registration_job_id";
-    const POLL_INTERVAL_MS = 3000;
+    const POLL_INTERVAL_MS = 1000;
     let poller = null;
 
     function getJobId() {
@@ -48,7 +48,7 @@
                 <button id="adminBulkJobBannerDismiss" type="button" style="background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; line-height:1;">×</button>
             </div>
             <div style="margin-top:12px; height:10px; border-radius:999px; background:rgba(255,255,255,.18); overflow:hidden;">
-                <div id="adminBulkJobBannerProgress" style="width:0%; height:100%; background:linear-gradient(90deg,#f7b500 0%,#ffd95a 35%,#fff3b0 55%,#ffd95a 75%,#f7b500 100%); background-size:220% 100%; animation:bulkProgressFlow 1.05s linear infinite; transition:width .6s ease;"></div>
+            <div id="adminBulkJobBannerProgress" style="width:0%; height:100%; background:linear-gradient(90deg,#f7b500 0%,#ffd95a 35%,#fff3b0 55%,#ffd95a 75%,#f7b500 100%); background-size:220% 100%; animation:bulkProgressFlow 1.05s linear infinite; transition:width 1.15s linear;"></div>
             </div>
             <div id="adminBulkJobBannerMeta" style="margin-top:10px; font-size:12px; opacity:.92;">Preparing background registration...</div>
             <div style="margin-top:12px; display:flex; justify-content:flex-end; gap:8px;">
@@ -91,10 +91,11 @@
     const total = Number(job.total || 0);
     const rawProgress = Number(job.progress || 0);
 
+    const derivedProgress = total > 0 ? Math.round((processed / total) * 100) : 0;
     const visibleProgress =
-        (job.status === "queued" || job.status === "running") && rawProgress > 0
-            ? Math.max(rawProgress, 3)
-            : rawProgress;
+        (job.status === "queued" || job.status === "running")
+            ? Math.max(rawProgress, derivedProgress, 2)
+            : Math.max(rawProgress, derivedProgress);
 
     banner.style.display = "block";
     progress.style.width = `${visibleProgress}%`;
@@ -186,6 +187,12 @@
     }
 
     function startPolling() {
+    // User Management has its own detailed progress card and poller.
+    if (window.location.pathname.toLowerCase() === "/admin/user-management") {
+        stopPolling();
+        hideBanner();
+        return;
+    }
     if (!getJobId() || !sessionStorage.getItem("admin_token")) return;
 
     if (poller) clearInterval(poller);

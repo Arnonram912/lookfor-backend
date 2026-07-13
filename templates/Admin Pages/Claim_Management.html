@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Claim.css?v=1"> 
+    <link rel="stylesheet" href="/static/Claim.css?v=2">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -160,9 +160,22 @@
 <div class="page-scroll-area">
         <section class="content-body">
             <div class="profile-page-card">
-                <div class="action-bar">
+        <div class="action-bar">
             <h2 class="section-title">Claim <span>Management</span></h2>
             <p style="margin-left: 20px;">Review pending claim matches and the claimant proof details before approving or rejecting.</p>
+            <div class="claim-filter-bar" aria-label="Claim filters">
+                <select id="claimStatusFilter" class="claim-filter" onchange="renderClaims()">
+                    <option value="all">All Claims</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Claimed</option>
+                    <option value="rejected">Rejected</option>
+                </select>
+                <select id="claimCategoryFilter" class="claim-filter" onchange="renderClaims()">
+                    <option value="all">All Categories</option>
+                </select>
+                <input type="date" id="claimDateFilter" class="claim-filter claim-date-filter" onchange="renderClaims()" title="Filter by claim date" aria-label="Filter by claim date">
+                <button type="button" class="claim-filter-reset" onclick="resetClaimFilters()">Clear Filters</button>
+            </div>
         </div>
 
         <div class="table-container">
@@ -208,9 +221,14 @@
 
                 <div style="margin-bottom:18px;">
                     <h4 style="margin:0 0 10px; color:#003366;">Claimant details</h4>
-                    <p style="margin:6px 0;"><strong>Full name:</strong> <span id="reportClaimantName">-</span></p>
-                    <p style="margin:6px 0;"><strong>Student/Employee ID:</strong> <span id="reportClaimantId">-</span></p>
-                    <p style="margin:6px 0;"><strong>Department/Course:</strong> <span id="reportClaimantDept">-</span></p>
+                    <label style="display:block; margin:8px 0 4px; font-weight:600;">Full name</label>
+                    <input id="reportClaimantName" maxlength="255" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
+                    <label style="display:block; margin:8px 0 4px; font-weight:600;">Student/Employee ID</label>
+                    <input id="reportClaimantId" maxlength="100" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
+                    <div id="claimantIdMatchStatus" style="margin-top:6px; font-size:12px; color:#64748b;"></div>
+                    <label style="display:block; margin:8px 0 4px; font-weight:600;">Department/Course</label>
+                    <input id="reportClaimantDept" maxlength="255" style="width:100%; padding:9px 10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
+                    <small style="display:block; margin-top:6px; color:#64748b;">Automatically filled from the account. You may correct these values for this claim report.</small>
                 </div>
 
                 <div>
@@ -224,6 +242,24 @@
             </div>
 
             <div style="display:flex; flex-direction:column; gap:16px;">
+                <div id="idVerificationPanel" style="border:1px solid #bfdbfe; border-radius:14px; padding:16px; background:#eff6ff;">
+                    <h4 style="margin:0 0 10px; color:#003366;">ID Verification</h4>
+                    <label style="display:block; margin-bottom:6px; font-weight:600;">Verification method</label>
+                    <select id="idVerificationMethod" style="width:100%; padding:9px 10px; border:1px solid #93c5fd; border-radius:8px;">
+                        <option value="">Select method</option>
+                        <option value="School ID">School ID</option>
+                        <option value="Employee ID">Employee ID</option>
+                        <option value="Government ID">Government ID</option>
+                        <option value="Other valid ID">Other valid ID</option>
+                    </select>
+                    <label style="display:flex; gap:8px; align-items:center; margin:12px 0; font-weight:600; cursor:pointer;"><input type="checkbox" id="idVerifiedCheckbox"> I verified that the ID belongs to this claimant</label>
+                    <label style="display:block; margin-bottom:6px; font-weight:600;">Claimant ID image</label>
+                    <input type="file" id="claimIdImage" accept="image/*">
+                    <img id="claimIdPreview" src="" alt="Claimant ID preview" style="width:100%; max-height:200px; object-fit:contain; border-radius:8px; margin-top:10px; background:#fff; display:none;">
+                    <div id="claimIdEmpty" style="text-align:center; color:#666; padding:20px 10px; background:#fff; border-radius:8px; margin-top:10px;">No claimant ID image available.</div>
+                    <label style="display:block; margin:10px 0 4px; font-weight:600;">Verification note</label>
+                    <textarea id="idVerificationNote" maxlength="500" rows="3" style="width:100%; padding:9px 10px; border:1px solid #93c5fd; border-radius:8px; box-sizing:border-box;" placeholder="Optional verification remarks"></textarea>
+                </div>
                 <div style="border:1px solid #e5e7eb; border-radius:14px; padding:16px; background:#f8fafc;">
                     <h4 style="margin:0 0 10px; color:#003366;">Decision Report Image</h4>
                     <input type="file" id="decisionReportImage" accept="image/*">
@@ -338,6 +374,8 @@ function showAccessDeniedPopup(permName) {
 document.addEventListener('DOMContentLoaded', () => {
     loadClaims();
     document.getElementById('decisionReportImage').addEventListener('change', previewDecisionReportImage);
+    document.getElementById('claimIdImage').addEventListener('change', previewClaimIdImage);
+    document.getElementById('reportClaimantId').addEventListener('input', updateClaimantIdMatchStatus);
 });
 
 let claimsCache = [];
@@ -355,9 +393,109 @@ function getClaimImageUrl(path, fallback = 'https://via.placeholder.com/50?text=
 
 function getClaimStatusLabel(status) {
     const normalized = String(status || 'pending').toLowerCase();
-    if (normalized === 'approved') return 'Claimed';
+    if (normalized === 'approved' || normalized === 'completed') return 'Claimed';
     if (normalized === 'rejected') return 'Rejected';
     return 'Pending';
+}
+
+function normalizeClaimCategory(value) {
+    return String(value || '').trim();
+}
+
+function populateClaimCategoryFilter() {
+    const filter = document.getElementById('claimCategoryFilter');
+    if (!filter) return;
+
+    const currentValue = filter.value || 'all';
+    const categories = [...new Set(
+        claimsCache.flatMap(claim => [
+            normalizeClaimCategory(claim.lost_item?.category),
+            normalizeClaimCategory(claim.found_item?.category)
+        ]).filter(category => category && category !== 'No lost report')
+    )].sort((a, b) => a.localeCompare(b));
+
+    filter.innerHTML = '<option value="all">All Categories</option>';
+    categories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        filter.appendChild(option);
+    });
+    filter.value = categories.includes(currentValue) ? currentValue : 'all';
+}
+
+function getFilteredClaims() {
+    const status = document.getElementById('claimStatusFilter')?.value || 'all';
+    const category = document.getElementById('claimCategoryFilter')?.value || 'all';
+    const date = document.getElementById('claimDateFilter')?.value || '';
+
+    return claimsCache.filter(claim => {
+        const claimStatus = String(claim.status || 'pending').toLowerCase();
+        const matchesStatus = status === 'all'
+            || claimStatus === status
+            || (status === 'approved' && claimStatus === 'completed');
+        const claimCategories = [
+            normalizeClaimCategory(claim.lost_item?.category),
+            normalizeClaimCategory(claim.found_item?.category)
+        ];
+        const matchesCategory = category === 'all' || claimCategories.includes(category);
+        const claimDate = String(claim.report?.date_claimed || '').slice(0, 10);
+        const matchesDate = !date || claimDate === date;
+
+        return matchesStatus && matchesCategory && matchesDate;
+    });
+}
+
+function resetClaimFilters() {
+    const statusFilter = document.getElementById('claimStatusFilter');
+    const categoryFilter = document.getElementById('claimCategoryFilter');
+    const dateFilter = document.getElementById('claimDateFilter');
+    if (statusFilter) statusFilter.value = 'all';
+    if (categoryFilter) categoryFilter.value = 'all';
+    if (dateFilter) dateFilter.value = '';
+    renderClaims();
+}
+
+function renderClaims() {
+    const tableBody = document.getElementById('claims-table-body');
+    if (!tableBody) return;
+
+    const claims = getFilteredClaims();
+    if (claims.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="5" class="claim-empty-state">No claims found for the selected filters.</td></tr>';
+        return;
+    }
+
+    tableBody.innerHTML = claims.map(claim => {
+        const lostImage = getClaimImageUrl(claim.lost_item?.image);
+        const foundImage = getClaimImageUrl(claim.found_item?.image);
+        const claimStatus = String(claim.status || 'pending').toLowerCase();
+        const actionContent = claimStatus === 'pending'
+            ? `
+                    <button class="btn-approve" type="button" onclick="openDecisionModal(${claim.id}, 'approve')">Approve</button>
+                    <button class="btn-reject" type="button" onclick="openDecisionModal(${claim.id}, 'reject')">Reject</button>
+                `
+            : `<span style="display:inline-flex; align-items:center; justify-content:center; min-width:110px; padding:8px 14px; border-radius:999px; background:#e5e7eb; color:#374151; font-weight:600;">${getClaimStatusLabel(claim.status) === 'Claimed' ? 'Claim' : 'Rejected'}</span>`;
+        return `
+            <tr>
+                <td><span class="badge badge-similarity">${claim.similarity}</span></td>
+                <td>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <img src="${lostImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;" onerror="this.onerror=null;this.src='https://via.placeholder.com/50?text=None';">
+                        <span>${claim.lost_item?.category || 'No lost report'}</span>
+                    </div>
+                </td>
+                <td>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <img src="${foundImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;" onerror="this.onerror=null;this.src='https://via.placeholder.com/50?text=None';">
+                        <span>${claim.found_item?.category || 'Unknown item'}</span>
+                    </div>
+                </td>
+                <td><span class="status-text">${getClaimStatusLabel(claim.status)}</span></td>
+                <td>${actionContent}</td>
+            </tr>
+        `;
+    }).join('');
 }
 
 async function loadClaims() {
@@ -367,48 +505,13 @@ async function loadClaims() {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const claims = await response.json();
-        claimsCache = claims;
-        const tableBody = document.getElementById('claims-table-body');
-        
-        if (claims.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No pending claims found.</td></tr>';
-            return;
-        }
-
-        tableBody.innerHTML = claims.map(claim => {
-            const lostImage = getClaimImageUrl(claim.lost_item?.image);
-            const foundImage = getClaimImageUrl(claim.found_item?.image);
-            const claimStatus = String(claim.status || 'pending').toLowerCase();
-            const actionContent = claimStatus === 'pending'
-                ? `
-                        <button class="btn-approve" type="button" onclick="openDecisionModal(${claim.id}, 'approve')">Approve</button>
-                        <button class="btn-reject" type="button" onclick="openDecisionModal(${claim.id}, 'reject')">Reject</button>
-                    `
-                : `<span style="display:inline-flex; align-items:center; justify-content:center; min-width:110px; padding:8px 14px; border-radius:999px; background:#e5e7eb; color:#374151; font-weight:600;">${claimStatus === 'approved' ? 'Claim' : 'Rejected'}</span>`;
-            return `
-                <tr>
-                    <td><span class="badge badge-similarity">${claim.similarity}</span></td>
-                    <td>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <img src="${lostImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;" onerror="this.onerror=null;this.src='https://via.placeholder.com/50?text=None';"> 
-                            <span>${claim.lost_item?.category || 'No lost report'}</span>
-                        </div>
-                    </td>
-                    <td>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <img src="${foundImage}" width="50" height="50" style="object-fit:cover; border-radius:4px;" onerror="this.onerror=null;this.src='https://via.placeholder.com/50?text=None';"> 
-                            <span>${claim.found_item?.category || 'Unknown item'}</span>
-                        </div>
-                    </td>
-                    <td><span class="status-text">${getClaimStatusLabel(claim.status)}</span></td>
-                    <td>
-                        ${actionContent}
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        claimsCache = Array.isArray(claims) ? claims : [];
+        populateClaimCategoryFilter();
+        renderClaims();
     } catch (error) {
         console.error("Error loading claims:", error);
+        document.getElementById('claims-table-body').innerHTML =
+            '<tr><td colspan="5" class="claim-empty-state">Unable to load claims. Please refresh and try again.</td></tr>';
     }
 }
 
@@ -438,9 +541,18 @@ function openDecisionModal(claimId, action) {
     document.getElementById('reportItemName').innerText = report.item_name || item.item_name || '-';
     document.getElementById('reportDateClaimed').innerText = formatDisplayDate(report.date_claimed);
     document.getElementById('reportStatus').innerText = statusLabel;
-    document.getElementById('reportClaimantName').innerText = claimant.full_name || '-';
-    document.getElementById('reportClaimantId').innerText = claimant.student_employee_id || '-';
-    document.getElementById('reportClaimantDept').innerText = claimant.department_course || '-';
+    document.getElementById('reportClaimantName').value = claimant.full_name === 'Unknown User' ? '' : (claimant.full_name || '');
+    document.getElementById('reportClaimantId').value = claimant.student_employee_id === 'Not available' ? '' : (claimant.student_employee_id || '');
+    document.getElementById('reportClaimantId').dataset.accountId = claimant.account_student_employee_id || '';
+    updateClaimantIdMatchStatus();
+    document.getElementById('reportClaimantDept').value = claimant.department_course === 'Not available' ? '' : (claimant.department_course || '');
+    const verification = report.id_verification || {};
+    document.getElementById('idVerifiedCheckbox').checked = Boolean(verification.verified);
+    document.getElementById('idVerificationMethod').value = verification.method || '';
+    document.getElementById('idVerificationNote').value = verification.note || '';
+    document.getElementById('idVerificationPanel').style.opacity = action === 'approve' ? '1' : '.75';
+    document.getElementById('claimIdImage').value = '';
+    setClaimIdPreview(claimant.proof_id_image);
     document.getElementById('reportDescItemName').innerText = item.item_name || '-';
     document.getElementById('reportDescBrand').innerText = item.brand || '-';
     document.getElementById('reportDescColor').innerText = item.color || '-';
@@ -484,6 +596,28 @@ async function saveDecisionReport() {
     const token = sessionStorage.getItem("admin_token");
     const formData = new FormData();
     formData.append("action", activeDecisionAction);
+    const claimantName = document.getElementById('reportClaimantName').value.trim();
+    const claimantId = document.getElementById('reportClaimantId').value.trim();
+    const verificationMethod = document.getElementById('idVerificationMethod').value;
+    const idVerified = document.getElementById('idVerifiedCheckbox').checked;
+    const claimIdImage = document.getElementById('claimIdImage').files[0];
+    const existingIdImage = activeDecisionClaim.report?.claimant?.proof_id_image;
+    if (activeDecisionAction === 'approve' && (!claimantName || !claimantId || !verificationMethod || !idVerified || (!claimIdImage && !existingIdImage))) {
+        await fireSwalOnTop({
+            icon: 'warning',
+            title: 'Complete ID verification',
+            text: 'Enter the claimant name and ID, select a verification method, confirm verification, and provide an ID image.',
+            confirmButtonColor: '#114b7a'
+        });
+        return;
+    }
+    formData.append('claimant_name', claimantName);
+    formData.append('claimant_student_no', claimantId);
+    formData.append('claimant_department_course', document.getElementById('reportClaimantDept').value.trim());
+    formData.append('id_verified', String(idVerified));
+    formData.append('verification_method', verificationMethod);
+    formData.append('verification_note', document.getElementById('idVerificationNote').value.trim());
+    if (claimIdImage) formData.append('claim_id_image', claimIdImage);
     const reportImage = document.getElementById('decisionReportImage').files[0];
     if (reportImage) {
         formData.append("report_image", reportImage);
@@ -553,6 +687,49 @@ function previewDecisionReportImage(event) {
     empty.style.display = 'none';
 }
 
+function setClaimIdPreview(path) {
+    const preview = document.getElementById('claimIdPreview');
+    const empty = document.getElementById('claimIdEmpty');
+    if (path) {
+        preview.src = getClaimImageUrl(path, '');
+        preview.style.display = 'block';
+        empty.style.display = 'none';
+    } else {
+        preview.removeAttribute('src');
+        preview.style.display = 'none';
+        empty.style.display = 'block';
+    }
+}
+
+function previewClaimIdImage(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        setClaimIdPreview(activeDecisionClaim?.report?.claimant?.proof_id_image);
+        return;
+    }
+    const preview = document.getElementById('claimIdPreview');
+    document.getElementById('claimIdEmpty').style.display = 'none';
+    preview.src = URL.createObjectURL(file);
+    preview.style.display = 'block';
+}
+
+function updateClaimantIdMatchStatus() {
+    const input = document.getElementById('reportClaimantId');
+    const status = document.getElementById('claimantIdMatchStatus');
+    const entered = input.value.trim().toLowerCase();
+    const accountId = String(input.dataset.accountId || '').trim().toLowerCase();
+    if (!accountId) {
+        status.textContent = 'No account ID is available; manual verification is required.';
+        status.style.color = '#92400e';
+    } else if (entered === accountId) {
+        status.textContent = 'Account ID match confirmed automatically.';
+        status.style.color = '#166534';
+    } else {
+        status.textContent = 'ID differs from the account. Add a verification note if this correction is valid.';
+        status.style.color = '#b91c1c';
+    }
+}
+
 function closeDecisionModal() {
     document.getElementById('decisionModal').style.display = 'none';
 }
@@ -584,6 +761,7 @@ function renderSavedReport(report) {
 
     const claimant = report.claimant || {};
     const item = report.item_description || {};
+    const verification = report.id_verification || {};
     const reportImage = report.report_image ? `<img src="${getClaimImageUrl(report.report_image, '')}" style="width:100%; max-height:240px; object-fit:contain; border:1px solid #ddd; border-radius:8px;">` : '<div style="padding:20px; border:1px solid #ddd; border-radius:8px; color:#666;">No report image uploaded.</div>';
 
     const printableHtml = `
@@ -616,6 +794,9 @@ function renderSavedReport(report) {
                         <p><strong>Full name:</strong> ${claimant.full_name || '-'}</p>
                         <p><strong>Student/Employee ID:</strong> ${claimant.student_employee_id || '-'}</p>
                         <p><strong>Department/Course:</strong> ${claimant.department_course || '-'}</p>
+                        <p><strong>ID verified:</strong> ${verification.verified ? 'Yes' : 'No'}</p>
+                        <p><strong>Verification method:</strong> ${verification.method || '-'}</p>
+                        <p><strong>Verification note:</strong> ${verification.note || '-'}</p>
                     </div>
                     <div class="section">
                         <h2>Item Description</h2>
@@ -673,7 +854,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=10"></script>
+<script src="/static/session-keepalive.js?v=13"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

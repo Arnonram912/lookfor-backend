@@ -629,6 +629,10 @@ async function saveProfileChanges() {
     const formData = new FormData();
     
     const fileInput = document.getElementById('imageUpload');
+    if (fileInput.files[0] && fileInput.files[0].size > 5 * 1024 * 1024) {
+        await showProfileAlert('warning', 'Image too large', 'Profile image must be 5 MB or smaller.');
+        return;
+    }
     
     if (fileInput.files[0]) {
         formData.append("profile_img", fileInput.files[0]);
@@ -676,6 +680,12 @@ async function saveProfileChanges() {
 document.getElementById('imageUpload').onchange = evt => {
     const [file] = document.getElementById('imageUpload').files;
     if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+            document.getElementById('imageUpload').value = '';
+            document.getElementById('applyProfileImageBtn').style.display = 'none';
+            showProfileAlert('warning', 'Image too large', 'Profile image must be 5 MB or smaller.');
+            return;
+        }
         const previewUrl = URL.createObjectURL(file);
         document.getElementById('display-pic').src = previewUrl;
         const topbarProfilePic = document.getElementById('topbar-profile-pic');

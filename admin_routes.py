@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 import models
 from database import get_db, SessionLocal
 from security import get_current_admin, pwd_context, sanitize_email_name_part
@@ -34,8 +34,9 @@ from utils import (
     item_display_id,
     item_display_code,
 )
-from sqlalchemy import or_
+from sqlalchemy import or_, func, text
 from concurrent.futures import ThreadPoolExecutor
+from account_email import queue_account_access_email, queue_item_event_email
 
 
 class AdminCreate(BaseModel):
@@ -47,6 +48,7 @@ class AdminCreate(BaseModel):
     email: EmailStr
     permissions: List[str]
     department: Optional[str] = None
+    personnel: str
     section: Optional[str] = None
 
 # For Bulk Student Registration (Matching your new User columns)
@@ -397,12 +399,105 @@ def create_student_notification(
     return notif
 
 
+def notify_lost_item_owner_of_match(
+    db: Session,
+    lost_item: models.Item,
+    found_item: models.Item,
+) -> None:
+    """Create both in-app and email alerts for the owner of a matched lost item."""
+    owner_id = lost_item.report_owner_user_id or lost_item.user_id
+    if not owner_id:
+        return
+    owner = db.query(models.User).filter(models.User.id == owner_id).first()
+    if not owner:
+        return
+
+    target_url = f"/student/Lost-report?item_id={lost_item.id}&show_match=1"
+    create_student_notification(
+        db,
+        owner.id,
+        f"Match found: found item #{found_item.id} may be your lost {lost_item.category}.",
+        "student_match",
+        target_url,
+    )
+    queue_item_event_email(
+        owner.email,
+        format_user_display_name(owner),
+        subject="A match was found for your lost item",
+        message_text=f"A found {lost_item.category} was matched with your lost-item report.",
+        action_url=target_url,
+    )
+
+
 def student_has_portal_access(user: models.User) -> bool:
     return STUDENT_ACCESS_PERMISSION in parse_permissions(user.permissions)
 
 
 def user_is_pending_delete(user: models.User) -> bool:
     return DELETE_QUEUE_PERMISSION in parse_permissions(user.permissions)
+
+
+def displayed_student_no(user: models.User) -> str | None:
+    if bool(getattr(user, "is_archived", False)) and getattr(user, "archived_student_no", None):
+        return user.archived_student_no
+    return user.student_no
+
+
+def displayed_email(user: models.User) -> str | None:
+    if bool(getattr(user, "is_archived", False)) and getattr(user, "archived_email", None):
+        return user.archived_email
+    return user.email
+
+
+def retained_login_value(prefix: str, user_id: int, max_length: int) -> str:
+    token = f"{prefix}-{user_id}-{uuid.uuid4().hex[:10]}"
+    return token[:max_length]
+
+
+def retire_user_login_identity(user: models.User, *, pending_delete: bool = False) -> None:
+    if not getattr(user, "archived_student_no", None):
+        user.archived_student_no = user.student_no
+    if not getattr(user, "archived_email", None):
+        user.archived_email = user.email
+
+    user.student_no = retained_login_value("retired", user.id, 50)
+    user.email = f"{retained_login_value('retired', user.id, 40)}@inactive.lookfor.local"
+    user.is_archived = True
+    user.must_change_password = True
+
+    permissions = parse_permissions(user.permissions)
+    permissions = [permission for permission in permissions if permission != STUDENT_ACCESS_PERMISSION]
+    if pending_delete and DELETE_QUEUE_PERMISSION not in permissions:
+        permissions.append(DELETE_QUEUE_PERMISSION)
+    user.permissions = json.dumps(permissions)
+
+
+def restore_retained_login_identity(db: Session, user: models.User) -> None:
+    archived_email = getattr(user, "archived_email", None)
+    archived_student_no = getattr(user, "archived_student_no", None)
+    if not archived_email and not archived_student_no:
+        return
+
+    conflict_filters = []
+    if archived_email:
+        conflict_filters.append(models.User.email == archived_email)
+    if archived_student_no:
+        conflict_filters.append(models.User.student_no == archived_student_no)
+
+    conflict = db.query(models.User.id).filter(
+        models.User.id != user.id,
+        or_(*conflict_filters)
+    ).first()
+    if conflict:
+        raise HTTPException(
+            status_code=409,
+            detail="This retained account cannot be restored because its original email or student number is already used by a newer registration."
+        )
+
+    user.email = archived_email or user.email
+    user.student_no = archived_student_no or user.student_no
+    user.archived_email = None
+    user.archived_student_no = None
 
 
 def get_assignable_permissions(admin: models.User) -> set[str]:
@@ -716,6 +811,33 @@ def store_item_as_reference(
     return reference_item
 
 
+def create_disposal_report(db: Session, source, source_type: str, admin_id: int | None):
+    if source_type == "report":
+        item_code = item_display_code(source)
+        owner_name = source.report_owner_name or format_user_display_name(source.owner)
+        source_id = source.id
+    else:
+        item_code = f"CONF-{source.id:06d}"
+        owner_name = source.student_name
+        source_id = source.id
+    report = models.DisposalReport(
+        source_type=source_type,
+        source_id=source_id,
+        item_code=item_code,
+        category=source.category,
+        brand=source.brand,
+        color=source.color,
+        description=source.description,
+        location=source.location,
+        owner_name=owner_name,
+        disposal_note=source.disposal_note,
+        disposed_by_admin_id=admin_id,
+        disposed_at=datetime.utcnow(),
+    )
+    db.add(report)
+    return report
+
+
 def compute_item_match_score(lost_item: models.Item, found_item: models.Item) -> float | None:
     if not lost_item.image_embedding or not found_item.image_embedding:
         return None
@@ -767,7 +889,31 @@ def compute_item_match_score(lost_item: models.Item, found_item: models.Item) ->
 
 print("Admin routes loaded")
 
-MAX_BULK_REGISTRATION_ROWS = 5000
+_AZURE_B1_DEFAULT_BULK_ROWS = 1000 if (os.getenv("WEBSITE_SITE_NAME") or os.getenv("WEBSITE_INSTANCE_ID")) else 5000
+MAX_BULK_REGISTRATION_ROWS = max(100, int(os.getenv("MAX_BULK_REGISTRATION_ROWS", str(_AZURE_B1_DEFAULT_BULK_ROWS))))
+
+
+def queue_registration_emails(rows: list[dict]) -> None:
+    """Queue account instructions without holding up bulk registration."""
+    for row in rows:
+        row["email_queued"] = queue_account_access_email(
+            row["email"],
+            row["full_name"],
+            row["temp_password"],
+            account_type="staff" if row.get("department") else "student",
+        )
+
+
+def should_queue_registration_email(row: dict) -> bool:
+    return bool(
+        row.get("email")
+        and row.get("temp_password")
+        and row.get("status") in {
+            "Created",
+            "Re-registered for current term",
+            "Replaced existing user",
+        }
+    )
 
 
 def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate_action: str):
@@ -783,17 +929,30 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
 
     # Tuning knobs
     lookup_chunk_size = 800      # SQL Server-safe lookup chunk for large 3k+ uploads
-    commit_chunk_size = 100      # keep each database transaction small and responsive
-    password_hash_chunk_size = 100
-    # Keep one CPU-heavy bcrypt worker so bulk registration cannot starve
-    # the single web process on a small Azure App Service plan.
-    hash_workers = 1
+    commit_chunk_size = max(50, min(1000, int(os.getenv("BULK_COMMIT_CHUNK_SIZE", "250"))))
+    password_hash_chunk_size = max(
+        50, min(1000, int(os.getenv("BULK_HASH_CHUNK_SIZE", "500")))
+    )
+    # bcrypt releases the GIL, so two workers substantially reduce preparation
+    # time while leaving capacity for web requests. Small plans can set this to 1.
+    hash_workers = max(1, min(4, int(os.getenv("BULK_HASH_WORKERS", "1"))))
+    progress_floor = 0
+    progress_span = 100
 
-    def push_bulk_progress(processed_count: int, message: str | None = None):
+    def push_bulk_progress(
+        processed_count: int,
+        message: str | None = None,
+        progress_override: int | None = None,
+    ):
         safe_processed = min(max(processed_count, 0), total_students)
+        row_ratio = (safe_processed / total_students) if total_students else 1
+        calculated_progress = progress_floor + int(row_ratio * progress_span)
         update_payload = {
             "processed": safe_processed,
-            "progress": int((safe_processed / total_students) * 100) if total_students else 100,
+            "progress": min(
+                99,
+                max(0, progress_override if progress_override is not None else calculated_progress)
+            ),
             "summary": {
                 "total": total_students,
                 "created": created_count,
@@ -810,7 +969,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
         job_id,
         status="running",
         started_at=started_at.isoformat(),
-        progress=0,
+        progress=1,
         processed=0,
         total=total_students,
         message="Bulk registration is running in the background."
@@ -872,6 +1031,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             level = str(s.get("level", "")).strip()
             batch_val = str(s.get("batch_id", "")).strip()
             department = str(s.get("department", "")).strip()
+            personnel = str(s.get("personnel", "")).strip().title()
             display_name = str(s.get("display_name", "")).strip()
             initial_permissions = [STUDENT_ACCESS_PERMISSION] if is_employee_import else []
 
@@ -886,7 +1046,11 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             )
 
             if is_employee_import and not department:
-                department = infer_employee_account_label(s_id)
+                department = (
+                    "Faculty / Teacher" if personnel == "Faculty"
+                    else "Administrative Personnel" if personnel == "Staff"
+                    else infer_employee_account_label(s_id)
+                )
 
             default_pass = f"STI{s_id}" if s_id else ""
             new_full_name = (
@@ -905,6 +1069,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                 "level": level,
                 "batch_id": batch_val,
                 "department": department,
+                "personnel": personnel,
                 "display_name": display_name,
                 "permissions": json.dumps(initial_permissions),
                 "email": email_addr,
@@ -954,7 +1119,8 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
         processed_seed = len(results)
         push_bulk_progress(
             processed_seed,
-            "Validating uploaded users before registration..."
+            "Validated uploaded users. Checking existing accounts...",
+            progress_override=5,
         )
 
         # ---------------------------------------------------------
@@ -970,7 +1136,27 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             ids_chunk = student_nos[i:i + lookup_chunk_size]
             emails_chunk = emails[i:i + lookup_chunk_size]
 
-            q = db.query(models.User)
+            q = db.query(models.User).options(load_only(
+                models.User.id,
+                models.User.first_name,
+                models.User.middle_name,
+                models.User.last_name,
+                models.User.full_name,
+                models.User.student_no,
+                models.User.archived_student_no,
+                models.User.email,
+                models.User.archived_email,
+                models.User.course,
+                models.User.department,
+                models.User.section,
+                models.User.level,
+                models.User.batch_id,
+                models.User.hashed_password,
+                models.User.is_admin,
+                models.User.is_archived,
+                models.User.must_change_password,
+                models.User.permissions,
+            ))
 
             if ids_chunk and emails_chunk:
                 rows = q.filter(
@@ -985,6 +1171,14 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                 rows = []
 
             existing_users.extend(rows)
+            lookup_progress = 5 + int(
+                (min(i + lookup_chunk_size, max_len) / max(max_len, 1)) * 5
+            )
+            push_bulk_progress(
+                processed_seed,
+                "Checking existing student and faculty accounts...",
+                progress_override=lookup_progress,
+            )
 
         existing_by_student_no = {}
         existing_by_email = {}
@@ -1012,6 +1206,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             user.email = row["email"]
             user.course = row["course"]
             user.department = row["department"]
+            user.personnel = row["personnel"]
             user.level = row["level"]
             user.batch_id = row["batch_id"]
             user.hashed_password = row["hashed_password"]
@@ -1042,6 +1237,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
 
         if rows_to_hash:
             hashed_count = 0
+            progress_update_step = max(1, len(rows_to_hash) // 200)
             for password_chunk in chunked(rows_to_hash, password_hash_chunk_size):
                 update_bulk_job(
                     job_id,
@@ -1058,12 +1254,32 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                     }
                     for future in as_completed(futures):
                         futures[future]["hashed_password"] = future.result()
-                hashed_count += len(password_chunk)
+                        hashed_count += 1
+                        if (
+                            hashed_count == len(rows_to_hash)
+                            or hashed_count % progress_update_step == 0
+                        ):
+                            hash_progress = 10 + int(
+                                (hashed_count / len(rows_to_hash)) * 45
+                            )
+                            push_bulk_progress(
+                                processed_seed,
+                                f"Securely preparing passwords {hashed_count}/{len(rows_to_hash)}...",
+                                progress_override=hash_progress,
+                            )
+        else:
+            push_bulk_progress(
+                processed_seed,
+                "No new passwords required. Preparing database updates...",
+                progress_override=55,
+            )
 
         # ---------------------------------------------------------
         # PASS 4: write users in bounded transaction chunks
         # ---------------------------------------------------------
         processed_valid_rows = processed_seed
+        progress_floor = 55
+        progress_span = 44
 
         for row_chunk in chunked(normalized_rows, commit_chunk_size):
             pending_results = []
@@ -1103,14 +1319,31 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                             })
 
                         elif existing_user.is_archived:
-                            # Semester-end processing archives prior-term students.
-                            # Registering one again means they are enrolled for the
-                            # current term, so restore the account to the active list.
-                            apply_registration_row_to_user(existing_user, row, keep_archived=False)
+                            # Keep the old archived/trash row for history, then
+                            # create a fresh accessible account for the new term.
+                            retire_user_login_identity(
+                                existing_user,
+                                pending_delete=user_is_pending_delete(existing_user)
+                            )
 
-                            existing_by_student_no[s_id] = existing_user
-                            if email_key:
-                                existing_by_email[email_key] = existing_user
+                            user_obj = models.User(
+                                first_name=row["first_name"],
+                                middle_name=row["middle_name"],
+                                last_name=row["last_name"],
+                                full_name=row["full_name"],
+                                student_no=row["student_no"],
+                                email=row["email"],
+                                course=row["course"],
+                                department=row["department"],
+                                personnel=row["personnel"],
+                                level=row["level"],
+                                batch_id=row["batch_id"],
+                                hashed_password=row["hashed_password"],
+                                is_admin=False,
+                                must_change_password=True,
+                                permissions=row["permissions"]
+                            )
+                            pending_creates.append(user_obj)
 
                             pending_counters["replaced"] += 1
                             pending_results.append({
@@ -1169,6 +1402,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                             email=row["email"],
                             course=row["course"],
                             department=row["department"],
+                            personnel=row["personnel"],
                             level=row["level"],
                             batch_id=row["batch_id"],
                             hashed_password=row["hashed_password"],
@@ -1192,10 +1426,17 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                         })
 
                 if pending_creates:
-                    db.add_all(pending_creates)
+                    db.flush()
+                    # Bypass per-object unit-of-work bookkeeping; these objects
+                    # are not reused after insertion.
+                    db.bulk_save_objects(pending_creates, return_defaults=False)
 
                 db.commit()
 
+                queue_registration_emails([
+                    result for result in pending_results
+                    if should_queue_registration_email(result)
+                ])
                 results.extend(pending_results)
                 created_count += pending_counters["created"]
                 replaced_count += pending_counters["replaced"]
@@ -1238,16 +1479,34 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 )
 
                             elif existing_user.is_archived:
-                                apply_registration_row_to_user(existing_user, row, keep_archived=False)
+                                retire_user_login_identity(
+                                    existing_user,
+                                    pending_delete=user_is_pending_delete(existing_user)
+                                )
+
+                                user_obj = models.User(
+                                    first_name=row["first_name"],
+                                    middle_name=row["middle_name"],
+                                    last_name=row["last_name"],
+                                    full_name=row["full_name"],
+                                    student_no=row["student_no"],
+                                    email=row["email"],
+                                    course=row["course"],
+                                    department=row["department"],
+                                    personnel=row["personnel"],
+                                    level=row["level"],
+                                    batch_id=row["batch_id"],
+                                    hashed_password=row["hashed_password"],
+                                    is_admin=False,
+                                    must_change_password=True,
+                                    permissions=row["permissions"]
+                                )
+                                db.flush()
+                                db.add(user_obj)
 
                                 db.commit()
 
-                                existing_by_student_no[s_id] = existing_user
-                                if email_key:
-                                    existing_by_email[email_key] = existing_user
-
-                                replaced_count += 1
-                                results.append({
+                                reregistered_result = {
                                     "email": row["email"],
                                     "student_no": row["student_no"],
                                     "full_name": row["full_name"],
@@ -1257,7 +1516,11 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                     "batch_id": row["batch_id"],
                                     "temp_password": row["temp_password"],
                                     "status": "Re-registered for current term"
-                                })
+                                }
+                                queue_registration_emails([reregistered_result])
+
+                                replaced_count += 1
+                                results.append(reregistered_result)
                                 processed_valid_rows += 1
                                 push_bulk_progress(
                                     processed_valid_rows,
@@ -1288,12 +1551,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
 
                                 db.commit()
 
-                                existing_by_student_no[s_id] = existing_user
-                                if email_key:
-                                    existing_by_email[email_key] = existing_user
-
-                                replaced_count += 1
-                                results.append({
+                                replaced_result = {
                                     "email": row["email"],
                                     "student_no": row["student_no"],
                                     "full_name": row["full_name"],
@@ -1303,7 +1561,15 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                     "batch_id": row["batch_id"],
                                     "temp_password": row["temp_password"],
                                     "status": "Replaced existing user"
-                                })
+                                }
+                                queue_registration_emails([replaced_result])
+
+                                existing_by_student_no[s_id] = existing_user
+                                if email_key:
+                                    existing_by_email[email_key] = existing_user
+
+                                replaced_count += 1
+                                results.append(replaced_result)
                                 processed_valid_rows += 1
                                 push_bulk_progress(
                                     processed_valid_rows,
@@ -1320,6 +1586,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 email=row["email"],
                                 course=row["course"],
                                 department=row["department"],
+                                personnel=row["personnel"],
                                 level=row["level"],
                                 batch_id=row["batch_id"],
                                 hashed_password=row["hashed_password"],
@@ -1331,7 +1598,7 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                             db.commit()
 
                             created_count += 1
-                            results.append({
+                            created_result = {
                                 "email": row["email"],
                                 "student_no": row["student_no"],
                                 "full_name": row["full_name"],
@@ -1341,7 +1608,9 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 "batch_id": row["batch_id"],
                                 "temp_password": row["temp_password"],
                                 "status": "Created"
-                            })
+                            }
+                            queue_registration_emails([created_result])
+                            results.append(created_result)
                             processed_valid_rows += 1
                             push_bulk_progress(
                                 processed_valid_rows,
@@ -1451,6 +1720,7 @@ async def toggle_archive(
     if archive:
         user.permissions = json.dumps([])  # remove all permissions
     else:
+        restore_retained_login_identity(db, user)
         permissions = [permission for permission in permissions if permission != DELETE_QUEUE_PERMISSION]
         user.permissions = json.dumps(permissions)
 
@@ -1514,6 +1784,10 @@ async def bulk_toggle_archive(
             )
 
         for user in users:
+            try:
+                restore_retained_login_identity(db, user)
+            except HTTPException:
+                continue
             permissions = parse_permissions(user.permissions)
             permissions = [permission for permission in permissions if permission != DELETE_QUEUE_PERMISSION]
             user.permissions = json.dumps(permissions)
@@ -1606,7 +1880,7 @@ async def bulk_move_users_to_delete(
         "requested_count": len(user_ids)
     }
 
-# ROUTE 2: Permanent Delete (Hard Delete)
+# ROUTE 2: Permanent Delete (retained and inaccessible)
 @router.delete("/permanent-delete/{user_id}")
 async def permanent_delete(
     user_id: int,
@@ -1623,17 +1897,17 @@ async def permanent_delete(
     try:
         deleted_user_name = user.full_name or user.email or f"User #{user_id}"
         deleted_user_is_admin = bool(user.is_admin)
-        delete_user_and_related_records(db, user)
+        retire_user_login_identity(user, pending_delete=True)
         db.commit()
         create_admin_notification(
             db,
-            f"{deleted_user_name} was permanently deleted from User Management.",
+            f"{deleted_user_name} was retained in Trash and disabled from User Management.",
             "user_management_admin" if deleted_user_is_admin else "user_management_students",
             user_id,
             created_by_admin_id=current_admin.id
         )
         
-        return {"message": "User and all related records (messages, claims, items) deleted."}
+        return {"message": "User account retained in Trash and disabled. Previous records were preserved."}
 
     except Exception as e:
         db.rollback()
@@ -1668,7 +1942,7 @@ async def bulk_permanent_delete(
     deleted_count = 0
     try:
         for user in users:
-            delete_user_and_related_records(db, user)
+            retire_user_login_identity(user, pending_delete=True)
             deleted_count += 1
         db.commit()
     except Exception as e:
@@ -1677,7 +1951,7 @@ async def bulk_permanent_delete(
         raise HTTPException(status_code=500, detail="Database Integrity Error: Some users still have active records.")
 
     return {
-        "message": f"{deleted_count} user account(s) deleted permanently.",
+        "message": f"{deleted_count} user account(s) retained in Trash and disabled.",
         "count": deleted_count,
         "requested_count": len(user_ids)
     }
@@ -1753,7 +2027,7 @@ def generate_embedding(image_path: str):
     return json.dumps(feat.cpu().numpy().flatten().tolist())
 
 
-async def build_combined_upload_embedding(*uploads: UploadFile) -> str:
+async def build_combined_upload_embedding(*uploads: UploadFile) -> str | None:
     images = []
 
     for upload in uploads:
@@ -1771,7 +2045,7 @@ async def build_combined_upload_embedding(*uploads: UploadFile) -> str:
             raise HTTPException(status_code=400, detail=f"Invalid uploaded image: {upload.filename}") from exc
 
     if not images:
-        raise HTTPException(status_code=400, detail="At least one image is required.")
+        return None
 
     return json.dumps(get_multi_image_embedding(images).tolist())
 # Auto Archive
@@ -1810,6 +2084,7 @@ async def confirm_match(
     # This is where the magic happens
     lost_item.is_matched = True
     found_item.is_matched = True
+    notify_lost_item_owner_of_match(db, lost_item, found_item)
 
     db.commit()
     return {"message": "Items successfully matched!"}
@@ -1836,6 +2111,7 @@ def get_archived_found_items(
         models.Item.status == "found",
         models.Item.archived == True,
         models.Item.deleted == False,
+        models.Item.disposal_status == "active",
     ).all()
     return [serialize_inventory_item(db, item) for item in items]
 
@@ -1871,6 +2147,7 @@ def get_archived_lost_items(
         models.Item.status == "lost",
         models.Item.archived == True,
         models.Item.deleted == False,
+        models.Item.disposal_status == "active",
     ).all()
     return [serialize_inventory_item(db, item) for item in items]
 
@@ -1954,6 +2231,15 @@ def admin_reports(
         "Admin Pages/Reports.html",
         {"request": request}
     )
+
+@router.get("/Audit-Logs")
+def admin_audit_logs(
+    request: Request
+):
+    return templates.TemplateResponse(
+        "Admin Pages/Reports.html",
+        {"request": request}
+    )
 @router.get("/Profile")
 def admin_profile(
     request: Request,
@@ -1983,6 +2269,10 @@ async def update_profile(
 
     # Handle Image Upload
     if profile_img and profile_img.filename:
+        try:
+            validate_upload_file_size(profile_img, label="Profile image")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
         file_extension = os.path.splitext(profile_img.filename)[1]
         db_file_path = f"static/profile_pics/user_{user.id}{file_extension}"
@@ -2030,6 +2320,15 @@ def admin_confiscated_items(
         "Admin Pages/Confiscated_Item.html",
         {"request": request} 
     )   
+
+@router.get("/For-Disposal")
+def admin_for_disposal(
+    request: Request
+):
+    return templates.TemplateResponse(
+        "Admin Pages/Confiscated_Item.html",
+        {"request": request}
+    )
 
 @router.get("/Content-management")
 def admin_content_management(
@@ -2269,6 +2568,9 @@ async def create_new_admin(
         raise HTTPException(status_code=400, detail="Admin / Employee ID is required")
     if not (admin_in.department or "").strip():
         raise HTTPException(status_code=400, detail="Department / Office is required")
+    personnel = admin_in.personnel.strip().title()
+    if personnel not in {"Faculty", "Staff"}:
+        raise HTTPException(status_code=400, detail="Personnel must be Faculty or Staff")
 
     existing = db.query(models.User).filter(
         or_(
@@ -2293,12 +2595,20 @@ async def create_new_admin(
         is_admin=True,
         permissions=json.dumps(requested_permissions),
         department=admin_in.department.strip(),
+        personnel=personnel,
         section=admin_in.section,
         must_change_password=True,
     )
     db.add(new_admin)
     db.commit()
     db.refresh(new_admin)
+
+    email_queued = queue_account_access_email(
+        new_admin.email,
+        new_admin.full_name,
+        temp_password,
+        account_type="admin",
+    )
 
     create_admin_notification(
         db,
@@ -2311,6 +2621,7 @@ async def create_new_admin(
         "message": "Admin created successfully",
         "temp_password": temp_password,
         "admin_id": admin_id,
+        "email_queued": email_queued,
     }
 
 
@@ -2538,13 +2849,37 @@ async def update_user_permissions(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/get-all-users")
-async def get_all_users(
+def get_all_users(
     db: Session = Depends(get_db),
     # Ensure the person calling this is actually an admin with the right perms
     admin = Depends(check_permission("User-Management")) 
 ):
-    process_academic_term_schedule(db)
-    users = db.query(models.User).all()
+    # Keep this endpoint in FastAPI's worker pool (plain `def`) because pyodbc
+    # is synchronous. Selecting only the fields used by the page also avoids
+    # transferring password hashes and account settings for every user.
+    users = db.query(models.User).options(load_only(
+        models.User.id,
+        models.User.first_name,
+        models.User.middle_name,
+        models.User.last_name,
+        models.User.full_name,
+        models.User.student_no,
+        models.User.archived_student_no,
+        models.User.email,
+        models.User.archived_email,
+        models.User.batch_id,
+        models.User.department,
+        models.User.personnel,
+        models.User.course,
+        models.User.section,
+        models.User.level,
+        models.User.profile_pic,
+        models.User.last_login,
+        models.User.is_admin,
+        models.User.is_archived,
+        models.User.must_change_password,
+        models.User.permissions,
+    )).all()
     user_list = []
     
     for u in users:
@@ -2562,10 +2897,11 @@ async def get_all_users(
             "middle_name": u.middle_name or "",
             "last_name": u.last_name or "",
             "full_name": u.full_name or "N/A",
-            "student_no": u.student_no or "N/A",
-            "email": u.email,
+            "student_no": displayed_student_no(u) or "N/A",
+            "email": displayed_email(u),
             "batch_id": u.batch_id or "",
             "department": u.department or "N/A",
+            "personnel": u.personnel or "",
             "course": u.course or "",
             "section": u.section or "",
             "level": u.level or "",
@@ -2821,17 +3157,17 @@ async def delete_students_by_batch(
         count = len(students)
         sample_student_id = students[0].id if students else None
         for student in students:
-            delete_user_and_related_records(db, student)
+            retire_user_login_identity(student, pending_delete=True)
         db.commit()
         create_admin_notification(
             db,
-            f"{count} archived student account(s) from batch {batch_id} were permanently deleted.",
+            f"{count} archived student account(s) from batch {batch_id} were retained in Trash and disabled.",
             "user_management_students",
             sample_student_id,
             created_by_admin_id=admin.id
         )
         return {
-            "message": f"{count} archived student account(s) from batch {batch_id} deleted successfully.",
+            "message": f"{count} archived student account(s) from batch {batch_id} retained in Trash and disabled.",
             "count": count,
             "batch_id": batch_id
         }
@@ -2841,7 +3177,7 @@ async def delete_students_by_batch(
         raise HTTPException(status_code=500, detail="Failed to delete archived students for this batch")
 
 @router.post("/bulk-register-students")
-async def bulk_register(
+def bulk_register(
     data: dict,
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("User-Management-Create"))
@@ -2878,6 +3214,14 @@ async def bulk_register(
 
     job_id = uuid.uuid4().hex
     with BULK_JOB_LOCK:
+        completed_jobs = [
+            (existing_id, job)
+            for existing_id, job in BULK_REGISTRATION_JOBS.items()
+            if job.get("status") in {"completed", "failed"}
+        ]
+        completed_jobs.sort(key=lambda entry: entry[1].get("finished_at") or entry[1].get("created_at") or "")
+        for stale_id, _ in completed_jobs[:-10]:
+            BULK_REGISTRATION_JOBS.pop(stale_id, None)
         BULK_REGISTRATION_JOBS[job_id] = {
             "job_id": job_id,
             "status": "queued",
@@ -2991,6 +3335,7 @@ async def approve_item(
             similarity_score="Auto Match"
         )
         db.flush()
+        notify_lost_item_owner_of_match(db, matched_lost_item, new_item)
         create_admin_notification(
             db,
             f"Approved found item #{new_item.id} was linked to lost item #{matched_lost_item.id}.",
@@ -3262,7 +3607,7 @@ UPLOAD_DIR = "static/uploads"
 
 @router.post("/items/lost")
 async def finalize_lost_upload(
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
     extra_image_1: UploadFile = File(None),
     extra_image_2: UploadFile = File(None),
     item_name: str = Form(...),
@@ -3303,7 +3648,7 @@ async def finalize_lost_upload(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     normalized_image_embedding = await build_combined_upload_embedding(file, extra_image_1, extra_image_2)
-    saved_path = save_file(file, resolved_category)
+    saved_path = save_file(file, resolved_category) if file and file.filename else "static/photos/boxw.png"
 
     # 3. Date Parsing
     parsed_date = None
@@ -3378,6 +3723,7 @@ async def finalize_lost_upload(
                     claimant_id=new_item.user_id or found_item.user_id or current_user.id,
                     similarity_score=f"{ai_score * 100:.1f}%"
                 )
+                notify_lost_item_owner_of_match(db, new_item, found_item)
 
         db.commit()
         db.refresh(new_item)
@@ -3408,7 +3754,7 @@ async def finalize_lost_upload(
 
 @router.post("/items/founds")
 async def finalize_found_upload(
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
     extra_image_1: UploadFile = File(None),
     extra_image_2: UploadFile = File(None),
     item_name: str = Form(...),
@@ -3444,7 +3790,7 @@ async def finalize_found_upload(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     normalized_image_embedding = await build_combined_upload_embedding(file, extra_image_1, extra_image_2)
-    saved_path = save_file(file, resolved_category)
+    saved_path = save_file(file, resolved_category) if file and file.filename else "static/photos/boxw.png"
 
     # 2. Handle Date Parsing safely (prevents crash if date is empty)
     parsed_date = None
@@ -3499,14 +3845,7 @@ async def finalize_found_upload(
                     claimant_id=lost_item.user_id or new_item.user_id or current_user.id,
                     similarity_score=f"{ai_score * 100:.1f}%"
                 )
-                if lost_item.user_id:
-                    create_student_notification(
-                        db,
-                        lost_item.user_id,
-                        f"Possible match found: {current_user.full_name} registered a found {category} that may match your lost item.",
-                        "student_match",
-                        f"/student/Lost-report?item_id={lost_item.id}&show_match=1"
-                    )
+                notify_lost_item_owner_of_match(db, lost_item, new_item)
 
         db.commit()
         db.refresh(new_item)
@@ -3745,6 +4084,10 @@ async def create_announcement(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin)
 ):
+    try:
+        validate_upload_file_size(file, label="Announcement image")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Keep a single active announcement by replacing the current record.
     upload_dir = Path("static/images")
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -3811,10 +4154,17 @@ async def report_confiscated(
     estimated_time: str = Form(None),
     location: str = Form(...),
     reason: str = Form(...),
+    student_name: str = Form(None),
+    student_number: str = Form(None),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
+    student_name = (student_name or "").strip() or None
+    student_number = (student_number or "").strip() or None
+    if not student_name and not student_number:
+        raise HTTPException(status_code=400, detail="Enter the student's name or student number.")
+
     parsed_date_confiscated = None
     if date_confiscated:
         try:
@@ -3824,7 +4174,11 @@ async def report_confiscated(
 
     # 1. Handle Image Upload
     file_path = None
-    if image:
+    if image and image.filename:
+        try:
+            validate_upload_file_size(image, label="Confiscated item image")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         upload_dir = "static/uploads/confiscated"
         os.makedirs(upload_dir, exist_ok=True)
         file_path = os.path.join(upload_dir, image.filename)
@@ -3842,6 +4196,8 @@ async def report_confiscated(
         location=location,
         estimated_time=estimated_time,
         reason=reason,
+        student_name=student_name,
+        student_number=student_number,
         image_path=file_path
     )
     
@@ -3859,6 +4215,80 @@ async def report_confiscated(
     
     return {"message": "Success", "id": new_item.id}
 
+
+@router.get("/confiscation-reasons")
+def get_confiscation_reasons(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    reasons = db.query(models.ConfiscationReason).order_by(models.ConfiscationReason.name.asc()).all()
+    if not reasons:
+        for name in ["Prohibited item", "Violation of school policy", "Disruptive use", "Safety concern"]:
+            db.add(models.ConfiscationReason(name=name))
+        db.commit()
+        reasons = db.query(models.ConfiscationReason).order_by(models.ConfiscationReason.name.asc()).all()
+    return reasons
+
+
+@router.post("/confiscation-reasons")
+def create_confiscation_reason(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Reason is required.")
+    existing = db.query(models.ConfiscationReason).filter(
+        func.lower(models.ConfiscationReason.name) == name.lower()
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="That reason already exists.")
+    reason = models.ConfiscationReason(name=name)
+    db.add(reason)
+    db.commit()
+    db.refresh(reason)
+    return reason
+
+
+@router.put("/confiscation-reasons/{reason_id}")
+def update_confiscation_reason(
+    reason_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    reason = db.query(models.ConfiscationReason).filter(models.ConfiscationReason.id == reason_id).first()
+    if not reason:
+        raise HTTPException(status_code=404, detail="Reason not found.")
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Reason is required.")
+    duplicate = db.query(models.ConfiscationReason).filter(
+        models.ConfiscationReason.id != reason_id,
+        func.lower(models.ConfiscationReason.name) == name.lower(),
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="That reason already exists.")
+    reason.name = name
+    db.commit()
+    db.refresh(reason)
+    return reason
+
+
+@router.delete("/confiscation-reasons/{reason_id}")
+def delete_confiscation_reason(
+    reason_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    reason = db.query(models.ConfiscationReason).filter(models.ConfiscationReason.id == reason_id).first()
+    if not reason:
+        raise HTTPException(status_code=404, detail="Reason not found.")
+    db.delete(reason)
+    db.commit()
+    return {"message": "Reason deleted."}
+
 @router.get("/get-confiscated-items")
 async def get_confiscated_items(
     view: str = "active",
@@ -3873,7 +4303,88 @@ async def get_confiscated_items(
     else:
         query = query.filter(models.ConfiscatedItem.disposal_status == "active")
     items = query.order_by(models.ConfiscatedItem.created_at.desc()).all()
-    return items
+    if view != "disposal":
+        return items
+
+    disposal_items = [
+        {
+            "id": item.id,
+            "source_type": "confiscated",
+            "category": item.category,
+            "brand": item.brand,
+            "description": item.description,
+            "color": item.color,
+            "date_confiscated": item.date_confiscated,
+            "location": item.location,
+            "estimated_time": item.estimated_time,
+            "reason": item.reason,
+            "student_name": item.student_name,
+            "student_number": item.student_number,
+            "image_path": item.image_path,
+            "disposal_note": item.disposal_note,
+        }
+        for item in items
+    ]
+    archived_reports = db.query(models.Item).filter(
+        models.Item.archived == True,
+        models.Item.deleted == False,
+        models.Item.disposal_status == "for_disposal",
+    ).order_by(models.Item.disposal_updated_at.desc()).all()
+    disposal_items.extend({
+        "id": item.id,
+        "source_type": "report",
+        "category": item.category,
+        "brand": item.brand,
+        "description": item.description,
+        "color": item.color,
+        "date_confiscated": item.date,
+        "location": item.location,
+        "estimated_time": item.time_found,
+        "reason": f"Archived {item.status.title()} Item",
+        "student_name": item.report_owner_name,
+        "student_number": None,
+        "image_path": item.image_path,
+        "disposal_note": item.disposal_note,
+    } for item in archived_reports)
+    return disposal_items
+
+
+@router.put("/items/{item_id}/disposal")
+def update_archived_item_disposal(
+    item_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item report not found")
+    action = str(payload.get("action") or "").strip().lower()
+    statuses = {"schedule": "for_disposal", "cancel": "active", "complete": "disposed"}
+    if action not in statuses:
+        raise HTTPException(status_code=400, detail="Invalid disposal action")
+    if action == "schedule" and (not item.archived or item.deleted):
+        raise HTTPException(status_code=400, detail="Only archived items can be moved to For Disposal")
+    if action == "complete" and item.disposal_status != "for_disposal":
+        raise HTTPException(status_code=400, detail="Only items waiting for disposal can be confirmed")
+    item.disposal_status = statuses[action]
+    submitted_note = str(payload.get("note") or "").strip()[:500]
+    if action == "schedule" or submitted_note:
+        item.disposal_note = submitted_note or None
+    item.disposal_updated_at = datetime.utcnow()
+    if action == "complete":
+        create_disposal_report(db, item, "report", current_admin.id)
+    db.commit()
+    label = {"schedule": "moved to For Disposal", "cancel": "returned to Archive", "complete": "recorded as disposed"}[action]
+    create_admin_notification(
+        db, f"Archived {item.status} item #{item.id} was {label}.", "item_disposal",
+        item.id, "/admin/For-Disposal", created_by_admin_id=current_admin.id,
+    )
+    return {
+        "message": f"Item {label}" + (" and disposal report created" if action == "complete" else ""),
+        "status": item.disposal_status,
+        "report_created": action == "complete",
+    }
 
 
 @router.put("/confiscated/{item_id}/disposal")
@@ -3894,9 +4405,15 @@ def update_confiscated_disposal(
     }
     if action not in statuses:
         raise HTTPException(status_code=400, detail="Invalid disposal action")
+    if action == "complete" and item.disposal_status != "for_disposal":
+        raise HTTPException(status_code=400, detail="Only items waiting for disposal can be confirmed")
     item.disposal_status = statuses[action]
-    item.disposal_note = str(payload.get("note") or "").strip()[:500] or None
+    submitted_note = str(payload.get("note") or "").strip()[:500]
+    if action == "schedule" or submitted_note:
+        item.disposal_note = submitted_note or None
     item.disposal_updated_at = datetime.utcnow()
+    if action == "complete":
+        create_disposal_report(db, item, "confiscated", current_admin.id)
     db.commit()
     labels = {
         "schedule": "marked for disposal",
@@ -3908,10 +4425,14 @@ def update_confiscated_disposal(
         f"Confiscated item #{item_id} was {labels[action]}.",
         "confiscated_disposal",
         item_id,
-        "/admin/Confiscated-items?view=disposal",
+        "/admin/For-Disposal",
         created_by_admin_id=current_admin.id,
     )
-    return {"message": f"Item {labels[action]}", "status": item.disposal_status}
+    return {
+        "message": f"Item {labels[action]}" + (" and disposal report created" if action == "complete" else ""),
+        "status": item.disposal_status,
+        "report_created": action == "complete",
+    }
 
 
 @router.get("/audit-logs")
@@ -3922,25 +4443,42 @@ def get_audit_logs(
     current_admin: models.User = Depends(get_current_admin),
 ):
     limit = max(1, min(limit, 500))
-    query = db.query(models.Notification).filter(
-        models.Notification.created_by_admin_id.isnot(None)
-    )
-    if search.strip():
-        query = query.filter(models.Notification.message.ilike(f"%{search.strip()}%"))
-    logs = query.order_by(models.Notification.created_at.desc()).limit(limit).all()
-    admin_ids = {log.created_by_admin_id for log in logs if log.created_by_admin_id}
+    top_limit = int(limit)
+    search_term = search.strip()
+    if search_term:
+        rows = db.execute(
+            text(f"""
+                SELECT TOP ({top_limit}) id, created_by_admin_id, message, type, target_url, created_at
+                FROM notifications
+                WHERE created_by_admin_id IS NOT NULL
+                  AND message LIKE :search
+                ORDER BY created_at DESC
+            """),
+            {"search": f"%{search_term}%"},
+        ).mappings().all()
+    else:
+        rows = db.execute(
+            text(f"""
+                SELECT TOP ({top_limit}) id, created_by_admin_id, message, type, target_url, created_at
+                FROM notifications
+                WHERE created_by_admin_id IS NOT NULL
+                ORDER BY created_at DESC
+            """),
+        ).mappings().all()
+
+    admin_ids = {row["created_by_admin_id"] for row in rows if row["created_by_admin_id"]}
     admins = {
         user.id: user
         for user in db.query(models.User).filter(models.User.id.in_(admin_ids)).all()
     } if admin_ids else {}
     return [{
-        "id": log.id,
-        "admin": format_user_display_name(admins.get(log.created_by_admin_id), "Unknown admin"),
-        "action": log.message,
-        "module": (log.type or "system").replace("_", " ").title(),
-        "target_url": log.target_url,
-        "created_at": log.created_at.isoformat() if log.created_at else None,
-    } for log in logs]
+        "id": row["id"],
+        "admin": format_user_display_name(admins.get(row["created_by_admin_id"]), "Unknown admin"),
+        "action": row["message"],
+        "module": (row["type"] or "system").replace("_", " ").title(),
+        "target_url": row["target_url"],
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+    } for row in rows]
 
 
 @router.get("/get-confiscated-item/{item_id}")
@@ -3966,6 +4504,8 @@ async def update_confiscated_item(
     estimated_time: str = Form(None),
     location: str = Form(...),
     reason: str = Form(...),
+    student_name: str = Form(None),
+    student_number: str = Form(None),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
@@ -3973,6 +4513,10 @@ async def update_confiscated_item(
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Confiscated item not found")
+    student_name = (student_name or "").strip() or None
+    student_number = (student_number or "").strip() or None
+    if not student_name and not student_number:
+        raise HTTPException(status_code=400, detail="Enter the student's name or student number.")
 
     parsed_date_confiscated = None
     if date_confiscated:
@@ -3982,6 +4526,10 @@ async def update_confiscated_item(
             raise HTTPException(status_code=400, detail="Please choose a valid confiscated date.")
 
     if image and image.filename:
+        try:
+            validate_upload_file_size(image, label="Confiscated item image")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         upload_dir = "static/uploads/confiscated"
         os.makedirs(upload_dir, exist_ok=True)
         file_path = os.path.join(upload_dir, image.filename)
@@ -3997,6 +4545,8 @@ async def update_confiscated_item(
     item.estimated_time = estimated_time
     item.location = location
     item.reason = reason
+    item.student_name = student_name
+    item.student_number = student_number
 
     db.commit()
     db.refresh(item)
