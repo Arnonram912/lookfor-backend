@@ -86,12 +86,38 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 STATIC_PROFILE_PICS_DIR = os.path.join(STATIC_DIR, "profile_pics")
 DEFAULT_PROFILE_PIC = "static/photos/default-student-avatar.jpg"
+LEGACY_UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+def seed_persistent_uploads() -> None:
+    """Copy versioned legacy pictures into persistent storage once."""
+    source_root = os.path.abspath(LEGACY_UPLOAD_FOLDER)
+    target_root = os.path.abspath(UPLOAD_FOLDER)
+    if os.path.normcase(source_root) == os.path.normcase(target_root):
+        return
+    if not os.path.isdir(source_root):
+        return
+
+    for source_dir, _, filenames in os.walk(source_root):
+        relative_dir = os.path.relpath(source_dir, source_root)
+        target_dir = target_root if relative_dir == "." else os.path.join(target_root, relative_dir)
+        os.makedirs(target_dir, exist_ok=True)
+        for filename in filenames:
+            source_path = os.path.join(source_dir, filename)
+            target_path = os.path.join(target_dir, filename)
+            if not os.path.exists(target_path):
+                shutil.copy2(source_path, target_path)
+
+
+seed_persistent_uploads()
+
+# Keep legacy database URLs working while all new uploads use /uploads/....
+app.mount("/static/uploads", StaticFiles(directory=UPLOAD_FOLDER), name="legacy-uploads")
 app.mount("/uploads", StaticFiles(directory=UPLOAD_FOLDER), name="uploads")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 # This makes sure we always use the SAME folder at the very top of your project
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads") # No "static/" prefix here
