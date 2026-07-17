@@ -9,9 +9,17 @@ import models
 
 # CHANGE THIS: Point it inside the static directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IS_AZURE_APP_SERVICE = bool(
+    os.getenv("WEBSITE_SITE_NAME") or os.getenv("WEBSITE_INSTANCE_ID")
+)
+DEFAULT_UPLOAD_FOLDER = (
+    os.path.join(os.sep, "home", "data", "uploads")
+    if IS_AZURE_APP_SERVICE
+    else os.path.join(BASE_DIR, "static", "uploads")
+)
 UPLOAD_FOLDER = os.path.abspath(
     os.getenv("UPLOAD_FOLDER", "").strip()
-    or os.path.join(BASE_DIR, "static", "uploads")
+    or DEFAULT_UPLOAD_FOLDER
 )
 UPLOAD_URL_PREFIX = "/uploads"
 MAX_REPORT_IMAGE_BYTES = 5 * 1024 * 1024

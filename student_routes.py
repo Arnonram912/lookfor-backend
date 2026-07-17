@@ -529,15 +529,7 @@ async def update_student_profile(
             validate_upload_file_size(profile_img, label="Profile image")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
-        file_extension = os.path.splitext(profile_img.filename)[1]
-        db_file_path = f"static/profile_pics/student_{user.id}{file_extension}"
-        file_path = os.path.join(STATIC_PROFILE_PICS_DIR, f"student_{user.id}{file_extension}")
-        
-        with open(file_path, "wb") as buffer:
-            buffer.write(await profile_img.read())
-        
-        user.profile_pic = db_file_path
+        user.profile_pic = save_file(profile_img, "profile-pics")
 
     # Only update fields that were submitted. Image-only saves should not erase
     # existing profile information.

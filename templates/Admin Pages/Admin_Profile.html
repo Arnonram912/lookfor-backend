@@ -511,7 +511,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const user = await response.json();
     const cleanProfilePic = user.profile_pic ? String(user.profile_pic).replace(/\\/g, '/') : '';
     const profilePic = cleanProfilePic
-        ? `${cleanProfilePic.startsWith('/') ? cleanProfilePic : '/' + cleanProfilePic}?t=${new Date().getTime()}`
+        ? `${/^(https?:)?\/\//i.test(cleanProfilePic) || cleanProfilePic.startsWith('/') ? cleanProfilePic : '/' + cleanProfilePic}${cleanProfilePic.includes('?') ? '&' : '?'}t=${new Date().getTime()}`
         : '/static/photos/default-student-avatar.jpg';
 
     const displayPic = document.getElementById('display-pic');

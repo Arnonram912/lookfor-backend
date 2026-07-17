@@ -124,7 +124,9 @@ A `Procfile` is included for hosts that support it:
 web: uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1 --limit-concurrency 20 --backlog 64 --timeout-keep-alive 5
 ```
 
-Uploads are stored under `static/uploads/`. On hosts with temporary filesystems, use persistent disk storage or move uploads to cloud storage.
+Uploads use Cloudinary when credentials are configured. Otherwise they are
+stored under `static/uploads/` locally and `/home/data/uploads` on Azure App
+Service, where App Service storage must be enabled.
 
 ### Azure App Service B1
 
@@ -135,8 +137,8 @@ App Service configuration:
 - set the Health check path to `/healthz`;
 - set `WEBSITES_ENABLE_APP_SERVICE_STORAGE=true` so the model cache under
   `/home/data/huggingface` survives restarts;
-- configure Cloudinary for uploaded images, or set `UPLOAD_FOLDER` to a
-  persistent `/home/data/...` directory;
+- configure Cloudinary for uploaded images, or leave `UPLOAD_FOLDER` blank to
+  use the persistent `/home/data/uploads` Azure default;
 - do not override the worker count above `1` on B1;
 - use the resource settings shown in `.env.example`.
 

@@ -292,7 +292,9 @@
         if (!profilePic) return fallback;
 
         const normalized = String(profilePic).replace(/\\/g, "/");
-        const url = normalized.startsWith("/") ? normalized : `/${normalized}`;
+        const url = /^(https?:)?\/\//i.test(normalized)
+            ? normalized
+            : (normalized.startsWith("/") ? normalized : `/${normalized}`);
         const separator = url.includes("?") ? "&" : "?";
         return `${url}${separator}t=${Date.now()}`;
     }

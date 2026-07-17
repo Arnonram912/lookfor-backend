@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/User_Management.css?v=23">
+    <link rel="stylesheet" href="/static/User_Management.css?v=24">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
@@ -626,6 +626,7 @@
         <input type="hidden" id="editUserId">
         <input type="hidden" id="editOriginalPermissions">
 
+        <div class="compact-permissions-scroll">
         <div class="permissions-container">
             <p style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Module Access</p>
             <p class="permission-helper-text">Choose which modules this account can open from the admin panel.</p>
@@ -755,6 +756,7 @@
             <div class="permission-summary-title">Access Review</div>
             <div id="permissionSummaryText" class="permission-summary-text">No access selected. This account will stay deactivated.</div>
             <div id="permissionSummaryList" class="permission-chip-list"></div>
+        </div>
         </div>
 
         <div class="compact-permissions-footer">

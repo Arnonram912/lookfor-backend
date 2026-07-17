@@ -41,6 +41,15 @@ jobs:
           docker build -t "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}" .
           docker push "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
 
+      - name: Enable persistent upload storage
+        run: |
+          az webapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --settings \
+              WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
+              UPLOAD_FOLDER=/home/data/uploads
+
       - name: Update web app container
         run: |
           az webapp config container set \

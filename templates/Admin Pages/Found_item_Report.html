@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
     <link rel="stylesheet" href="/static/Found_item_report.css?v=19">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
+    <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -389,10 +390,10 @@
                 </div>
             </div>
             <div id="confirmModal" class="modal-overlay" style="z-index: 1001;">
-                <div class="modal-content" style="max-width: 500px; padding: 30px;">
-                    <h2 style="text-align: center; margin-bottom: 20px;">Review <span>Report</span></h2>
+                <div class="modal-content report-review-card" style="max-width: 620px; padding: 30px;" role="dialog" aria-modal="true" aria-labelledby="reportReviewTitle">
+                    <h2 id="reportReviewTitle" class="report-review-title" style="text-align: center; margin-bottom: 20px;">Review <span>Report</span></h2>
                     
-                    <div id="submissionSummary" style="background: #f9f9f9; border-radius: 10px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #003366; text-align: left; font-size: 14px;">
+                    <div id="submissionSummary" class="report-review-summary" style="background: #f9f9f9; border-radius: 10px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #003366; text-align: left; font-size: 14px;">
                         <p><strong>📦 Item:</strong> <span id="sumName"></span></p>
                         <p><strong>🏷️ Category:</strong> <span id="sumCategory"></span></p>
                         <p><strong>🎨 Color/Brand:</strong> <span id="sumColorBrand"></span></p>
@@ -401,11 +402,11 @@
                         <p><strong>📅 Date:</strong> <span id="sumDate"></span></p>
                     </div>
 
-                    <p style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">
+                    <p class="report-review-message" style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">
                         Is everything correct? Our AI will now analyze this image for potential matches.
                     </p>
                     
-                    <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div class="modal-footer report-review-footer" style="display: flex; flex-direction: column; gap: 10px;">
                         <button class="btn-found lost-submit-btn surrender-submit-btn" id="finalConfirmBtn" onclick="executeSubmit()" style="width: 100%; margin: 0;">Confirm & Save</button>
                         
                         <div style="display: flex; gap: 10px; width: 100%;">
@@ -1467,7 +1468,7 @@ async function moveFoundItemToDeleted(itemId, isPending = false) {
 
             // Fill Summary List
             document.getElementById('sumName').innerText = itemName;
-            document.getElementById('sumCategory').innerText = document.getElementById('itemCategory').value;
+            document.getElementById('sumCategory').innerText = document.getElementById('itemCategory').selectedOptions[0]?.text || "N/A";
             
             const color = document.getElementById('itemColor').value || "N/A";
             const brand = document.getElementById('itemBrand').value || "N/A";

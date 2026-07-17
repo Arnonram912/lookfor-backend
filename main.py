@@ -3655,7 +3655,7 @@ def get_students(
     return result
     
 def save_and_replace_file(new_file: UploadFile, old_path: str = None):
-    """Saves new file and deletes the old one from the system."""
+    """Save a content image using the configured persistent storage backend."""
     try:
         validate_upload_file_size(new_file, label="Content image")
     except ValueError as exc:
@@ -3672,16 +3672,7 @@ def save_and_replace_file(new_file: UploadFile, old_path: str = None):
             except Exception as e:
                 print(f"Error deleting old file: {e}")
 
-    # 2. Save the new file
-    filename = f"{uuid()}_{new_file.filename}"
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-
-    with open(file_path, "wb") as buffer:
-        buffer.write(new_file.file.read())
-
-    # 3. Return the web-friendly path for the database
-    # Result looks like: static/uploads/uuid_name.png
-    return os.path.join("static", "uploads", filename).replace("\\", "/")
+    return save_file(new_file, "content")
 
     
 @app.post("/admin/api/update-content/bulk")
@@ -3807,14 +3798,7 @@ async def update_bulk_content(
                     if os.path.exists(old_physical_path):
                         os.remove(old_physical_path)
 
-                ext = image.filename.split(".")[-1]
-                new_filename = f"{uuid4()}.{ext}"
-                new_physical_path = os.path.join(UPLOAD_FOLDER, new_filename)
-
-                with open(new_physical_path, "wb") as buffer:
-                    buffer.write(await image.read())
-
-                section.image_path = f"static/uploads/{new_filename}"
+                section.image_path = save_file(image, "content")
 
             return section
 

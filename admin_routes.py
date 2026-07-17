@@ -2429,15 +2429,7 @@ async def update_profile(
             validate_upload_file_size(profile_img, label="Profile image")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        os.makedirs(STATIC_PROFILE_PICS_DIR, exist_ok=True)
-        file_extension = os.path.splitext(profile_img.filename)[1]
-        db_file_path = f"static/profile_pics/user_{user.id}{file_extension}"
-        file_path = os.path.join(STATIC_PROFILE_PICS_DIR, f"user_{user.id}{file_extension}")
-        
-        with open(file_path, "wb") as buffer:
-            buffer.write(await profile_img.read())
-        
-        user.profile_pic = db_file_path
+        user.profile_pic = save_file(profile_img, "profile-pics")
 
     # Update Text Fields (Email remains read-only for security)
     if full_name: user.full_name = full_name
@@ -4268,16 +4260,8 @@ async def create_announcement(
         validate_upload_file_size(file, label="Announcement image")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    # Keep a single active announcement by replacing the current record.
-    upload_dir = Path("static/images")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = f"{uuid.uuid4().hex}_{Path(file.filename).name}"
-    file_location = upload_dir / safe_name
-
-    with file_location.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    db_path = f"static/images/{safe_name}"
+    # Keep a single active announcement in persistent/cloud-backed storage.
+    db_path = save_file(file, "announcements")
     existing_posts = db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).all()
     current_post = existing_posts[0] if existing_posts else None
 
@@ -4359,12 +4343,7 @@ async def report_confiscated(
             validate_upload_file_size(image, label="Confiscated item image")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        upload_dir = "static/uploads/confiscated"
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, image.filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-        file_path = file_path.replace("\\", "/")
+        file_path = save_file(image, "confiscated")
 
     # 2. Save to Database
     new_item = models.ConfiscatedItem(
@@ -4731,12 +4710,7 @@ async def update_confiscated_item(
             validate_upload_file_size(image, label="Confiscated item image")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        upload_dir = "static/uploads/confiscated"
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, image.filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-        item.image_path = file_path.replace("\\", "/")
+        item.image_path = save_file(image, "confiscated")
 
     item.category = category
     item.brand = brand
