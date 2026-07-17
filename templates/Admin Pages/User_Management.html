@@ -186,7 +186,8 @@
 <div class="table-header-actions">
     <div class="table-header-top">
         <div class="tab-group user-tabs">
-        <button id="btnShowAdmin" class="tab-btn active" onclick="filterTable('admin')">Admin/Staff</button>
+        <button id="btnShowAdmin" class="tab-btn active" onclick="filterTable('admin')">Admin</button>
+        <button id="btnShowStaff" class="tab-btn" onclick="filterTable('staff')">Staff</button>
         <button id="btnShowStudent" class="tab-btn" onclick="filterTable('student')">Student</button>
         <button id="btnShowFaculty" class="tab-btn" onclick="filterTable('faculty')">Faculty</button>
 
@@ -225,8 +226,11 @@
         <button id="openBulkRegisterBtn" class="upload-btn" onclick="openModal('bulkRegisterModal')"> 
             + Register Student/Faculty
         </button> 
-         <button id="openCreateAdminBtn" class="upload-btn" onclick="openModal('createAdminModal')"> 
+         <button id="openCreateAdminBtn" class="upload-btn" onclick="openCreateAccountModal('admin')">
             + Create an Admin
+        </button>
+        <button id="openCreateStaffBtn" class="upload-btn" onclick="openCreateAccountModal('staff')">
+            + Create Staff
         </button>
         <button id="openResetStudentPasswordBtn" class="upload-btn" onclick="openModal('resetStudentPasswordModal')">
             + Reset Student/Faculty Password
@@ -627,6 +631,13 @@
             <p class="permission-helper-text">Choose which modules this account can open from the admin panel.</p>
             <div class="permissions-grid">
                 <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Dashboard" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Dashboard</span>
+                        <span class="perm-desc">View the administrator dashboard and summary counts.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
                     <input type="checkbox" class="edit-perm" value="Messages" onchange="updatePermissionSummary()">
                     <span class="perm-copy">
                         <span class="perm-title">Messages</span>
@@ -717,6 +728,20 @@
                     </span>
                 </label>
                 <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="For-Disposal" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">For Disposal</span>
+                        <span class="perm-desc">View items queued for disposal.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
+                    <input type="checkbox" class="edit-perm" value="Audit-Logs" onchange="updatePermissionSummary()">
+                    <span class="perm-copy">
+                        <span class="perm-title">Audit Logs</span>
+                        <span class="perm-desc">Review recorded administrator activity.</span>
+                    </span>
+                </label>
+                <label class="perm-item professional">
                     <input type="checkbox" class="edit-perm" value="Content-management" onchange="updatePermissionSummary()">
                     <span class="perm-copy">
                         <span class="perm-title">Content Management</span>
@@ -744,15 +769,15 @@
             <span class="close-modal" onclick="closeModal('createAdminModal')">&times;</span>
             <div class="permission-modal-header">
                 <div>
-                    <h2 style="color: var(--sti-blue);">Create New Admin</h2>
-                    <p style="font-size: 13px; color: #666;">A secure temporary password will be generated automatically.</p>
+                    <h2 id="createAccountModalTitle" style="color: var(--sti-blue);">Create New Admin</h2>
+                    <p id="createAccountModalDescription" style="font-size: 13px; color: #666;">A secure temporary password will be generated automatically.</p>
                 </div>
-                <div class="permission-state-badge active">New Access</div>
+                <div id="createAccountAccessBadge" class="permission-state-badge active">New Admin Access</div>
             </div>
 
             <div class="create-admin-info-grid">
                 <div class="form-group">
-                    <label for="adminEmployeeId">Admin / Employee ID</label>
+                    <label id="createAccountEmployeeIdLabel" for="adminEmployeeId">Admin / Employee ID</label>
                     <input type="text" id="adminEmployeeId" placeholder="Enter ID number" class="admin-input" autocomplete="off">
                 </div>
 
@@ -783,10 +808,11 @@
                     </select>
                 </div>
 
-                <div class="form-group">
+                <div id="adminPersonnelGroup" class="form-group" style="display:none;">
                     <label for="adminPersonnel">Personnel</label>
                     <select id="adminPersonnel" class="admin-input" required>
                         <option value="">-- Select Personnel --</option>
+                        <option value="Admin">Admin</option>
                         <option value="Faculty">Faculty</option>
                         <option value="Staff">Staff</option>
                     </select>
@@ -794,8 +820,15 @@
             </div>
             <div class="permissions-container" style="margin-top: 10px;">
                 <p style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 8px;">Module Access</p>
-                <p class="permission-helper-text">Choose which modules this new admin can open from the admin panel.</p>
+                <p id="createAccountPermissionHelp" class="permission-helper-text">Choose which modules this new admin can open from the admin panel.</p>
                 <div class="permissions-grid">
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Dashboard">
+                        <span class="perm-copy">
+                            <span class="perm-title">Dashboard</span>
+                            <span class="perm-desc">View the administrator dashboard and summary counts.</span>
+                        </span>
+                    </label>
                     <label class="perm-item professional">
                         <input type="checkbox" class="perm-check" value="Messages">
                         <span class="perm-copy">
@@ -843,6 +876,20 @@
                         <span class="perm-copy">
                             <span class="perm-title">Confiscated Items</span>
                             <span class="perm-desc">View and process confiscated item records.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="For-Disposal">
+                        <span class="perm-copy">
+                            <span class="perm-title">For Disposal</span>
+                            <span class="perm-desc">View items queued for disposal.</span>
+                        </span>
+                    </label>
+                    <label class="perm-item professional">
+                        <input type="checkbox" class="perm-check" value="Audit-Logs">
+                        <span class="perm-copy">
+                            <span class="perm-title">Audit Logs</span>
+                            <span class="perm-desc">Review recorded administrator activity.</span>
                         </span>
                     </label>
                     <label class="perm-item professional">
@@ -899,12 +946,12 @@
             <div class="bulk-modal-footer create-admin-footer">
                 <button class="btn-secondary" type="button" onclick="closeModal('createAdminModal')">Cancel</button>
                 <button class="btn-primary success-btn" type="button" onclick="submitAdminCreate()" id="createBtn">
-                    Generate Accounts
+                    Generate Account
                 </button>
             </div>
             
             <div id="adminResult" style="margin-top: 15px; display: none; text-align: center;">
-                <p style="font-size: 14px;">Generated Password:</p>
+                <p id="generatedAccountPasswordLabel" style="font-size: 14px;">Generated Password:</p>
                 <code id="generatedAdminPass" style="font-size: 18px; color: #28a745; font-weight: bold;"></code>
             </div>
         </div>
@@ -962,7 +1009,10 @@
 <script>
 
 const PERMISSION_LABELS = {
+    "Dashboard": "Dashboard",
     "Messages": "Messages",
+    "Messages-Send": "Messages: Send",
+    "Messages-Manage": "Messages: Archive / Delete",
     "User-Management": "User Management",
     "User-Management-Create": "User Management Create",
     "User-Management-Edit": "User Management Edit",
@@ -970,12 +1020,72 @@ const PERMISSION_LABELS = {
     "User-Management-Archive": "User Management Archive",
     "User-Management-Delete": "User Management Delete",
     "Lost-Reports": "Lost Item Reports",
+    "Lost-Reports-Create": "Lost Reports: Create",
+    "Lost-Reports-Archive": "Lost Reports: Archive / Recover",
+    "Lost-Reports-Delete": "Lost Reports: Delete",
     "Found-Reports": "Found Item Reports",
+    "Found-Reports-Create": "Found Reports: Create",
+    "Found-Reports-Approve": "Found Reports: Approve",
+    "Found-Reports-Archive": "Found Reports: Archive / Recover",
+    "Found-Reports-Delete": "Found Reports: Delete",
     "Claim-Management": "Claim Management",
+    "Claim-Management-Create": "Claim Management: Create",
+    "Claim-Management-Decide": "Claim Management: Decide",
     "Reports": "Reports",
+    "Reports-Export": "Reports: Export",
+    "Reports-Manage": "Reports: Manage",
     "Confiscated-items": "Confiscated Items",
+    "Confiscated-items-Create": "Confiscated Items: Create",
+    "Confiscated-items-Edit": "Confiscated Items: Edit",
+    "Confiscated-items-Delete": "Confiscated Items: Delete",
+    "For-Disposal": "For Disposal",
+    "For-Disposal-Manage": "For Disposal: Manage",
+    "Audit-Logs": "Audit Logs",
     "Content-management": "Content Management",
+    "Content-management-Announcements": "Content: Announcements",
+    "Content-management-Taxonomy": "Content: Departments / Categories",
+    "Content-management-Term": "Content: Academic Term",
+    "Content-management-Edit": "Content: Edit Pages",
     "Student-Portal-Access": "Student Portal Access"
+};
+const MODULE_ACTION_PERMISSIONS = {
+    "Messages": [
+        ["Messages-Send", "Send Messages", "Compose messages and send replies."],
+        ["Messages-Manage", "Manage Messages", "Archive and delete message records."]
+    ],
+    "Lost-Reports": [
+        ["Lost-Reports-Create", "Create Reports", "Create lost-item reports from the admin panel."],
+        ["Lost-Reports-Archive", "Archive / Recover", "Archive and restore lost reports."],
+        ["Lost-Reports-Delete", "Delete", "Move lost reports to Trash or dispose them."]
+    ],
+    "Found-Reports": [
+        ["Found-Reports-Create", "Create Reports", "Create found-item reports from the admin panel."],
+        ["Found-Reports-Approve", "Approve Submissions", "Approve pending found-item submissions."],
+        ["Found-Reports-Archive", "Archive / Recover", "Archive and restore found reports."],
+        ["Found-Reports-Delete", "Delete", "Move found reports to Trash or dispose them."]
+    ],
+    "Claim-Management": [
+        ["Claim-Management-Create", "Create Claims", "Create manual and office direct claims."],
+        ["Claim-Management-Decide", "Decide Claims", "Approve, reject, and save claim decisions."]
+    ],
+    "Reports": [
+        ["Reports-Export", "Export Reports", "Generate printable or PDF report exports."],
+        ["Reports-Manage", "Manage Reports", "Save, update, exclude, and delete report configurations."]
+    ],
+    "Confiscated-items": [
+        ["Confiscated-items-Create", "Create Records", "Record confiscated items and manage reasons."],
+        ["Confiscated-items-Edit", "Edit Records", "Update confiscated-item details."],
+        ["Confiscated-items-Delete", "Delete Records", "Delete confiscated-item records."]
+    ],
+    "For-Disposal": [
+        ["For-Disposal-Manage", "Manage Disposal", "Schedule, cancel, and confirm item disposal."]
+    ],
+    "Content-management": [
+        ["Content-management-Announcements", "Announcements", "Create and remove announcements."],
+        ["Content-management-Taxonomy", "Departments / Categories", "Create and delete departments and categories."],
+        ["Content-management-Term", "Academic Term", "Configure, end, reactivate, and start academic terms."],
+        ["Content-management-Edit", "Edit Website Content", "Edit landing, feature, and about-page content."]
+    ]
 };
 const BULK_JOB_STORAGE_KEY = "active_bulk_registration_job_id";
 const BULK_JOB_AUTO_OPEN_STORAGE_KEY = "active_bulk_registration_job_auto_open";
@@ -997,12 +1107,85 @@ function canGrantPermission(permission) {
     return hasAccessPermission(permission);
 }
 
+function findPermissionCheckbox(cssClass, permission) {
+    return Array.from(document.querySelectorAll('.' + cssClass))
+        .find(checkbox => checkbox.value === permission);
+}
+
+function syncModuleActionPanel(modulePermission, mode) {
+    const inputClass = mode === 'edit' ? 'edit-perm' : 'perm-check';
+    const master = findPermissionCheckbox(inputClass, modulePermission);
+    const panel = document.querySelector('[data-module-action-panel="' + mode + ':' + modulePermission + '"]');
+    if (!master || !panel) return;
+
+    const actionCheckboxes = Array.from(panel.querySelectorAll('.' + inputClass));
+    panel.style.display = master.checked ? 'grid' : 'none';
+    if (!master.checked) {
+        actionCheckboxes.forEach(checkbox => { checkbox.checked = false; });
+    }
+}
+
+function syncAllModuleActionPanels(mode) {
+    Object.keys(MODULE_ACTION_PERMISSIONS).forEach(modulePermission => {
+        syncModuleActionPanel(modulePermission, mode);
+    });
+}
+
+function initializeModuleActionPermissionControls() {
+    [
+        { mode: 'edit', inputClass: 'edit-perm' },
+        { mode: 'create', inputClass: 'perm-check' }
+    ].forEach(({ mode, inputClass }) => {
+        Object.entries(MODULE_ACTION_PERMISSIONS).forEach(([modulePermission, actions]) => {
+            const master = findPermissionCheckbox(inputClass, modulePermission);
+            if (!master || document.querySelector('[data-module-action-panel="' + mode + ':' + modulePermission + '"]')) return;
+
+            const panel = document.createElement('div');
+            panel.className = 'user-management-access-panel';
+            panel.dataset.moduleActionPanel = mode + ':' + modulePermission;
+            panel.style.display = 'none';
+            panel.innerHTML = `
+                <div class="user-management-access-title">${PERMISSION_LABELS[modulePermission]} Button Access</div>
+                <div class="user-management-access-help">Choose which actions this account may use inside the module.</div>
+                <div class="nested-permission-group"></div>`;
+
+            const group = panel.querySelector('.nested-permission-group');
+            actions.forEach(([permission, title, description]) => {
+                const label = document.createElement('label');
+                label.className = 'perm-item professional nested';
+                label.innerHTML = `
+                    <input type="checkbox" class="${inputClass} module-action-permission" value="${permission}">
+                    <span class="perm-copy">
+                        <span class="perm-title">${title}</span>
+                        <span class="perm-desc">${description}</span>
+                    </span>`;
+                const checkbox = label.querySelector('input');
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) master.checked = true;
+                    syncModuleActionPanel(modulePermission, mode);
+                    updatePermissionSummary();
+                });
+                group.appendChild(label);
+            });
+
+            master.closest('.perm-item')?.insertAdjacentElement('afterend', panel);
+            master.addEventListener('change', () => {
+                syncModuleActionPanel(modulePermission, mode);
+                updatePermissionSummary();
+            });
+        });
+    });
+}
+
+initializeModuleActionPermissionControls();
+
 function syncPermissionGrantLocks() {
     document.querySelectorAll('.edit-perm').forEach(cb => {
         const allowed = canGrantPermission(cb.value);
         cb.disabled = !allowed;
         cb.closest('.perm-item')?.classList.toggle('disabled-permission', !allowed);
     });
+    syncAllModuleActionPanels('edit');
 }
 
 function syncCreateAdminGrantLocks() {
@@ -1013,6 +1196,7 @@ function syncCreateAdminGrantLocks() {
         cb.closest('.perm-item')?.classList.toggle('disabled-permission', !allowed);
     });
     toggleCreateAdminUserManagementActions();
+    syncAllModuleActionPanels('create');
 }
 
 function dismissBulkJobCard() {
@@ -1144,8 +1328,10 @@ function renderBulkJobCard(job, options = {}) {
         }
         const bulkBtn = document.getElementById('openBulkRegisterBtn');
         const createBtn = document.getElementById('openCreateAdminBtn');
+        const createStaffBtn = document.getElementById('openCreateStaffBtn');
         if (bulkBtn) bulkBtn.style.display = '';
         if (createBtn) createBtn.style.display = '';
+        if (createStaffBtn) createStaffBtn.style.display = '';
         return;
     }
 
@@ -1353,9 +1539,15 @@ function handleSearchKeydown(event) {
 
 function normalizePermissionSelection(permissions) {
     const normalized = Array.from(new Set(permissions || []));
-    if (normalized.some(permission => permission.startsWith('User-Management-')) && !normalized.includes('User-Management')) {
-        normalized.unshift('User-Management');
-    }
+    const modules = ['User-Management', ...Object.keys(MODULE_ACTION_PERMISSIONS)];
+    modules.forEach(modulePermission => {
+        if (
+            normalized.some(permission => permission.startsWith(modulePermission + '-'))
+            && !normalized.includes(modulePermission)
+        ) {
+            normalized.unshift(modulePermission);
+        }
+    });
     return normalized;
 }
 
@@ -1381,7 +1573,7 @@ function getUserStatusLabel(user) {
 
 function getUserRoleLabel(user) {
     if (!user) return 'User';
-    if (user.is_admin) return 'Admin/Staff';
+    if (user.is_admin) return isStaffAdmin(user) ? 'Staff' : 'Admin';
     return isFacultyUser(user) ? 'Faculty' : 'Student';
 }
 
@@ -1535,6 +1727,7 @@ function openProfileAccessEditor() {
 
     syncPermissionGrantLocks();
     toggleUserManagementActions();
+    syncAllModuleActionPanels('edit');
     updatePermissionSummary();
     document.getElementById('editPermissionsModal').style.display = 'flex';
 }
@@ -1553,6 +1746,7 @@ function cancelPermissionEdit() {
     document.getElementById('permissionAccessState').innerText = "No Access";
     document.getElementById('permissionAccessState').className = "permission-state-badge";
     document.getElementById('userManagementActionsGroupWrapper').style.display = 'none';
+    syncAllModuleActionPanels('edit');
     
     // 2. Hide the modal
     document.getElementById('editPermissionsModal').style.display = 'none';
@@ -1792,15 +1986,23 @@ async function permanentDelete(userId, currentRole, silent = false) {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
         });
+        const result = await response.json().catch(() => ({}));
 
-        if (response.ok) {
-            if (!silent) {
-                await showUserManagementAlert('success', 'User deleted', 'User deleted permanently.');
-                loadUsers(currentRole);
-            }
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to permanently delete this user.');
         }
+
+        if (!silent) {
+            await showUserManagementAlert('success', 'User deleted', result.message || 'User deleted permanently.');
+            await loadUsers(currentRole);
+        }
+        return result;
     } catch (err) {
         console.error("Permanent delete failed:", err);
+        if (!silent) {
+            await showUserManagementAlert('error', 'Delete failed', err.message || 'Failed to permanently delete this user.');
+        }
+        throw err;
     }
 }
 
@@ -1893,6 +2095,11 @@ function isFacultyUser(user) {
     const course = String(user.course || '').trim();
     const section = String(user.section || '').trim();
     return !!department && department !== 'N/A' && !course && !section;
+}
+
+function isStaffAdmin(user) {
+    return isTruthyFlag(user?.is_admin)
+        && String(user?.personnel || '').trim().toLowerCase() === 'staff';
 }
 
 function parseBatchTerm(batchId) {
@@ -2349,7 +2556,8 @@ function getFilteredUsersForRole(role) {
     let filtered = allUsers.filter(user => {
         const isAdmin = isTruthyFlag(user.is_admin);
 
-        if (role === 'admin') return isAdmin && !isTruthyFlag(user.is_archived);
+        if (role === 'admin') return isAdmin && !isStaffAdmin(user) && !isTruthyFlag(user.is_archived);
+        if (role === 'staff') return isAdmin && isStaffAdmin(user) && !isTruthyFlag(user.is_archived);
         if (role === 'student') return !isAdmin && !isFacultyUser(user) && !isTruthyFlag(user.is_archived);
         if (role === 'faculty') return !isAdmin && isFacultyUser(user) && !isTruthyFlag(user.is_archived);
         if (role === 'archive') return isArchiveTabUser(user);
@@ -2362,7 +2570,7 @@ function getFilteredUsersForRole(role) {
 
 function getInitialUserManagementTab() {
     const tab = new URLSearchParams(window.location.search).get('tab');
-    return ['admin', 'student', 'faculty', 'archive', 'delete'].includes(tab) ? tab : 'admin';
+    return ['admin', 'staff', 'student', 'faculty', 'archive', 'delete'].includes(tab) ? tab : 'admin';
 }
 
 function sortUsersByFullName(users) {
@@ -2449,6 +2657,7 @@ async function loadUsersOnce(currentRole) {
 function filterTable(role = 'admin') {
     const config = {
         admin:   { container: 'adminContainer',   body: 'adminTableBody' },
+        staff:   { container: 'adminContainer',   body: 'adminTableBody' },
         student: { container: 'studentContainer', body: 'studentTableBody' },
         faculty: { container: 'facultyContainer', body: 'facultyTableBody' },
         archive: { container: 'archiveContainer', body: 'archiveTableBody' },
@@ -2473,11 +2682,12 @@ function filterTable(role = 'admin') {
         selectedSemesterTerms.clear();
     }
 
-    const tabButtons = ['btnShowAdmin', 'btnShowStudent', 'btnShowFaculty', 'btnShowArchive', 'btnShowDelete'];
+    const tabButtons = ['btnShowAdmin', 'btnShowStaff', 'btnShowStudent', 'btnShowFaculty', 'btnShowArchive', 'btnShowDelete'];
     tabButtons.forEach(id => document.getElementById(id)?.classList.remove('active'));
 
     const activeButtonMap = {
         admin: 'btnShowAdmin',
+        staff: 'btnShowStaff',
         student: 'btnShowStudent',
         faculty: 'btnShowFaculty',
         archive: 'btnShowArchive',
@@ -2516,7 +2726,7 @@ function filterTable(role = 'admin') {
 
     if (batchFilterContainer) {
         batchFilterContainer.style.display =
-            (role === 'admin' || role === 'student' || role === 'faculty' || shouldShowArchiveFilters) ? 'flex' : 'none';
+            (role === 'admin' || role === 'staff' || role === 'student' || role === 'faculty' || shouldShowArchiveFilters) ? 'flex' : 'none';
     }
 
     if (batchFilterInput) {
@@ -2535,7 +2745,7 @@ function filterTable(role = 'admin') {
 
     if (selectAllControl) {
         selectAllControl.style.display =
-            (role === 'admin' || role === 'student' || role === 'faculty' || role === 'archive' || role === 'delete')
+            (role === 'admin' || role === 'staff' || role === 'student' || role === 'faculty' || role === 'archive' || role === 'delete')
                 ? 'inline-flex'
                 : 'none';
     }
@@ -2546,7 +2756,7 @@ function filterTable(role = 'admin') {
 
     if (userCountBadge) {
         userCountBadge.style.display =
-            (role === 'admin' || role === 'student' || role === 'faculty' || role === 'archive' || role === 'delete')
+            (role === 'admin' || role === 'staff' || role === 'student' || role === 'faculty' || role === 'archive' || role === 'delete')
                 ? 'inline-flex'
                 : 'none';
     }
@@ -2601,7 +2811,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
     const pageRows = isShowingAll ? data : data.slice(pageStart, pageStart + currentUserPageSize);
 
     if (!pageRows.length) {
-        const columnCount = currentRole === 'admin' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete'
+        const columnCount = currentRole === 'admin' || currentRole === 'staff' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete'
             ? 7
             : 6;
         tableBody.innerHTML = `<tr><td colspan="${columnCount}" style="text-align:center; padding:18px; color:#5b6f86; font-weight:700;">No records found.</td></tr>`;
@@ -2635,7 +2845,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                     : ((user.course || user.section)
                     ? `${user.course || ''} ${user.section || ''}`.trim()
                     : 'STUDENT');
-            infoColumn = `<td>${user.is_admin ? 'Admin' : getUserRoleLabel(user)}${roleInfo ? ` - ${roleInfo}` : ''}</td>`;
+            infoColumn = `<td>${getUserRoleLabel(user)}${roleInfo ? ` - ${roleInfo}` : ''}</td>`;
         } else {
             // Admin perspective
             infoColumn = `<td>${user.department || 'N/A'}</td>`;
@@ -2689,7 +2899,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                     `;
             }
 
-        const canSelect = currentRole === 'admin' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete';
+        const canSelect = currentRole === 'admin' || currentRole === 'staff' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete';
         const selectColumn = canSelect
             ? `<td><input type="checkbox" class="row-select" ${isMe ? 'disabled title="You cannot select your own account."' : ''} ${selectedUserIds.has(user.id) ? 'checked' : ''} onchange="toggleUserSelection(${user.id}, this.checked)"></td>`
             : '';
@@ -2743,7 +2953,10 @@ function toggleUserSelection(userId, isChecked) {
 }
 
 function toggleSelectAllVisible(isChecked) {
-    const visibleCheckboxes = Array.from(document.querySelectorAll(`#${currentView}TableBody .row-select:not(:disabled)`));
+    const activeTableBodyId = currentView === 'admin' || currentView === 'staff'
+        ? 'adminTableBody'
+        : `${currentView}TableBody`;
+    const visibleCheckboxes = Array.from(document.querySelectorAll(`#${activeTableBodyId} .row-select:not(:disabled)`));
     visibleCheckboxes.forEach(checkbox => {
         checkbox.checked = isChecked;
         const row = checkbox.closest('tr');
@@ -2770,7 +2983,7 @@ function updateSelectionActionButtons() {
     const isStudentOrFacultyView = currentView === 'student' || currentView === 'faculty';
 
     if (archiveSelectedBtn) {
-        archiveSelectedBtn.style.display = ((currentView === 'admin' && hasActiveAdminsSelected) || (isStudentOrFacultyView && selectedVisibleUsers.length > 0))
+        archiveSelectedBtn.style.display = (((currentView === 'admin' || currentView === 'staff') && hasActiveAdminsSelected) || (isStudentOrFacultyView && selectedVisibleUsers.length > 0))
             && hasAccessPermission('User-Management-Archive')
             ? 'inline-flex'
             : 'none';
@@ -2801,7 +3014,7 @@ async function archiveSelectedUsers() {
         selectedUserIds.has(user.id) &&
         !user.is_archived &&
         user.id !== currentAdminId &&
-        ((currentView === 'admin' && user.is_admin) ||
+        (((currentView === 'admin' || currentView === 'staff') && user.is_admin) ||
             (currentView === 'student' && !user.is_admin && !isFacultyUser(user)) ||
             (currentView === 'faculty' && !user.is_admin && isFacultyUser(user)))
     );
@@ -2809,14 +3022,14 @@ async function archiveSelectedUsers() {
         await showUserManagementAlert(
             'info',
             'No users selected',
-            currentView === 'admin'
-                ? 'Select at least one admin account first.'
+            currentView === 'admin' || currentView === 'staff'
+                ? `Select at least one ${currentView} account first.`
                 : `Select at least one active ${currentView === 'faculty' ? 'faculty' : 'student'} account first.`
         );
         return;
     }
-    const selectedLabel = currentView === 'admin'
-        ? 'admin account(s)'
+    const selectedLabel = currentView === 'admin' || currentView === 'staff'
+        ? `${currentView} account(s)`
         : `${currentView === 'faculty' ? 'faculty' : 'student'} account(s)`;
     if (!(await confirmUserManagementAction('Archive selected users?', `Archive ${selected.length} selected ${selectedLabel}?`, 'Archive selected'))) return;
 
@@ -2824,7 +3037,7 @@ async function archiveSelectedUsers() {
     const originalArchiveBtnHtml = setBatchActionButtonLoading(
         'btnArchiveSelected',
         true,
-            `<i class="fas fa-spinner fa-spin"></i> Archiving ${selected.length} ${currentView === 'admin' ? 'Admins' : (currentView === 'faculty' ? 'Faculty' : 'Students')}...`
+            `<i class="fas fa-spinner fa-spin"></i> Archiving ${selected.length} ${currentView === 'admin' ? 'Admins' : (currentView === 'staff' ? 'Staff' : (currentView === 'faculty' ? 'Faculty' : 'Students'))}...`
     );
 
     try {
@@ -3204,21 +3417,22 @@ async function deleteSelectedUsers() {
     );
 
     try {
-        await runUserBatchRequests(selected, async (user) => {
-            const response = await fetch(`/admin/permanent-delete/${user.id}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                throw new Error(result.detail || `Failed to delete ${user.full_name || 'user'}.`);
-            }
-            return result;
+        const response = await fetch('/admin/bulk-permanent-delete', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`
+            },
+            body: JSON.stringify({ user_ids: selected.map(user => user.id) })
         });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to permanently delete the selected accounts.');
+        }
 
         selectedUserIds.clear();
         await loadUsers(currentView);
-        await showUserManagementAlert('success', 'Accounts deleted', `${selected.length} selected account(s) deleted.`);
+        await showUserManagementAlert('success', 'Accounts deleted', result.message || `${selected.length} selected account(s) deleted permanently.`);
     } catch (error) {
         await showUserManagementAlert('error', 'Delete failed', error.message || 'Failed to delete selected accounts.');
     } finally {
@@ -3390,7 +3604,7 @@ async function moveSingleUserToTrash(userId) {
     }
 
     // Re-render the table with the search results
-    const bodyId = activeTab === 'admin'
+    const bodyId = activeTab === 'admin' || activeTab === 'staff'
         ? 'adminTableBody'
         : activeTab === 'student'
             ? 'studentTableBody'
@@ -3511,10 +3725,14 @@ async function applyPermissions() {
         const canResetStudentPasswords = hasAccessPermission('User-Management-Reset');
         const bulkBtn = document.getElementById('openBulkRegisterBtn');
         const createBtn = document.getElementById('openCreateAdminBtn');
+        const createStaffBtn = document.getElementById('openCreateStaffBtn');
         const resetBtn = document.getElementById('openResetStudentPasswordBtn');
+        const academicTermBtn = document.getElementById('openAcademicTermBtn');
         if (bulkBtn) bulkBtn.style.display = canManageUserActions ? 'inline-flex' : 'none';
         if (createBtn) createBtn.style.display = canManageUserActions ? 'inline-flex' : 'none';
+        if (createStaffBtn) createStaffBtn.style.display = canManageUserActions ? 'inline-flex' : 'none';
         if (resetBtn) resetBtn.style.display = canResetStudentPasswords ? 'inline-flex' : 'none';
+        if (academicTermBtn) academicTermBtn.style.display = hasAccessPermission('Content-management-Term') ? 'inline-flex' : 'none';
 
     } catch (error) {
         console.error("Permission check failed", error);
@@ -3525,10 +3743,14 @@ async function applyPermissions() {
         });
         const bulkBtn = document.getElementById('openBulkRegisterBtn');
         const createBtn = document.getElementById('openCreateAdminBtn');
+        const createStaffBtn = document.getElementById('openCreateStaffBtn');
         const resetBtn = document.getElementById('openResetStudentPasswordBtn');
+        const academicTermBtn = document.getElementById('openAcademicTermBtn');
         if (bulkBtn) bulkBtn.style.display = 'none';
         if (createBtn) createBtn.style.display = 'none';
+        if (createStaffBtn) createStaffBtn.style.display = 'none';
         if (resetBtn) resetBtn.style.display = 'none';
+        if (academicTermBtn) academicTermBtn.style.display = 'none';
     }
 }
 
@@ -3547,20 +3769,48 @@ function fitCreateAdminModalToViewport() {
         return;
     }
 
-    card.style.maxHeight = 'none';
-    card.style.overflowY = 'visible';
     card.style.setProperty('--create-admin-scale', '1');
-    const availableWidth = Math.max(320, window.innerWidth - 48);
     const availableHeight = Math.max(320, window.innerHeight - 32);
-    const widthScale = availableWidth / card.offsetWidth;
-    const heightScale = availableHeight / card.scrollHeight;
-    const scale = Math.min(1, widthScale, heightScale);
-    card.style.setProperty('--create-admin-scale', String(Math.max(0.6, scale)));
+    card.style.maxHeight = `${availableHeight}px`;
+    card.style.overflowY = 'auto';
 }
 
 window.addEventListener('resize', () => {
     requestAnimationFrame(fitCreateAdminModalToViewport);
 });
+
+let createAccountMode = 'admin';
+
+function configureCreateAccountModal(mode = 'admin') {
+    createAccountMode = mode === 'staff' ? 'staff' : 'admin';
+    const isStaff = createAccountMode === 'staff';
+    const accountLabel = isStaff ? 'Staff' : 'Admin';
+    const personnel = document.getElementById('adminPersonnel');
+
+    if (personnel) {
+        personnel.value = accountLabel;
+        personnel.disabled = true;
+    }
+
+    const title = document.getElementById('createAccountModalTitle');
+    const description = document.getElementById('createAccountModalDescription');
+    const employeeIdLabel = document.getElementById('createAccountEmployeeIdLabel');
+    const permissionHelp = document.getElementById('createAccountPermissionHelp');
+    const accessBadge = document.getElementById('createAccountAccessBadge');
+    const createBtn = document.getElementById('createBtn');
+
+    if (title) title.textContent = `Create New ${accountLabel}`;
+    if (description) description.textContent = `A secure temporary password for this ${accountLabel.toLowerCase()} account will be generated automatically.`;
+    if (employeeIdLabel) employeeIdLabel.textContent = `${accountLabel} / Employee ID`;
+    if (permissionHelp) permissionHelp.textContent = `Choose which modules this new ${accountLabel.toLowerCase()} can open from the admin panel.`;
+    if (accessBadge) accessBadge.textContent = `New ${accountLabel} Access`;
+    if (createBtn) createBtn.textContent = `Generate ${accountLabel} Account`;
+}
+
+function openCreateAccountModal(mode) {
+    configureCreateAccountModal(mode);
+    openModal('createAdminModal');
+}
 
 function openModal(id) {
         if ((id === 'bulkRegisterModal' || id === 'createAdminModal') && !hasAccessPermission('User-Management-Create')) {
@@ -3659,6 +3909,10 @@ async function refreshAcademicTermSetting() {
 }
 
 async function openAcademicTermModal() {
+    if (!hasAccessPermission('Content-management-Term')) {
+        showAccessDeniedPopup('Academic Term Management');
+        return;
+    }
     try {
         const term = await refreshAcademicTermSetting();
         const summary = document.getElementById('academicTermSummary');
@@ -4150,6 +4404,8 @@ loadDepartments();
     const email = (document.getElementById('adminEmail')?.value || '').trim().toLowerCase();
     const department = (document.getElementById('adminCourse')?.value || '').trim();
     const personnel = (document.getElementById('adminPersonnel')?.value || '').trim();
+    const accountLabel = createAccountMode === 'staff' ? 'Staff' : 'Admin';
+    const targetRole = createAccountMode === 'staff' ? 'staff' : 'admin';
 
     // 2. Collect checked permissions
     toggleCreateAdminUserManagementActions();
@@ -4161,7 +4417,7 @@ loadDepartments();
 
     // 3. Validation
     if (!adminEmployeeId || !lastName || !firstName || !email || !department || !personnel) {
-        await showUserManagementAlert('warning', 'Missing details', 'Please provide the Admin/Employee ID, last name, first name, STI email, department, and personnel type.');
+        await showUserManagementAlert('warning', 'Missing details', `Please provide the ${accountLabel}/Employee ID, last name, first name, STI email, and department.`);
         return;
     }
     if (normalizedPermissions.length === 0) {
@@ -4202,17 +4458,18 @@ loadDepartments();
             document.getElementById('adminResult').style.display = 'block';
             document.getElementById('generatedAdminPass').innerText = result.temp_password;
             btn.style.display = "none"; // Hide button so they don't click twice
-            await showUserManagementAlert('success', 'Admin created', 'Admin created successfully.');
+            await loadUsers(targetRole);
+            await showUserManagementAlert('success', `${accountLabel} created`, result.message || `${accountLabel} created successfully.`);
         } else {
-            await showUserManagementAlert('error', 'Creation failed', result.detail || 'Error creating admin');
+            await showUserManagementAlert('error', 'Creation failed', result.detail || `Error creating ${accountLabel.toLowerCase()}`);
             btn.disabled = false;
-            btn.innerText = "Generate Accounts";
+            btn.innerText = `Generate ${accountLabel} Account`;
         }
     } catch (err) {
         console.error("Fetch error:", err);
         await showUserManagementAlert('error', 'Connection failed', 'Failed to connect to server.');
         btn.disabled = false;
-        btn.innerText = "Generate Accounts";
+        btn.innerText = `Generate ${accountLabel} Account`;
     }
 }
     async function submitHeaderPasswordReset() {
@@ -4765,7 +5022,7 @@ window.addEventListener('pageshow', () => {
 });
 </script>
 
-<script src="/static/session-keepalive.js?v=13"></script>
+<script src="/static/session-keepalive.js?v=14"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=3"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>

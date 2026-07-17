@@ -95,6 +95,7 @@
                         <option value="found">Found Items</option>
                         <option value="claim">Claim</option>
                         <option value="confiscated">Confiscated Items</option>
+                        <option value="for_disposal">For Disposal</option>
                         <option value="disposal">Disposed Items</option>
                         <option value="pending">Pending Item Submissions</option>
                         <option value="user">User Accounts</option>
@@ -126,10 +127,9 @@
                     <button class="generate-report-button" onclick="generateReportPdf()"><i class="fas fa-file-pdf" aria-hidden="true"></i> Generate Report</button>
                 </div>
 
-               
+
                 <div class="btn-multi-select">
-                    <button class="selectall"><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)"> Select All</button>
-                    <button class="selectdelete" onclick="removeSelectedRows()">Exclude Selected</button>
+                    <button type="button" id="deleteSelectedButton" class="selectdelete" onclick="removeSelectedRows()" hidden><i class="fas fa-trash" aria-hidden="true"></i> Delete Selected</button>
                 </div>
 
                 <div class="report-table-scroll" role="region" aria-label="Generated report records" tabindex="0">
@@ -498,17 +498,23 @@ function renderReportTable(rows) {
     const tbody = document.getElementById('reportTableBody');
     if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No reports found for the current filters.</td></tr>';
+        updateBulkSelectionControls();
         return;
     }
 
     tbody.innerHTML = rows.map((row, index) => {
-        const editLabel = row.row_type === 'claim' ? 'Edit claim decision' : 'Edit report record';
+        const isForDisposal = row.row_type === 'for_disposal';
+        const editLabel = row.row_type === 'claim'
+            ? 'Edit claim decision'
+            : (isForDisposal ? 'Maintain in For Disposal' : 'Edit report record');
+        const editIcon = isForDisposal ? 'fa-screwdriver-wrench' : 'fa-pen';
         const actionButtons = `
             <button type="button" class="report-action view" onclick="openViewModal(${index})" title="View report" aria-label="View report"><i class="fas fa-eye" aria-hidden="true"></i></button>
-            <button type="button" class="report-action edit" onclick="openEditModal(${index})" title="${editLabel}" aria-label="${editLabel}"><i class="fas fa-pen" aria-hidden="true"></i></button>
+            <button type="button" class="report-action edit" onclick="openEditModal(${index})" title="${editLabel}" aria-label="${editLabel}"><i class="fas ${editIcon}" aria-hidden="true"></i></button>
             <button type="button" class="report-action delete" onclick="openDeleteModal(${index})" title="Exclude from this report" aria-label="Exclude from this report"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
-        return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}"></td><td>${escapeHtml(row.item_code || row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td class="report-actions">${actionButtons}</td></tr>`;
+        return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}" onchange="updateBulkSelectionControls()"></td><td>${escapeHtml(row.item_code || row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td class="report-actions">${actionButtons}</td></tr>`;
     }).join('');
+    updateBulkSelectionControls();
 }
 
 function formatReportItemId(value) {
@@ -716,6 +722,11 @@ function openEditModal(index) {
         return;
     }
 
+    if (row.row_type === 'for_disposal') {
+        window.location.href = row.maintenance_url || '/admin/For-Disposal';
+        return;
+    }
+
     alert('This record is managed in its original module. Only claim decisions can be edited from Reports.');
 }
 function closeEditModal() {}
@@ -740,8 +751,15 @@ function confirmDelete() {
     closeDeleteModal();
 }
 
-function toggleSelectAll(source) {
-    document.querySelectorAll('.rowCheckbox').forEach(cb => { cb.checked = source.checked; });
+function updateBulkSelectionControls() {
+    const checkboxes = Array.from(document.querySelectorAll('.rowCheckbox'));
+    const selectedCount = checkboxes.filter(cb => cb.checked).length;
+    const deleteButton = document.getElementById('deleteSelectedButton');
+
+    if (deleteButton) {
+        deleteButton.hidden = selectedCount === 0;
+        deleteButton.innerHTML = `<i class="fas fa-trash" aria-hidden="true"></i> Delete Selected (${selectedCount})`;
+    }
 }
 
 function removeSelectedRows() {
@@ -749,7 +767,6 @@ function removeSelectedRows() {
     if (!selected.length) { alert('Select at least one row first.'); return; }
     reportRowsCache = reportRowsCache.filter((_, index) => !selected.includes(index));
     renderReportTable(reportRowsCache);
-    document.getElementById('selectAll').checked = false;
 }
 
 function openClaimReportModal(index) {
@@ -928,7 +945,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=13"></script>
+<script src="/static/session-keepalive.js?v=14"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

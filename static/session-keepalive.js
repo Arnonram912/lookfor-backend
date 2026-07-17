@@ -12,7 +12,10 @@
     let idleTimeoutId = null;
     const ROOT_ADMIN_EMAIL = "admin@novaliches.sti.edu.ph";
     const ADMIN_PERMISSION_KEYS = [
+        "Dashboard",
         "Messages",
+        "Messages-Send",
+        "Messages-Manage",
         "User-Management",
         "User-Management-Create",
         "User-Management-Edit",
@@ -20,11 +23,32 @@
         "User-Management-Archive",
         "User-Management-Delete",
         "Lost-Reports",
+        "Lost-Reports-Create",
+        "Lost-Reports-Archive",
+        "Lost-Reports-Delete",
         "Found-Reports",
+        "Found-Reports-Create",
+        "Found-Reports-Approve",
+        "Found-Reports-Archive",
+        "Found-Reports-Delete",
         "Claim-Management",
+        "Claim-Management-Create",
+        "Claim-Management-Decide",
         "Reports",
+        "Reports-Export",
+        "Reports-Manage",
         "Confiscated-items",
-        "Content-management"
+        "Confiscated-items-Create",
+        "Confiscated-items-Edit",
+        "Confiscated-items-Delete",
+        "For-Disposal",
+        "For-Disposal-Manage",
+        "Audit-Logs",
+        "Content-management",
+        "Content-management-Announcements",
+        "Content-management-Taxonomy",
+        "Content-management-Term",
+        "Content-management-Edit"
     ];
 
     function decodeJwtPayload(token) {
@@ -335,11 +359,30 @@
     }
 
     window.getAdminPermissionsCached = getAdminPermissions;
+    window.hasAdminPermissionCachedSync = permission => {
+        const token = sessionStorage.getItem("admin_token");
+        const permissions = readCachedAdminPermissions(token) || [];
+        return permissions.includes(permission);
+    };
     window.checkAccess = cachedCheckAccess;
 
     function addAdminSidebarMenuItems() {
         const nav = document.querySelector("body > .sidebar .nav-links");
         if (!nav) return;
+        const dashboardLink = Array.from(nav.querySelectorAll("a")).find(link =>
+            String(link.getAttribute("href") || link.getAttribute("onclick") || "")
+                .toLowerCase()
+                .includes("/admin/dashboard")
+        );
+        if (dashboardLink?.closest("li")) {
+            const dashboardItem = dashboardLink.closest("li");
+            dashboardItem.dataset.permission = "Dashboard";
+            getAdminPermissions(false).then(permissions => {
+                dashboardItem.style.display = permissions.includes("Dashboard") ? "" : "none";
+            }).catch(() => {
+                dashboardItem.style.display = "none";
+            });
+        }
         const adminPageAliases = {
             "/admin/For-Disposal": "/c/9374b372-d94f-5fa4-a36d-e219bd12e3a6",
             "/admin/Audit-Logs": "/c/3fbf5fb3-92b4-57c5-81ac-8e82ef0bce83",
@@ -409,6 +452,12 @@
                 parentLink.closest("li").insertAdjacentElement("afterend", item);
             }
 
+            getAdminPermissions(false).then(permissions => {
+                item.style.display = permissions.includes(permission) ? "" : "none";
+            }).catch(() => {
+                item.style.display = "none";
+            });
+
             if (isAdminSubpageActive(targetUrl)) {
                 const parentItem = parentLink.closest("li");
                 parentItem.classList.remove("active");
@@ -424,7 +473,7 @@
             "adminForDisposalNav",
             "For Disposal",
             "/admin/For-Disposal",
-            "Confiscated-items",
+            "For-Disposal",
             "/static/photos/handw.png"
         );
         insertAfterLink(
@@ -432,7 +481,7 @@
             "adminAuditLogsNav",
             "Audit Logs",
             "/admin/Audit-Logs",
-            "Reports",
+            "Audit-Logs",
             "/static/photos/folderw.png"
         );
 
@@ -446,14 +495,226 @@
         }
     }
 
+    const ADMIN_ACTION_UI_RULES = {
+        messages: [
+            { permission: "Messages-Send", selectors: [
+                '[onclick*="openNewMessagePage"]',
+                '[onclick*="sendNewMessage"]',
+                '[onclick*="sendReply"]'
+            ] },
+            { permission: "Messages-Manage", selectors: [
+                '[onclick*="archiveMessage"]',
+                '[onclick*="deleteMessage"]',
+                '[onclick*="handleDeleteConversation"]'
+            ] }
+        ],
+        lost: [
+            { permission: "Lost-Reports-Create", selectors: [
+                '.action-bar [onclick*="openModal(\'reportModal\')"]',
+                '#reportModal [onclick*="submitReport"]',
+                '#confirmModal [onclick*="executeSubmit"]'
+            ] },
+            { permission: "Claim-Management-Create", selectors: [
+                '#possibleMatchesPanel button',
+                '[onclick*="applySelectedPossibleMatch"]'
+            ] },
+            { permission: "Lost-Reports-Archive", selectors: [
+                '[onclick*="runAdminBulkItemAction(\'lost\', \'archive\')"]',
+                '#recoverBtn'
+            ] },
+            { permission: "Lost-Reports-Delete", selectors: [
+                '[onclick*="runAdminBulkItemAction(\'lost\', \'delete\')"]',
+                '#deleteBtn'
+            ] }
+        ],
+        found: [
+            { permission: "Found-Reports-Create", selectors: [
+                '.action-bar [onclick*="openModal(\'reportModal\')"]',
+                '#reportModal [onclick*="submitReport"]',
+                '#confirmModal [onclick*="executeSubmit"]'
+            ] },
+            { permission: "Found-Reports-Approve", selectors: ['#approveBtn'] },
+            { permission: "Found-Reports-Archive", selectors: ['#rejectBtn'] },
+            { permission: "Claim-Management-Create", selectors: [
+                '#manualClaimBtn',
+                '#claimedBtn',
+                '#confirmDirectClaimBtn'
+            ] },
+            { permission: "Found-Reports-Archive", selectors: [
+                '[onclick*="runAdminBulkItemAction(\'found\', \'archive\')"]',
+                '#recoverBtn'
+            ] },
+            { permission: "Found-Reports-Delete", selectors: [
+                '[onclick*="runAdminBulkItemAction(\'found\', \'delete\')"]',
+                '#deleteBtn'
+            ] },
+            { permission: "For-Disposal-Manage", selectors: [
+                '[onclick*="runAdminBulkItemAction(\'found\', \'dispose\')"]',
+                '#disposeBtn'
+            ] }
+        ],
+        claims: [
+            { permission: "Claim-Management-Decide", selectors: [
+                '[onclick*="openDecisionModal"]',
+                '[onclick*="saveDecisionReport"]'
+            ] }
+        ],
+        reports: [
+            { permission: "Reports-Export", selectors: [
+                '[onclick*="generateReportPdf"]',
+                '[onclick*="printClaimReport"]'
+            ] },
+            { permission: "Reports-Manage", selectors: [
+                '.report-action.edit',
+                '.report-action.delete',
+                '#deleteSelectedButton',
+                '[onclick*="saveClaimReport"]'
+            ] },
+            { permission: "Claim-Management-Decide", selectors: [
+                '[onclick*="saveClaimReport"]'
+            ] }
+        ],
+        confiscated: [
+            { permission: "Confiscated-items-Create", selectors: [
+                '[onclick*="openConfiscatedModal"]',
+                '[onclick*="submitConfiscated"]',
+                '[onclick*="openReasonManager"]',
+                '[onclick*="addConfiscationReason"]',
+                '[onclick*="saveConfiscationReason"]',
+                '[onclick*="deleteConfiscationReason"]'
+            ] },
+            { permission: "Confiscated-items-Edit", selectors: ['[onclick*="editConfiscated"]'] },
+            { permission: "Confiscated-items-Delete", selectors: ['[onclick*="deleteConfiscated"]'] },
+            { permission: "For-Disposal-Manage", selectors: [
+                '[onclick*="updateDisposal"]',
+                '[onclick*="bulkDisposalAction"]'
+            ] }
+        ],
+        disposal: [
+            { permission: "For-Disposal-Manage", selectors: [
+                '[onclick*="updateDisposal"]',
+                '[onclick*="bulkDisposalAction"]'
+            ] }
+        ],
+        content: [
+            { permission: "Content-management-Announcements", selectors: [
+                '[onclick*="openModal(\'announcementModal\')"]',
+                '[onclick*="submitAnnouncement"]',
+                '[onclick*="executeSubmitAnnouncement"]'
+            ] },
+            { permission: "Content-management-Taxonomy", selectors: [
+                '[onclick*="createCategory"]',
+                '[onclick*="createDepartment"]',
+                '[onclick*="deleteCategory"]',
+                '[onclick*="deleteDepartment"]'
+            ] },
+            { permission: "Content-management-Term", selectors: [
+                '[onclick*="saveAcademicTermSchedule"]'
+            ] },
+            { permission: "Content-management-Edit", selectors: [
+                '[onclick*="toggleEditMode"]',
+                '[onclick*="saveDirectChanges"]',
+                '[onclick*="saveAboutChanges"]',
+                '[onclick*="saveExploreChanges"]'
+            ] }
+        ]
+    };
+
+    function getCurrentAdminActionModule() {
+        const path = window.location.pathname.toLowerCase();
+        const query = new URLSearchParams(window.location.search);
+        const aliases = {
+            "/c/073de3ca-5067-553d-90ba-9033ea9be665": "messages",
+            "/c/6a12cb4b-be2c-83ec-ae4b-671169ad8496": "lost",
+            "/c/f63b7f52-4bb0-5d24-8a09-80b3d1f77db2": "found",
+            "/c/f97a07ee-7138-519e-8e81-c077ced9ee0a": "claims",
+            "/c/8c2dc56e-79ae-5939-890e-315c8a959b32": query.get("view") === "audit" ? "audit" : "reports",
+            "/c/dd5c6fcb-8cb9-54c8-bb07-d8b3f6e2aa79": query.get("view") === "disposal" ? "disposal" : "confiscated",
+            "/c/9374b372-d94f-5fa4-a36d-e219bd12e3a6": "disposal",
+            "/c/ab3bc951-819c-5bd7-aa04-2740b55a64a4": "content",
+            "/c/cf6ffae9-1082-5e37-b051-3fffd2866f74": "content",
+            "/c/cb34df2e-2169-53be-867e-37b9fd08a7e6": "content",
+            "/c/d5e2c76e-2d33-5318-ba15-b150695800aa": "content"
+        };
+        if (aliases[path]) return aliases[path];
+        if (path.includes("/messages")) return "messages";
+        if (path.includes("/lost_items_report")) return "lost";
+        if (path.includes("/found_items_report")) return "found";
+        if (path.includes("/claim-management")) return "claims";
+        if (path.includes("/audit-logs")) return "audit";
+        if (path.includes("/for-disposal")) return "disposal";
+        if (path.includes("/confiscated-items")) return query.get("view") === "disposal" ? "disposal" : "confiscated";
+        if (path.includes("/reports")) return query.get("view") === "audit" ? "audit" : "reports";
+        if (path.includes("/content-")) return "content";
+        return "";
+    }
+
+    async function enforceAdminActionVisibility() {
+        const moduleName = getCurrentAdminActionModule();
+        const rules = ADMIN_ACTION_UI_RULES[moduleName] || [];
+        if (!rules.length) return;
+
+        let permissions = [];
+        try {
+            permissions = await getAdminPermissions(false);
+        } catch (_) {
+            permissions = [];
+        }
+
+        const applyRules = root => {
+            rules.forEach(rule => {
+                if (permissions.includes(rule.permission)) return;
+                rule.selectors.forEach(selector => {
+                    const matches = [];
+                    if (root.matches?.(selector)) matches.push(root);
+                    root.querySelectorAll?.(selector).forEach(element => matches.push(element));
+                    matches.forEach(element => {
+                        if (element.dataset.permissionHidden === rule.permission) return;
+                        element.dataset.permissionHidden = rule.permission;
+                        element.hidden = true;
+                        element.setAttribute("aria-hidden", "true");
+                        element.style.setProperty("display", "none", "important");
+                    });
+                });
+            });
+        };
+
+        applyRules(document);
+        const observer = new MutationObserver(mutations => {
+            mutations.forEach(mutation => {
+                if (mutation.type === "childList") {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) applyRules(node);
+                    });
+                } else if (mutation.target?.dataset?.permissionHidden) {
+                    if (!mutation.target.hidden) mutation.target.hidden = true;
+                    if (
+                        mutation.target.style.display !== "none"
+                        || mutation.target.style.getPropertyPriority("display") !== "important"
+                    ) {
+                        mutation.target.style.setProperty("display", "none", "important");
+                    }
+                }
+            });
+        });
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["style", "hidden"]
+        });
+    }
+
     initializeSessionKeepAlive();
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", preloadAdminPermissions, { once: true });
         document.addEventListener("DOMContentLoaded", loadTopbarProfileAvatar, { once: true });
         document.addEventListener("DOMContentLoaded", addAdminSidebarMenuItems, { once: true });
+        document.addEventListener("DOMContentLoaded", enforceAdminActionVisibility, { once: true });
     } else {
         preloadAdminPermissions();
         loadTopbarProfileAvatar();
         addAdminSidebarMenuItems();
+        enforceAdminActionVisibility();
     }
 })();

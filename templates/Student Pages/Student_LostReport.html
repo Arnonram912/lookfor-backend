@@ -4,7 +4,7 @@
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=15"> 
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=23">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -133,6 +133,10 @@
              <div class="profile-page-card">
                 <div class="action-bar">
                     <h2 class="section-title">Lost Items</h2>
+                    <div class="view-toggle" role="group" aria-label="Choose lost items view">
+                        <button type="button" id="lostThumbnailViewBtn" class="view-toggle-btn active" onclick="setLostDisplayMode('thumbnail')" aria-label="Thumbnail view" title="Thumbnail view" aria-pressed="true"><i class="fas fa-th-large" aria-hidden="true"></i><span>Thumbnail</span></button>
+                        <button type="button" id="lostListViewBtn" class="view-toggle-btn" onclick="setLostDisplayMode('list')" aria-label="List view" title="List view" aria-pressed="false"><i class="fas fa-list" aria-hidden="true"></i><span>List</span></button>
+                    </div>
                     <button class="upload-btn" id="studentLostArchiveBtn" onclick="setStudentLostView('archive')">Archive</button>
                     <button class="upload-btn" id="studentLostDeletedBtn" onclick="setStudentLostView('deleted')">Deleted Items</button>
                     <button class="upload-btn" onclick="openModal('reportModal')"> 
@@ -487,6 +491,25 @@ window.onclick = function(event) {
         // --- LOAD ITEMS INTO BOXES ---
        // --- LOAD ONLY MY ITEMS ---
 let studentLostView = "active";
+let lostDisplayMode = localStorage.getItem("lookfor-lost-display-mode") === "list" ? "list" : "thumbnail";
+
+function setLostDisplayMode(mode) {
+    lostDisplayMode = mode === "list" ? "list" : "thumbnail";
+    localStorage.setItem("lookfor-lost-display-mode", lostDisplayMode);
+    const grid = document.getElementById("lostItemsGrid");
+    const thumbnailBtn = document.getElementById("lostThumbnailViewBtn");
+    const listBtn = document.getElementById("lostListViewBtn");
+    const isList = lostDisplayMode === "list";
+    if (grid) grid.classList.toggle("list-view", isList);
+    if (thumbnailBtn) {
+        thumbnailBtn.classList.toggle("active", !isList);
+        thumbnailBtn.setAttribute("aria-pressed", String(!isList));
+    }
+    if (listBtn) {
+        listBtn.classList.toggle("active", isList);
+        listBtn.setAttribute("aria-pressed", String(isList));
+    }
+}
 
 function setStudentLostView(view) {
     studentLostView = studentLostView === view ? "active" : view;
@@ -497,6 +520,7 @@ function setStudentLostView(view) {
 
 async function loadLostItems() {
     const grid = document.getElementById("lostItemsGrid");
+    setLostDisplayMode(lostDisplayMode);
     const token = getStudentToken();
 
     if (!token) {

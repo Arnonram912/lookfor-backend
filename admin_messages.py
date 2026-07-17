@@ -6,7 +6,7 @@ from database import get_db
 import models
 import schemas
 from datetime import datetime
-from security import get_current_user
+from admin_routes import check_permission
 
 templates = Jinja2Templates(directory="templates")
 
@@ -50,7 +50,11 @@ def admin_messages(request: Request, db: Session = Depends(get_db)):
 # =====================================================
 
 @router.get("/thread/{thread_id}")
-def get_thread(thread_id: int, db: Session = Depends(get_db)):
+def get_thread(
+    thread_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages")),
+):
 
     messages = (
         db.query(models.Message)
@@ -76,7 +80,11 @@ def get_thread(thread_id: int, db: Session = Depends(get_db)):
 # =====================================================
 
 @router.post("/send-message")
-def send_message(data: schemas.SendMessageSchema, db: Session = Depends(get_db)):
+def send_message(
+    data: schemas.SendMessageSchema,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages-Send")),
+):
 
     # 1️⃣ Create thread first
     new_thread = models.Thread(
@@ -106,7 +114,11 @@ def send_message(data: schemas.SendMessageSchema, db: Session = Depends(get_db))
 # =====================================================
 
 @router.post("/send-reply")
-def send_reply(data: schemas.ReplySchema, db: Session = Depends(get_db)):
+def send_reply(
+    data: schemas.ReplySchema,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages-Send")),
+):
 
     thread = db.query(models.Thread).filter(
         models.Thread.id == data.thread_id
@@ -136,7 +148,7 @@ def send_reply(data: schemas.ReplySchema, db: Session = Depends(get_db)):
 def send_bulk_message(
     data: schemas.BulkSendMessageSchema,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(check_permission("Messages-Send"))
 ):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can send bulk messages.")
@@ -186,7 +198,11 @@ def send_bulk_message(
 # =====================================================
 
 @router.put("/message/read-all/{student_id}")
-def mark_all_as_read(student_id: int, db: Session = Depends(get_db)):
+def mark_all_as_read(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages")),
+):
     # Find all unread messages where this student is the sender
     # and the status is "unread"
     unread_messages = db.query(models.Message).filter(
@@ -205,7 +221,10 @@ def mark_all_as_read(student_id: int, db: Session = Depends(get_db)):
 # 6️⃣ MARK AS UNREAD
 # =====================================================
 @router.get("/api/messages/unread-count")
-def get_unread_count(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def get_unread_count(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(check_permission("Messages")),
+):
     # This ignores: 'Unread', 'UNREAD', and 'unread    ' (with spaces)
     count = db.query(models.Message).filter(
         models.Message.recipient_id == current_user.id,
@@ -215,7 +234,11 @@ def get_unread_count(db: Session = Depends(get_db), current_user: models.User = 
     return {"unread_count": count}
 
 @router.put("/message/unread/{message_id}")
-def mark_unread(message_id: int, db: Session = Depends(get_db)):
+def mark_unread(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages")),
+):
 
     msg = db.query(models.Message).filter(
         models.Message.id == message_id
@@ -232,7 +255,11 @@ def mark_unread(message_id: int, db: Session = Depends(get_db)):
 # =========================== ==========================
 
 @router.put("/message/archive/{message_id}")
-def archive_message(message_id: int, db: Session = Depends(get_db)):
+def archive_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages-Manage")),
+):
 
     msg = db.query(models.Message).filter(
         models.Message.id == message_id
@@ -249,7 +276,11 @@ def archive_message(message_id: int, db: Session = Depends(get_db)):
 # =====================================================
 
 @router.delete("/message/{message_id}")
-def delete_message(message_id: int, db: Session = Depends(get_db)):
+def delete_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages-Manage")),
+):
 
     msg = db.query(models.Message).filter(
         models.Message.id == message_id
@@ -269,8 +300,11 @@ def delete_message(message_id: int, db: Session = Depends(get_db)):
 # =====================================================
 
 @router.get("/search")
-def search_conversations(query: str,
-                         db: Session = Depends(get_db)):
+def search_conversations(
+    query: str,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Messages")),
+):
 
     threads = db.query(models.Thread).filter(
         models.Thread.subject.ilike(f"%{query}%")

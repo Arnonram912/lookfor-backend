@@ -1084,8 +1084,18 @@ animation: pulse-yellow 2s infinite;
     line-height: 1.1;
     margin-bottom: 30px;
 }
-.cta-headline span {
+/* Keep the LookFor wordmark consistent with the navbar logo. */
+.cta-headline > span {
+    display: inline-block;
+    font-family: "Great Vibes", cursive;
+    font-size: 1.15em;
+    font-weight: 700;
     color: var(--sti-blue);
+}
+
+.cta-headline > span > span {
+    font-family: inherit;
+    color: var(--sti-yellow);
 }
 
 .cta-subtext {
@@ -1888,6 +1898,61 @@ padding: 0 20px;
     .floating-animation,
     .pulse-animation {
         animation: none;
+    }
+}
+
+/* Scroll-triggered entrance for the How It Works heading and cards. */
+.js .landing-reveal {
+    opacity: 0;
+    transform: translateY(32px);
+    transition:
+        opacity 650ms ease var(--reveal-delay, 0ms),
+        transform 650ms cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+}
+
+.js .landing-reveal.reveal-from-top {
+    transform: translateY(-28px);
+}
+
+.js .landing-reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.js .step-card.landing-reveal.is-visible:hover {
+    transform: translateY(-10px);
+}
+
+#cms-how-title {
+    min-height: 1.25em;
+}
+
+.how-title-caret {
+    display: inline-block;
+    width: 3px;
+    height: 0.9em;
+    margin-left: 6px;
+    background: var(--sti-yellow);
+    vertical-align: -0.06em;
+    animation: howTitleCaretBlink 700ms steps(1, end) infinite;
+}
+
+@keyframes howTitleCaretBlink {
+    0%, 45% { opacity: 1; }
+    46%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .js .landing-reveal,
+    .js .landing-reveal.reveal-from-top {
+        opacity: 1;
+        transform: none;
+        transition: none;
+    }
+
+    .how-title-caret {
+        animation-duration: 1200ms;
     }
 }
 

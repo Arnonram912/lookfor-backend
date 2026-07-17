@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=18">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=19">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
 
 
@@ -214,6 +214,10 @@
                             <option value="40">40</option>
                             <option value="50">50</option>
                         </select>
+                        <div class="view-toggle" role="group" aria-label="Choose found items view">
+                            <button type="button" id="foundThumbnailViewBtn" class="view-toggle-btn active" onclick="setFoundDisplayMode('thumbnail')" aria-label="Thumbnail view" title="Thumbnail view" aria-pressed="true"><i class="fas fa-th-large" aria-hidden="true"></i><span>Thumbnail</span></button>
+                            <button type="button" id="foundListViewBtn" class="view-toggle-btn" onclick="setFoundDisplayMode('list')" aria-label="List view" title="List view" aria-pressed="false"><i class="fas fa-list" aria-hidden="true"></i><span>List</span></button>
+                        </div>
                     </div>
                     <div class="pagination-status" id="foundPaginationStatus">Page 1 of 1</div>
                     <div class="pagination-buttons">
@@ -261,8 +265,9 @@
                             <button type="button" class="btn-archive-big" id="archiveBtn">Delete</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
                             <button type="button" class="btn-archive-big" id="manualClaimBtn" onclick="handleManualClaimButtonClick()" style="display:none; background:#0d6efd;">Create Manual Claim</button>
+                            <button type="button" class="btn-archive-big" id="claimedBtn" onclick="handleClaimedButtonClick()" style="display:none; background:#198754;">Claimed</button>
                             <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
-                            <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">Delete Item</button>
+                            <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">For Disposal</button>
                         </div>
                     </div>
                 </div>
@@ -581,6 +586,7 @@ function showAccessDeniedPopup(permName) {
         registerAdminItemBulkScope('found', { getView: () => foundLifecycleView, reload: loadLostItems, render: renderFoundItems, gridId: 'lostItemsGrid' });
         let currentFoundPage = 1;
         let currentFoundPageSize = 10;
+        let foundDisplayMode = localStorage.getItem("lookfor-found-display-mode") === "list" ? "list" : "thumbnail";
         let activeFoundItemForManualClaim = null;
         let activeDetailFoundItem = null;
         let directClaimUsersCache = [];
@@ -831,8 +837,27 @@ function showAccessDeniedPopup(permName) {
         if (pageSizeInput) pageSizeInput.value = String(currentFoundPageSize);
     }
 
+    function setFoundDisplayMode(mode) {
+        foundDisplayMode = mode === "list" ? "list" : "thumbnail";
+        localStorage.setItem("lookfor-found-display-mode", foundDisplayMode);
+        const grid = document.getElementById("lostItemsGrid");
+        const thumbnailBtn = document.getElementById("foundThumbnailViewBtn");
+        const listBtn = document.getElementById("foundListViewBtn");
+        const isList = foundDisplayMode === "list";
+        if (grid) grid.classList.toggle("list-view", isList);
+        if (thumbnailBtn) {
+            thumbnailBtn.classList.toggle("active", !isList);
+            thumbnailBtn.setAttribute("aria-pressed", String(!isList));
+        }
+        if (listBtn) {
+            listBtn.classList.toggle("active", isList);
+            listBtn.setAttribute("aria-pressed", String(isList));
+        }
+    }
+
     function renderFoundItems() {
         const grid = document.getElementById("lostItemsGrid");
+        setFoundDisplayMode(foundDisplayMode);
         const filteredItems = getFilteredFoundItems();
 
         grid.innerHTML = "";
@@ -931,6 +956,7 @@ function showAccessDeniedPopup(permName) {
     const approveBtn = document.getElementById("approveBtn");
     const rejectBtn = document.getElementById("rejectBtn");
     const manualClaimBtn = document.getElementById("manualClaimBtn");
+    const claimedBtn = document.getElementById("claimedBtn");
     if (foundLifecycleView !== "active") {
         if (approveBtn) {
             approveBtn.style.display = "none";
@@ -952,14 +978,18 @@ function showAccessDeniedPopup(permName) {
             manualClaimBtn.style.display = "none";
             manualClaimBtn.disabled = true;
         }
+        if (claimedBtn) {
+            claimedBtn.style.display = "none";
+            claimedBtn.disabled = true;
+        }
         if (deleteBtn) {
             deleteBtn.style.display = foundLifecycleView === "deleted" ? "inline-flex" : "none";
             deleteBtn.textContent = "Delete Permanently";
             deleteBtn.onclick = () => disposeItem(item.id, item.is_pending);
         }
-        disposeBtn.style.display = (foundLifecycleView === "archive" && !item.is_pending) ? "inline-flex" : "none";
-        disposeBtn.textContent = "For Disposal";
-        disposeBtn.onclick = (foundLifecycleView === "archive" && !item.is_pending) ? () => moveArchivedFoundItemToDisposal(item.id) : null;
+        // Disposal is initiated from the active Found Items inventory.
+        disposeBtn.style.display = "none";
+        disposeBtn.onclick = null;
     } else {
         if (item.is_pending) {
             if (approveBtn) {
@@ -993,13 +1023,27 @@ function showAccessDeniedPopup(permName) {
             manualClaimBtn.style.display = (!item.is_pending && !item.is_matched) ? "inline-flex" : "none";
             manualClaimBtn.disabled = !!item.is_matched || !!item.is_pending;
         }
-        disposeBtn.style.display = "none";
-        disposeBtn.onclick = null;
+        if (claimedBtn) {
+            claimedBtn.style.display = (!item.is_pending && !item.is_claimed) ? "inline-flex" : "none";
+            claimedBtn.disabled = !!item.is_pending || !!item.is_claimed;
+        }
+        const canMoveActiveItemToDisposal = !item.is_pending && !item.is_matched && !item.is_claimed;
+        disposeBtn.style.display = canMoveActiveItemToDisposal ? "inline-flex" : "none";
+        disposeBtn.textContent = "For Disposal";
+        disposeBtn.onclick = canMoveActiveItemToDisposal ? () => moveFoundItemToDisposal(item.id) : null;
         if (deleteBtn) {
             deleteBtn.style.display = "inline-flex";
             deleteBtn.textContent = "Delete";
             deleteBtn.onclick = () => moveFoundItemToDeleted(item.id, item.is_pending);
         }
+    }
+
+    const canArchiveFound = window.hasAdminPermissionCachedSync?.('Found-Reports-Archive') === true;
+    const canDeleteFound = window.hasAdminPermissionCachedSync?.('Found-Reports-Delete') === true;
+    if (foundLifecycleView === "active" && !item.is_pending && !canArchiveFound) {
+        archiveBtn.style.display = "none";
+    } else if (foundLifecycleView === "archive" && !canDeleteFound) {
+        archiveBtn.style.display = "none";
     }
     
     openModal('itemDetailModal');
@@ -1010,6 +1054,25 @@ function handleManualClaimButtonClick() {
         showFoundReportAlert('info', 'No item selected', 'Please open an item first.');
         return;
     }
+    openManualClaimModal(activeDetailFoundItem);
+}
+
+function handleClaimedButtonClick() {
+    if (!activeDetailFoundItem || !activeDetailFoundItem.id) {
+        showFoundReportAlert('info', 'No item selected', 'Please open an item first.');
+        return;
+    }
+
+    if (activeDetailFoundItem.is_claimed) {
+        showFoundReportAlert('info', 'Already claimed', 'This item already has an approved claim.');
+        return;
+    }
+
+    if (activeDetailFoundItem.is_matched) {
+        window.location.href = '/admin/Claim-Management';
+        return;
+    }
+
     openManualClaimModal(activeDetailFoundItem);
 }
 
@@ -1230,8 +1293,8 @@ async function submitDirectClaim() {
     }
 }
 
-async function moveArchivedFoundItemToDisposal(itemId) {
-    const confirmed = await confirmFoundReportAction("Move to For Disposal?", "Move this archived item to the For Disposals menu?", "Move Item");
+async function moveFoundItemToDisposal(itemId) {
+    const confirmed = await confirmFoundReportAction("Move to For Disposal?", "Move this item out of active inventory and into the For Disposals menu?", "Move Item");
     if (!confirmed) return;
     const note = prompt('Optional disposal note:') || '';
     const response = await fetch(`/admin/items/${itemId}/disposal`, {
@@ -1742,7 +1805,7 @@ async function disposeItem(itemId, isPending = false) {
     </script>
       </div>
 </main>
-<script src="/static/session-keepalive.js?v=13"></script>
+<script src="/static/session-keepalive.js?v=14"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

@@ -285,7 +285,7 @@ body {
 
  
 
-.rowCheckbox, #selectAll { 
+.rowCheckbox {
 
   transform: scale(1.2); 
 
@@ -293,7 +293,7 @@ body {
 
 } 
 
-.btn-multi-selec{ 
+.btn-multi-select{
 
   margin-top: 10px; 
 
@@ -306,24 +306,6 @@ body {
   align-items: center; 
 
   justify-content: start; 
-
-} 
-
-.selectall{ 
-
-  color: var(--sti-blue); 
-
-  font-size: 1rem; 
-
-  padding: 6px 15px; 
-
-  border: none; 
-
-  border-radius: 4px; 
-
-  cursor: pointer; 
-
-  margin-top: 10px; 
 
 } 
 
@@ -346,6 +328,12 @@ body {
   margin-top: 10px; 
 
 } 
+
+.selectdelete[hidden] {
+
+  display: none;
+
+}
 
 .selectdelete:hover { 
 

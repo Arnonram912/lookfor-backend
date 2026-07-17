@@ -98,7 +98,10 @@ BULK_REGISTRATION_JOBS: dict[str, dict] = {}
 BULK_JOB_LOCK = threading.Lock()
 ROOT_ADMIN_EMAIL = "admin@novaliches.sti.edu.ph"
 ADMIN_PERMISSION_KEYS = [
+    "Dashboard",
     "Messages",
+    "Messages-Send",
+    "Messages-Manage",
     "User-Management",
     "User-Management-Create",
     "User-Management-Edit",
@@ -106,12 +109,46 @@ ADMIN_PERMISSION_KEYS = [
     "User-Management-Archive",
     "User-Management-Delete",
     "Lost-Reports",
+    "Lost-Reports-Create",
+    "Lost-Reports-Archive",
+    "Lost-Reports-Delete",
+    "Found-Reports",
+    "Found-Reports-Create",
+    "Found-Reports-Approve",
+    "Found-Reports-Archive",
+    "Found-Reports-Delete",
+    "Claim-Management",
+    "Claim-Management-Create",
+    "Claim-Management-Decide",
+    "Reports",
+    "Reports-Export",
+    "Reports-Manage",
+    "Confiscated-items",
+    "Confiscated-items-Create",
+    "Confiscated-items-Edit",
+    "Confiscated-items-Delete",
+    "For-Disposal",
+    "For-Disposal-Manage",
+    "Audit-Logs",
+    "Content-management",
+    "Content-management-Announcements",
+    "Content-management-Taxonomy",
+    "Content-management-Term",
+    "Content-management-Edit",
+]
+MODULE_PERMISSION_KEYS = {
+    "Dashboard",
+    "Messages",
+    "User-Management",
+    "Lost-Reports",
     "Found-Reports",
     "Claim-Management",
     "Reports",
     "Confiscated-items",
+    "For-Disposal",
+    "Audit-Logs",
     "Content-management",
-]
+}
 STUDENT_ACCESS_PERMISSION = "Student-Portal-Access"
 DELETE_QUEUE_PERMISSION = "__PENDING_DELETE__"
 
@@ -168,6 +205,20 @@ def parse_permissions(raw_permissions) -> list[str]:
         return raw_permissions or []
     except Exception:
         return []
+
+
+def normalize_admin_permissions(permissions) -> list[str]:
+    normalized = list(dict.fromkeys(
+        permission for permission in (permissions or [])
+        if permission in ADMIN_PERMISSION_KEYS
+    ))
+    for module_permission in MODULE_PERMISSION_KEYS:
+        if any(
+            permission.startswith(f"{module_permission}-")
+            for permission in normalized
+        ) and module_permission not in normalized:
+            normalized.insert(0, module_permission)
+    return normalized
 
 
 def is_root_admin(user: models.User | None) -> bool:
@@ -548,6 +599,17 @@ def check_permission(required_permission: str):
 
         return admin
     return permission_dependency
+
+
+def require_admin_permission(admin: models.User, required_permission: str) -> models.User:
+    if is_root_admin(admin):
+        return admin
+    if required_permission not in parse_permissions(admin.permissions):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access Denied: Requires {required_permission}",
+        )
+    return admin
 def create_admin_notification(
     db: Session,
     message: str,
@@ -1705,7 +1767,7 @@ async def toggle_archive(
     user_id: int, 
     archive: bool, 
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("User-Management-Archive"))
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -1880,7 +1942,7 @@ async def bulk_move_users_to_delete(
         "requested_count": len(user_ids)
     }
 
-# ROUTE 2: Permanent Delete (retained and inaccessible)
+# ROUTE 2: Permanent Delete
 @router.delete("/permanent-delete/{user_id}")
 async def permanent_delete(
     user_id: int,
@@ -1893,26 +1955,27 @@ async def permanent_delete(
         raise HTTPException(status_code=404, detail="User not found")
     if is_root_admin(user):
         raise HTTPException(status_code=404, detail="User not found")
+    if user.id == current_admin.id:
+        raise HTTPException(status_code=400, detail="You cannot permanently delete your own account.")
 
     try:
         deleted_user_name = user.full_name or user.email or f"User #{user_id}"
         deleted_user_is_admin = bool(user.is_admin)
-        retire_user_login_identity(user, pending_delete=True)
-        db.commit()
+        delete_user_and_related_records(db, user)
         create_admin_notification(
             db,
-            f"{deleted_user_name} was retained in Trash and disabled from User Management.",
+            f"{deleted_user_name} was permanently deleted from User Management.",
             "user_management_admin" if deleted_user_is_admin else "user_management_students",
             user_id,
             created_by_admin_id=current_admin.id
         )
         
-        return {"message": "User account retained in Trash and disabled. Previous records were preserved."}
+        return {"message": "User account permanently deleted."}
 
     except Exception as e:
         db.rollback()
         print(f"Delete Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Database Integrity Error: User has active records.")
+        raise HTTPException(status_code=500, detail="The user could not be permanently deleted. Related records were not changed.")
 
 
 @router.delete("/bulk-permanent-delete")
@@ -1932,7 +1995,8 @@ async def bulk_permanent_delete(
         users.extend(
             db.query(models.User).filter(
                 models.User.id.in_(user_id_chunk),
-                models.User.email != ROOT_ADMIN_EMAIL
+                models.User.email != ROOT_ADMIN_EMAIL,
+                models.User.id != current_admin.id
             ).all()
         )
 
@@ -1942,22 +2006,33 @@ async def bulk_permanent_delete(
     deleted_count = 0
     try:
         for user in users:
-            retire_user_login_identity(user, pending_delete=True)
+            delete_user_and_related_records(db, user)
             deleted_count += 1
         db.commit()
     except Exception as e:
         db.rollback()
         print(f"Bulk Delete Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Database Integrity Error: Some users still have active records.")
+        raise HTTPException(status_code=500, detail="The selected users could not be permanently deleted. No partial deletion was saved.")
 
     return {
-        "message": f"{deleted_count} user account(s) retained in Trash and disabled.",
+        "message": f"{deleted_count} user account(s) permanently deleted.",
         "count": deleted_count,
         "requested_count": len(user_ids)
     }
 
 def delete_user_and_related_records(db: Session, user: models.User):
     user_id = user.id
+
+    # Preserve historical records that can safely exist without their admin.
+    db.execute(
+        text(
+            "UPDATE audit_logs "
+            "SET admin_id = CASE WHEN admin_id = :user_id THEN NULL ELSE admin_id END, "
+            "claimant_id = CASE WHEN claimant_id = :user_id THEN NULL ELSE claimant_id END "
+            "WHERE admin_id = :user_id OR claimant_id = :user_id"
+        ),
+        {"user_id": user_id}
+    )
     db.query(models.ClaimDecisionReport).filter(
         models.ClaimDecisionReport.created_by_admin_id == user_id
     ).update(
@@ -1970,13 +2045,48 @@ def delete_user_and_related_records(db: Session, user: models.User):
         {models.ClaimProof.claimant_user_id: None},
         synchronize_session=False
     )
+    db.query(models.DisposalReport).filter(
+        models.DisposalReport.disposed_by_admin_id == user_id
+    ).update(
+        {models.DisposalReport.disposed_by_admin_id: None},
+        synchronize_session=False
+    )
+    db.query(models.SavedReport).filter(
+        models.SavedReport.created_by_admin_id == user_id
+    ).delete(synchronize_session=False)
+
     db.query(models.Message).filter(
         (models.Message.sender_id == user_id) |
         (models.Message.recipient_id == user_id)
     ).delete(synchronize_session=False)
-    db.query(models.Claim).filter(models.Claim.claimant_id == user_id).delete(synchronize_session=False)
+
+    claimant_claim_ids = [
+        claim_id for (claim_id,) in db.query(models.Claim.id).filter(
+            models.Claim.claimant_id == user_id
+        ).all()
+    ]
+    if claimant_claim_ids:
+        db.query(models.ClaimDecisionReport).filter(
+            models.ClaimDecisionReport.claim_id.in_(claimant_claim_ids)
+        ).delete(synchronize_session=False)
+        db.query(models.ClaimProof).filter(
+            models.ClaimProof.claim_id.in_(claimant_claim_ids)
+        ).delete(synchronize_session=False)
+        db.query(models.Claim).filter(
+            models.Claim.id.in_(claimant_claim_ids)
+        ).delete(synchronize_session=False)
+
     user_items = db.query(models.Item).filter(models.Item.user_id == user_id).all()
     for item in user_items:
+        db.execute(
+            text(
+                "UPDATE audit_logs "
+                "SET lost_item_id = CASE WHEN lost_item_id = :item_id THEN NULL ELSE lost_item_id END, "
+                "found_item_id = CASE WHEN found_item_id = :item_id THEN NULL ELSE found_item_id END "
+                "WHERE lost_item_id = :item_id OR found_item_id = :item_id"
+            ),
+            {"item_id": item.id}
+        )
         linked_claims = db.query(models.Claim).filter(
             or_(
                 models.Claim.lost_item_id == item.id,
@@ -2073,7 +2183,7 @@ async def confirm_match(
     lost_id: int,
     found_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Claim-Management-Create")),
 ):
     lost_item = db.query(models.Item).filter(models.Item.id == lost_id).first()
     found_item = db.query(models.Item).filter(models.Item.id == found_id).first()
@@ -2093,7 +2203,7 @@ async def confirm_match(
 @router.get("/items/found")
 def get_found_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Found-Reports")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
@@ -2105,7 +2215,7 @@ def get_found_items(
 @router.get("/items/found/archived")
 def get_archived_found_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Found-Reports")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
@@ -2118,7 +2228,7 @@ def get_archived_found_items(
 @router.get("/items/found/deleted")
 def get_deleted_found_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Found-Reports")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
@@ -2129,7 +2239,7 @@ def get_deleted_found_items(
 @router.get("/items/lost")
 def get_lost_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Lost-Reports")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
@@ -2141,7 +2251,7 @@ def get_lost_items(
 @router.get("/items/lost/archived")
 def get_archived_lost_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Lost-Reports")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
@@ -2154,7 +2264,7 @@ def get_archived_lost_items(
 @router.get("/items/lost/deleted")
 def get_deleted_lost_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Lost-Reports")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
@@ -2251,6 +2361,52 @@ def admin_profile(
         "Admin Pages/Admin_Profile.html",
         {"request": request}
     )
+
+@router.get("/recent-activity")
+def get_admin_recent_activity(
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_admin),
+):
+    """Return audit entries created by the administrator viewing the profile."""
+    limit = max(1, min(limit, 20))
+    actor_name = format_user_display_name(
+        current_user,
+        current_user.email or "Unknown administrator",
+    )
+    activities = (
+        db.query(models.Notification)
+        # Never mix another administrator's actions into this profile timeline.
+        .filter(models.Notification.created_by_admin_id == current_user.id)
+        .order_by(models.Notification.created_at.desc(), models.Notification.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    def without_repeated_actor(message: str | None) -> str:
+        description = str(message or "Administrative activity").strip()
+        identities = [actor_name, str(current_user.email or "").strip()]
+        for identity in identities:
+            if identity and description.casefold().startswith(identity.casefold()):
+                remainder = description[len(identity):].lstrip(" :-–—")
+                return remainder or "performed an administrative activity."
+        return description
+
+    return [
+        {
+            "id": activity.id,
+            "actor": actor_name,
+            "description": without_repeated_actor(activity.message),
+            "type": activity.type,
+            "target_url": activity.target_url,
+            # Notification timestamps are stored as naive UTC values.
+            "created_at": (
+                activity.created_at.isoformat()
+                + ("Z" if activity.created_at.tzinfo is None else "")
+            ) if activity.created_at else None,
+        }
+        for activity in activities
+    ]
 
 @router.post("/update-profile")
 async def update_profile(
@@ -2373,7 +2529,7 @@ async def content_editor_page(
 @router.get("/pending-items")
 def get_pending_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Found-Reports"))
 ):
     auto_archive_pending(db)
 
@@ -2388,7 +2544,7 @@ def get_pending_items(
 @router.get("/pending-items/archived")
 def get_archived_pending_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Found-Reports"))
 ):
     items = db.query(models.PendingItem).filter(
         models.PendingItem.archived == True,
@@ -2400,7 +2556,7 @@ def get_archived_pending_items(
 @router.get("/pending-items/deleted")
 def get_deleted_pending_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Found-Reports")),
 ):
     items = db.query(models.PendingItem).filter(
         models.PendingItem.deleted == True
@@ -2428,7 +2584,7 @@ async def get_caregory(
 async def create_department(
     data: dict,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management"))
+    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
 ):
     name = str(data.get("name", "")).strip()
     if not name:
@@ -2457,7 +2613,7 @@ async def create_department(
 async def delete_department(
     department_id: int,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management"))
+    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
 ):
     department = db.query(models.Department).filter(models.Department.id == department_id).first()
     if not department:
@@ -2481,7 +2637,7 @@ async def delete_department(
 async def create_category(
     data: dict,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management"))
+    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
 ):
     name = str(data.get("name", "")).strip()
     if not name:
@@ -2510,7 +2666,7 @@ async def create_category(
 async def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management"))
+    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
 ):
     category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not category:
@@ -2536,21 +2692,24 @@ async def create_new_admin(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("User-Management-Create"))
 ):
-    requested_permissions = list(dict.fromkeys(admin_in.permissions))
+    submitted_permissions = list(dict.fromkeys(admin_in.permissions))
+    requested_permissions = normalize_admin_permissions(submitted_permissions)
     assignable_permissions = get_assignable_permissions(current_admin)
     invalid_permissions = [
-        permission for permission in requested_permissions
-        if permission not in assignable_permissions
+        permission for permission in submitted_permissions
+        if permission not in ADMIN_PERMISSION_KEYS or permission not in assignable_permissions
     ]
+
+    invalid_permissions.extend(
+        permission for permission in requested_permissions
+        if permission not in assignable_permissions and permission not in invalid_permissions
+    )
 
     if invalid_permissions:
         raise HTTPException(
             status_code=403,
             detail=f"You cannot grant permissions you do not have: {', '.join(invalid_permissions)}"
         )
-
-    if any(permission.startswith("User-Management-") for permission in requested_permissions):
-        requested_permissions = list(dict.fromkeys(["User-Management", *requested_permissions]))
 
     first_name = admin_in.first_name.strip()
     middle_name = (admin_in.middle_name or "").strip()
@@ -2569,8 +2728,8 @@ async def create_new_admin(
     if not (admin_in.department or "").strip():
         raise HTTPException(status_code=400, detail="Department / Office is required")
     personnel = admin_in.personnel.strip().title()
-    if personnel not in {"Faculty", "Staff"}:
-        raise HTTPException(status_code=400, detail="Personnel must be Faculty or Staff")
+    if personnel not in {"Admin", "Faculty", "Staff"}:
+        raise HTTPException(status_code=400, detail="Personnel must be Admin, Faculty, or Staff")
 
     existing = db.query(models.User).filter(
         or_(
@@ -2603,22 +2762,23 @@ async def create_new_admin(
     db.commit()
     db.refresh(new_admin)
 
+    account_label = "Staff" if personnel == "Staff" else "Admin"
     email_queued = queue_account_access_email(
         new_admin.email,
         new_admin.full_name,
         temp_password,
-        account_type="admin",
+        account_type=account_label.lower(),
     )
 
     create_admin_notification(
         db,
-        f"New admin account created for {full_name}.",
+        f"New {account_label.lower()} account created for {full_name}.",
         "user_management_admin",
         new_admin.id,
         created_by_admin_id=current_admin.id,
     )
     return {
-        "message": "Admin created successfully",
+        "message": f"{account_label} created successfully",
         "temp_password": temp_password,
         "admin_id": admin_id,
         "email_queued": email_queued,
@@ -2641,7 +2801,7 @@ def get_academic_term(
 def update_academic_term(
     data: AcademicTermScheduleUpdate,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management")),
+    admin: models.User = Depends(check_permission("Content-management-Term")),
 ):
     if data.current_end_date <= data.current_start_date:
         raise HTTPException(status_code=400, detail="Current semester end date must be after its start date.")
@@ -2694,7 +2854,7 @@ def update_academic_term(
 @router.post("/academic-term/end")
 def manually_end_academic_term(
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("User-Management-Archive")),
+    admin: models.User = Depends(check_permission("Content-management-Term")),
 ):
     setting = get_or_create_academic_term_setting(db)
     archived_count = end_current_academic_term(db, setting, admin.id)
@@ -2709,7 +2869,7 @@ def manually_end_academic_term(
 def reactivate_academic_term(
     data: AcademicTermReactivateRequest,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("User-Management-Archive")),
+    admin: models.User = Depends(check_permission("Content-management-Term")),
 ):
     setting = get_or_create_academic_term_setting(db)
     if setting.current_status != "ended":
@@ -2791,7 +2951,7 @@ def reactivate_academic_term(
 @router.post("/academic-term/start")
 def manually_start_academic_term(
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("User-Management-Archive")),
+    admin: models.User = Depends(check_permission("Content-management-Term")),
 ):
     setting = get_or_create_academic_term_setting(db)
     try:
@@ -2818,9 +2978,18 @@ async def update_user_permissions(
     if is_root_admin(user) and not is_root_admin(admin):
         raise HTTPException(status_code=404, detail="User not found")
 
-    requested_permissions = list(dict.fromkeys(data.permissions))
+    submitted_permissions = list(dict.fromkeys(data.permissions))
+    requested_permissions = normalize_admin_permissions(submitted_permissions)
     assignable_permissions = get_assignable_permissions(admin)
-    invalid_permissions = [permission for permission in requested_permissions if permission not in assignable_permissions]
+    invalid_permissions = [
+        permission for permission in submitted_permissions
+        if permission not in ADMIN_PERMISSION_KEYS or permission not in assignable_permissions
+    ]
+
+    invalid_permissions.extend(
+        permission for permission in requested_permissions
+        if permission not in assignable_permissions and permission not in invalid_permissions
+    )
 
     if invalid_permissions:
         raise HTTPException(
@@ -2829,8 +2998,6 @@ async def update_user_permissions(
         )
 
     permissions = requested_permissions
-    if any(permission.startswith("User-Management-") for permission in permissions):
-        permissions = list(dict.fromkeys(["User-Management", *permissions]))
 
     if not user.is_admin and student_has_portal_access(user) and STUDENT_ACCESS_PERMISSION not in permissions:
         permissions.append(STUDENT_ACCESS_PERMISSION)
@@ -3064,7 +3231,7 @@ async def grant_admin_access(
 async def archive_students_by_batch(
     data: dict,
     db: Session = Depends(get_db),
-    admin = Depends(check_permission("User-Management"))
+    admin = Depends(check_permission("User-Management-Archive"))
 ):
     batch_id = str(data.get("batch_id", "")).strip()
     if not batch_id:
@@ -3101,7 +3268,7 @@ async def archive_students_by_batch(
 async def restore_students_by_batch(
     data: dict,
     db: Session = Depends(get_db),
-    admin = Depends(check_permission("User-Management"))
+    admin = Depends(check_permission("User-Management-Archive"))
 ):
     batch_id = str(data.get("batch_id", "")).strip()
     if not batch_id:
@@ -3138,7 +3305,7 @@ async def restore_students_by_batch(
 async def delete_students_by_batch(
     data: dict,
     db: Session = Depends(get_db),
-    admin = Depends(check_permission("User-Management"))
+    admin = Depends(check_permission("User-Management-Delete"))
 ):
     batch_id = str(data.get("batch_id", "")).strip()
     if not batch_id:
@@ -3282,7 +3449,7 @@ async def get_bulk_register_status(
 async def approve_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Found-Reports-Approve"))
 ):
     # 1. Find the pending item
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == item_id).first()
@@ -3365,7 +3532,7 @@ async def approve_item(
 def archive_pending(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Found-Reports-Archive"))
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -3380,7 +3547,7 @@ def archive_pending(
         "new_report",
         pending_id,
         "/admin/Found_Items_Report",
-        created_by_admin_id=getattr(admin, "id", None)
+        created_by_admin_id=current_admin.id
     )
     return {"message": "Item archived"}
 
@@ -3389,7 +3556,7 @@ def archive_pending(
 def dispose_pending_item(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin)
+    current_user: models.User = Depends(check_permission("Found-Reports-Delete"))
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -3437,7 +3604,7 @@ def dispose_pending_item(
 def archive_found_item(
     item_id: int, 
     db: Session = Depends(get_db), 
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Found-Reports-Archive"))
 ):
     # 1. Search in the Items table
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
@@ -3457,7 +3624,7 @@ def archive_found_item(
 def recover_pending(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin)
+    current_user: models.User = Depends(check_permission("Found-Reports-Archive"))
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if pending:
@@ -3497,7 +3664,7 @@ def recover_pending(
 def move_pending_item_to_deleted(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin),
+    current_user: models.User = Depends(check_permission("Found-Reports-Delete")),
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -3511,7 +3678,7 @@ def move_pending_item_to_deleted(
 def recover_lost_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin)
+    current_user: models.User = Depends(check_permission("Lost-Reports-Archive"))
 ):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
@@ -3534,7 +3701,7 @@ def recover_lost_item(
 def recover_found_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin)
+    current_user: models.User = Depends(check_permission("Found-Reports-Archive"))
 ):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
@@ -3629,7 +3796,7 @@ async def finalize_lost_upload(
     matched_item_id: int = Form(None), 
     db: Session = Depends(get_db),
     # 1. Add this dependency to get the logged-in user's info
-    current_user: models.User = Depends(get_current_admin) 
+    current_user: models.User = Depends(check_permission("Lost-Reports-Create"))
 ):
     # 2. Save the file
     try:
@@ -3771,7 +3938,7 @@ async def finalize_found_upload(
     ai_score: float = Form(0.0),       
     matched_item_id: int = Form(None), 
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin) 
+    current_user: models.User = Depends(check_permission("Found-Reports-Create"))
 ):
     # 2. Save the file
     try:
@@ -3883,6 +4050,11 @@ async def archive_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    require_admin_permission(
+        current_user,
+        "Lost-Reports-Archive" if item.status == "lost" else "Found-Reports-Archive",
+    )
+
     # 2. Update the status
     item.archived = True
     item.deleted = False
@@ -3905,6 +4077,10 @@ async def move_item_to_deleted(
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    require_admin_permission(
+        current_user,
+        "Lost-Reports-Delete" if item.status == "lost" else "Found-Reports-Delete",
+    )
     item.archived = True
     item.deleted = True
     db.commit()
@@ -3919,6 +4095,10 @@ async def dispose_item(
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
+    require_admin_permission(
+        current_user,
+        "Lost-Reports-Delete" if item.status == "lost" else "Found-Reports-Delete",
+    )
 
     try:
         linked_claims = db.query(models.Claim).filter(
@@ -3953,7 +4133,7 @@ async def dispose_item(
 @router.get("/dashboard-stats")
 async def get_stats(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Dashboard")),
 ):
     return {
         "welcome": f"Hello {current_admin.email}",
@@ -4082,7 +4262,7 @@ async def create_announcement(
     content: str = Form(...),
     file: UploadFile = File(...), # Changed from 'image' to 'file'
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Content-management-Announcements"))
 ):
     try:
         validate_upload_file_size(file, label="Announcement image")
@@ -4158,7 +4338,7 @@ async def report_confiscated(
     student_number: str = Form(None),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
 ):
     student_name = (student_name or "").strip() or None
     student_number = (student_number or "").strip() or None
@@ -4219,7 +4399,7 @@ async def report_confiscated(
 @router.get("/confiscation-reasons")
 def get_confiscation_reasons(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items")),
 ):
     reasons = db.query(models.ConfiscationReason).order_by(models.ConfiscationReason.name.asc()).all()
     if not reasons:
@@ -4234,7 +4414,7 @@ def get_confiscation_reasons(
 def create_confiscation_reason(
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
 ):
     name = str(payload.get("name") or "").strip()
     if not name:
@@ -4256,7 +4436,7 @@ def update_confiscation_reason(
     reason_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
 ):
     reason = db.query(models.ConfiscationReason).filter(models.ConfiscationReason.id == reason_id).first()
     if not reason:
@@ -4280,7 +4460,7 @@ def update_confiscation_reason(
 def delete_confiscation_reason(
     reason_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
 ):
     reason = db.query(models.ConfiscationReason).filter(models.ConfiscationReason.id == reason_id).first()
     if not reason:
@@ -4295,6 +4475,10 @@ async def get_confiscated_items(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_current_admin),
 ):
+    require_admin_permission(
+        current_admin,
+        "For-Disposal" if view == "disposal" else "Confiscated-items",
+    )
     query = db.query(models.ConfiscatedItem)
     if view == "disposal":
         query = query.filter(models.ConfiscatedItem.disposal_status == "for_disposal")
@@ -4354,7 +4538,7 @@ def update_archived_item_disposal(
     item_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("For-Disposal-Manage")),
 ):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
@@ -4363,8 +4547,25 @@ def update_archived_item_disposal(
     statuses = {"schedule": "for_disposal", "cancel": "active", "complete": "disposed"}
     if action not in statuses:
         raise HTTPException(status_code=400, detail="Invalid disposal action")
-    if action == "schedule" and (not item.archived or item.deleted):
-        raise HTTPException(status_code=400, detail="Only archived items can be moved to For Disposal")
+    if action == "schedule" and item.deleted:
+        raise HTTPException(status_code=400, detail="Deleted items cannot be moved to For Disposal")
+    if action == "schedule":
+        active_claim = db.query(models.Claim.id).filter(
+            or_(
+                models.Claim.found_item_id == item.id,
+                models.Claim.lost_item_id == item.id,
+            ),
+            models.Claim.status.in_(["pending", "approved"]),
+        ).first()
+        if active_claim:
+            raise HTTPException(
+                status_code=409,
+                detail="Items with an active or approved claim cannot be moved to For Disposal",
+            )
+        # For Disposal is outside the live inventory, so active items are
+        # archived automatically as part of this transition.
+        item.archived = True
+        item.deleted = False
     if action == "complete" and item.disposal_status != "for_disposal":
         raise HTTPException(status_code=400, detail="Only items waiting for disposal can be confirmed")
     item.disposal_status = statuses[action]
@@ -4377,7 +4578,7 @@ def update_archived_item_disposal(
     db.commit()
     label = {"schedule": "moved to For Disposal", "cancel": "returned to Archive", "complete": "recorded as disposed"}[action]
     create_admin_notification(
-        db, f"Archived {item.status} item #{item.id} was {label}.", "item_disposal",
+        db, f"{item.status.title()} item #{item.id} was {label}.", "item_disposal",
         item.id, "/admin/For-Disposal", created_by_admin_id=current_admin.id,
     )
     return {
@@ -4392,7 +4593,7 @@ def update_confiscated_disposal(
     item_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("For-Disposal-Manage")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
@@ -4440,7 +4641,7 @@ def get_audit_logs(
     search: str = "",
     limit: int = 200,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Audit-Logs")),
 ):
     limit = max(1, min(limit, 500))
     top_limit = int(limit)
@@ -4485,7 +4686,7 @@ def get_audit_logs(
 async def get_confiscated_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
@@ -4508,7 +4709,7 @@ async def update_confiscated_item(
     student_number: str = Form(None),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items-Edit")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
@@ -4565,7 +4766,7 @@ async def update_confiscated_item(
 async def delete_confiscated_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Confiscated-items-Delete")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:

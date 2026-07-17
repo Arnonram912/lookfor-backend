@@ -5,7 +5,7 @@
     <title>Admin Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
     
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=22">
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=23">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -181,7 +181,6 @@
                     <span class="admin-bulk-count" id="lostBulkCount">0 selected</span>
                     <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'archive')">Archive</button>
                     <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'delete')">Delete</button>
-                    <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'dispose')">Dispose</button>
                     <button type="button" class="upload-btn" onclick="clearAdminBulkSelection('lost'); renderLostItems();">Clear</button>
                 </div>
 
@@ -199,6 +198,10 @@
                             <option value="40">40</option>
                             <option value="50">50</option>
                         </select>
+                        <div class="view-toggle" role="group" aria-label="Choose lost items view">
+                            <button type="button" id="lostThumbnailViewBtn" class="view-toggle-btn active" onclick="setLostDisplayMode('thumbnail')" aria-label="Thumbnail view" title="Thumbnail view" aria-pressed="true"><i class="fas fa-th-large" aria-hidden="true"></i><span>Thumbnail</span></button>
+                            <button type="button" id="lostListViewBtn" class="view-toggle-btn" onclick="setLostDisplayMode('list')" aria-label="List view" title="List view" aria-pressed="false"><i class="fas fa-list" aria-hidden="true"></i><span>List</span></button>
+                        </div>
                     </div>
                     <div class="pagination-status" id="lostPaginationStatus">Page 1 of 1</div>
                     <div class="pagination-buttons">
@@ -249,7 +252,6 @@
                             <button type="button" class="btn-found lost-submit-btn" id="applySelectedMatchBtn" style="display:none;" onclick="applySelectedPossibleMatch()">Use Selected Match</button>
                             <button type="button" class="btn-archive-big" id="archiveBtn">Delete</button>
                             <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
-                            <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">Delete Item</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
                         </div>
                     </div>
@@ -574,6 +576,7 @@ function showAccessDeniedPopup(permName) {
         registerAdminItemBulkScope('lost', { getView: () => lostLifecycleView, reload: loadLostItems, render: renderLostItems, gridId: 'lostItemsGrid' });
         let currentLostPage = 1;
         let currentLostPageSize = 10;
+        let lostDisplayMode = localStorage.getItem("lookfor-lost-display-mode") === "list" ? "list" : "thumbnail";
         let reportOwnerUsersCache = [];
         let reportOwnerSearchTimer = null;
 
@@ -789,8 +792,27 @@ function showAccessDeniedPopup(permName) {
         if (pageSizeInput) pageSizeInput.value = String(currentLostPageSize);
     }
 
+    function setLostDisplayMode(mode) {
+        lostDisplayMode = mode === "list" ? "list" : "thumbnail";
+        localStorage.setItem("lookfor-lost-display-mode", lostDisplayMode);
+        const grid = document.getElementById("lostItemsGrid");
+        const thumbnailBtn = document.getElementById("lostThumbnailViewBtn");
+        const listBtn = document.getElementById("lostListViewBtn");
+        const isList = lostDisplayMode === "list";
+        if (grid) grid.classList.toggle("list-view", isList);
+        if (thumbnailBtn) {
+            thumbnailBtn.classList.toggle("active", !isList);
+            thumbnailBtn.setAttribute("aria-pressed", String(!isList));
+        }
+        if (listBtn) {
+            listBtn.classList.toggle("active", isList);
+            listBtn.setAttribute("aria-pressed", String(isList));
+        }
+    }
+
     function renderLostItems() {
         const grid = document.getElementById("lostItemsGrid");
+        setLostDisplayMode(lostDisplayMode);
         const filteredItems = getFilteredLostItems();
 
         grid.innerHTML = "";
@@ -1002,7 +1024,6 @@ function showAccessDeniedPopup(permName) {
     if (lostLifecycleView === "active") {
         loadPossibleMatchesForDetail(item.id, item.category, Boolean(item.is_matched), false);
     }
-    const disposeBtn = document.getElementById("disposeBtn");
     const archiveBtn = document.getElementById("archiveBtn");
     const deleteBtn = document.getElementById("deleteBtn");
     const recoveryBtn = document.getElementById("recoverBtn");
@@ -1011,9 +1032,6 @@ function showAccessDeniedPopup(permName) {
         archiveBtn.style.display = lostLifecycleView === "archive" ? "inline-flex" : "none";
         archiveBtn.textContent = "Delete";
         archiveBtn.onclick = () => moveLostItemToDeleted(item.id);
-        disposeBtn.style.display = lostLifecycleView === "archive" ? "inline-flex" : "none";
-        disposeBtn.textContent = "For Disposal";
-        disposeBtn.onclick = lostLifecycleView === "archive" ? () => moveArchivedItemToDisposal(item.id) : null;
         recoveryBtn.onclick = () => recoverArchivedLostItem(item.id);
         deleteBtn.style.display = lostLifecycleView === "deleted" ? "inline-flex" : "none";
         deleteBtn.textContent = "Delete Permanently";
@@ -1022,13 +1040,19 @@ function showAccessDeniedPopup(permName) {
         archiveBtn.style.display = "inline-flex";
         archiveBtn.textContent = "Archive Item";
         archiveBtn.onclick = () => archiveLostItem(item.id);
-        disposeBtn.style.display = "none";
-        disposeBtn.onclick = null;
         recoveryBtn.style.display = "none"; 
         deleteBtn.style.display = "inline-flex";
         deleteBtn.textContent = "Delete";
         deleteBtn.onclick = () => moveLostItemToDeleted(item.id);
     
+    }
+
+    const canArchiveLost = window.hasAdminPermissionCachedSync?.('Lost-Reports-Archive') === true;
+    const canDeleteLost = window.hasAdminPermissionCachedSync?.('Lost-Reports-Delete') === true;
+    if (lostLifecycleView === "active" && !canArchiveLost) {
+        archiveBtn.style.display = "none";
+    } else if (lostLifecycleView === "archive" && !canDeleteLost) {
+        archiveBtn.style.display = "none";
     }
     
     openModal('itemDetailModal');
@@ -1242,22 +1266,6 @@ async function moveLostItemToDeleted(itemId) {
     } catch (error) {
         await showLostUploadAlert('error', 'Move failed', error.message);
     }
-}
-
-async function moveArchivedItemToDisposal(itemId) {
-    const confirmed = await confirmFoundReportAction("Move to For Disposal?", "Move this archived item to the For Disposals menu?", "Move Item");
-    if (!confirmed) return;
-    const note = prompt('Optional disposal note:') || '';
-    const response = await fetch(`/admin/items/${itemId}/disposal`, {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'schedule', note })
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) return showLostUploadAlert('error', 'Action failed', result.detail || 'Could not move item.');
-    await showLostUploadAlert('success', 'Moved for disposal', result.message);
-    closeModal('itemDetailModal');
-    loadLostItems();
 }
 
         function showLostUploadAlert(icon, title, text) {
@@ -1951,7 +1959,7 @@ async function disposeItem(itemId) {
         window.location.href = "/";
     }
     </script>
-<script src="/static/session-keepalive.js?v=13"></script>
+<script src="/static/session-keepalive.js?v=14"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

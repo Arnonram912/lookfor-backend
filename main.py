@@ -39,7 +39,15 @@ from clip_test import (
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from admin_messages import router as admin_messages_router
-from admin_routes import ADMIN_PERMISSION_KEYS, ROOT_ADMIN_EMAIL, router as admin_router, create_admin_notification, process_academic_term_schedule
+from admin_routes import (
+    ADMIN_PERMISSION_KEYS,
+    ROOT_ADMIN_EMAIL,
+    router as admin_router,
+    check_permission,
+    create_admin_notification,
+    process_academic_term_schedule,
+    require_admin_permission,
+)
 from student_routes import router as student_router
 from security import (
     pwd_context,
@@ -2211,6 +2219,8 @@ def get_chat_history(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    if current_user.is_admin:
+        require_admin_permission(current_user, "Messages")
     unread_messages = db.query(models.Message).filter(
         models.Message.sender_id == other_user_id,
         models.Message.recipient_id == current_user.id,
@@ -2240,6 +2250,8 @@ def mark_chat_as_read(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    if current_user.is_admin:
+        require_admin_permission(current_user, "Messages")
     unread_messages = db.query(models.Message).filter(
         models.Message.sender_id == other_user_id,
         models.Message.recipient_id == current_user.id,
@@ -2258,6 +2270,8 @@ def delete_conversation(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    if current_user.is_admin:
+        require_admin_permission(current_user, "Messages-Manage")
     deleted_count = db.query(models.Message).filter(
         or_(
             (models.Message.sender_id == current_user.id) & (models.Message.recipient_id == other_user_id),
@@ -2275,6 +2289,8 @@ def send_message(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    if current_user.is_admin:
+        require_admin_permission(current_user, "Messages-Send")
     recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
@@ -2317,7 +2333,7 @@ def send_message(
 @app.get("/api/admin/claims")
 def get_claims(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Claim-Management"))
 ):
     # Join Claim with Item to get both Lost and Found details in one go
     claims = db.query(models.Claim).order_by(models.Claim.created_at.desc()).all()
@@ -2544,7 +2560,7 @@ def build_claim_report_payload(
 def approve_claim(
     claim_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Claim-Management-Decide"))
 ):
     claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
     if not claim:
@@ -2560,7 +2576,7 @@ def approve_claim(
 def reject_claim(
     claim_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Claim-Management-Decide"))
 ):
     claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
     if not claim:
@@ -2585,7 +2601,7 @@ async def create_claim_decision_report(
     verification_method: str = Form(""),
     verification_note: str = Form(""),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Claim-Management-Decide"))
 ):
     claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
     if not claim:
@@ -2701,7 +2717,7 @@ def saved_report_payload(report: models.SavedReport) -> dict:
 @app.get("/api/admin/saved-reports")
 def list_saved_reports(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Reports")),
 ):
     reports = db.query(models.SavedReport).filter(
         models.SavedReport.created_by_admin_id == current_admin.id
@@ -2713,7 +2729,7 @@ def list_saved_reports(
 def create_saved_report(
     payload: SavedReportRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Reports-Manage")),
 ):
     name = " ".join(payload.name.split())
     if not name:
@@ -2738,7 +2754,7 @@ def update_saved_report(
     report_id: int,
     payload: SavedReportRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Reports-Manage")),
 ):
     report = db.query(models.SavedReport).filter(
         models.SavedReport.id == report_id,
@@ -2763,7 +2779,7 @@ def update_saved_report(
 def delete_saved_report(
     report_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("Reports-Manage")),
 ):
     report = db.query(models.SavedReport).filter(
         models.SavedReport.id == report_id,
@@ -2788,7 +2804,7 @@ def get_report_module_data(
     page: int = Query(1, ge=1),
     page_size: int = Query(250, ge=25, le=500),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Reports"))
 ):
     normalized_report_type = " ".join(str(report_type or "all").strip().lower().replace("-", "_").split())
     report_type_aliases = {
@@ -2796,10 +2812,12 @@ def get_report_module_data(
         "lost & found": "lost_found",
         "lostfound": "lost_found",
         "lost_found_items": "lost_found",
+        "for disposal": "for_disposal",
+        "for_disposal_items": "for_disposal",
     }
     report_type = report_type_aliases.get(normalized_report_type, normalized_report_type)
     valid_report_types = {
-        "all", "lost", "found", "lost_found", "claim", "confiscated", "disposal",
+        "all", "lost", "found", "lost_found", "claim", "confiscated", "for_disposal", "disposal",
         "user", "pending", "announcement", "message", "notification", "academic_term",
     }
     if report_type not in valid_report_types:
@@ -3085,6 +3103,84 @@ def get_report_module_data(
                 "claim_payload": None,
             })
 
+    if report_type == "for_disposal":
+        queued_items = (
+            db.query(models.Item)
+            .options(joinedload(models.Item.owner))
+            .filter(
+                models.Item.archived == True,
+                models.Item.deleted == False,
+                models.Item.disposal_status == "for_disposal",
+            )
+            .order_by(models.Item.disposal_updated_at.desc(), models.Item.id.desc())
+            .all()
+        )
+        for item in queued_items:
+            report_code = item_report_code(item)
+            reported_by = str(item.report_owner_name or "").strip() or display_name(item.owner)
+            rows.append({
+                "row_type": "for_disposal",
+                "row_id": report_code or f"ITEM-{item.id:06d}",
+                "item_id": item_report_id(item),
+                "item_code": report_code or f"ITEM-{item.id:06d}",
+                "item": item.category or "Item for Disposal",
+                "category": item.category or "Uncategorized",
+                "location": item.location or "Not specified",
+                "status": "For Disposal",
+                "date": item.disposal_updated_at.isoformat() if item.disposal_updated_at else (item.created_at.isoformat() if item.created_at else None),
+                "reported_by": reported_by,
+                "image_path": public_file_url(item.image_path),
+                "maintenance_url": "/admin/For-Disposal",
+                "details": {
+                    "Item Code": report_code or f"ITEM-{item.id:06d}",
+                    "Source": f"Archived {(item.status or 'Item').title()} Report",
+                    "Category": item.category or "Not specified",
+                    "Brand": item.brand or "Not specified",
+                    "Color": item.color or "Not specified",
+                    "Location": item.location or "Not specified",
+                    "Owner / Reporter": reported_by,
+                    "Disposal Note": item.disposal_note or "Not specified",
+                    "Moved to For Disposal": item.disposal_updated_at.isoformat() if item.disposal_updated_at else "Not specified",
+                },
+                "claim_payload": None,
+            })
+
+        queued_confiscated_items = (
+            db.query(models.ConfiscatedItem)
+            .filter(models.ConfiscatedItem.disposal_status == "for_disposal")
+            .order_by(models.ConfiscatedItem.disposal_updated_at.desc(), models.ConfiscatedItem.id.desc())
+            .all()
+        )
+        for item in queued_confiscated_items:
+            rows.append({
+                "row_type": "for_disposal",
+                "row_id": f"CONF-{item.id:06d}",
+                "item_id": item.id,
+                "item_code": f"CONF-{item.id:06d}",
+                "item": item.category or "Confiscated Item for Disposal",
+                "category": item.category or "Uncategorized",
+                "location": item.location or "Not specified",
+                "status": "For Disposal",
+                "date": item.disposal_updated_at.isoformat() if item.disposal_updated_at else (item.created_at.isoformat() if item.created_at else None),
+                "reported_by": "Administrator",
+                "image_path": public_file_url(item.image_path),
+                "maintenance_url": "/admin/For-Disposal",
+                "details": {
+                    "Item Code": f"CONF-{item.id:06d}",
+                    "Source": "Confiscated Item",
+                    "Category": item.category or "Not specified",
+                    "Brand": item.brand or "Not specified",
+                    "Color": item.color or "Not specified",
+                    "Location": item.location or "Not specified",
+                    "Student": item.student_name or "Not specified",
+                    "Student Number": item.student_number or "Not specified",
+                    "Reason": item.reason or "Not specified",
+                    "Disposal Note": item.disposal_note or "Not specified",
+                    "Moved to For Disposal": item.disposal_updated_at.isoformat() if item.disposal_updated_at else "Not specified",
+                },
+                "claim_payload": None,
+            })
+
     if report_type in {"all", "disposal"}:
         disposal_reports = db.query(models.DisposalReport).options(
             joinedload(models.DisposalReport.disposed_by_admin)
@@ -3361,7 +3457,7 @@ def create_manual_claim(
     found_item_id: int = Form(...),
     lost_item_id: int = Form(...),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Claim-Management-Create"))
 ):
     found_item = db.query(models.Item).filter(models.Item.id == found_item_id).first()
     lost_item = db.query(models.Item).filter(models.Item.id == lost_item_id).first()
@@ -3441,7 +3537,7 @@ def create_direct_claim(
     claimant_user_id: int = Form(...),
     claim_id_image: UploadFile | None = File(None),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("Claim-Management-Create"))
 ):
     try:
         validate_upload_file_size(claim_id_image, label="Claim ID image")
@@ -3505,6 +3601,7 @@ def create_direct_claim(
             message=f"Office direct claim created for Found Item #{found_item_id}.",
             type="match",
             related_id=found_item_id,
+            created_by_admin_id=current_admin.id,
             target_url="/admin/Claim-Management",
             is_read=False
         )
@@ -3687,7 +3784,8 @@ async def update_bulk_content(
     about_cta_title: str = Form(None),
     about_cta_desc: str = Form(None),
     about_cta_img: UploadFile = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("Content-management-Edit")),
 ):
     try:
         async def upsert_landing_section(section_key: str, title: str = None, description: str = None, image: UploadFile = None):
@@ -3970,7 +4068,7 @@ def get_landing_content(db: Session = Depends(get_db)):
         },
     ]
     response["explore_cta"] = {
-        "title": explore_cta_data.title if explore_cta_data and explore_cta_data.title else "Improve the process<br>with <span>Look<span>for</span></span>",
+        "title": explore_cta_data.title if explore_cta_data and explore_cta_data.title else "Improve the process<br>with <span>Look<span>For</span></span>",
         "description": explore_cta_data.description if explore_cta_data and explore_cta_data.description else "Join the community to enhance the lost and found system of STI College Novaliches from reporting and surrendering found items to finding and retrieving lost ones.",
     }
     response["about_hero"] = {

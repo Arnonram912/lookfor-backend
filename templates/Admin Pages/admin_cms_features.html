@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LookFor CMS - Features</title>
-    <link rel="stylesheet" href="/static/landing.css?v=5.1">
+    <link rel="stylesheet" href="/static/landing.css?v=5.2">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         .cms-controls {
@@ -134,7 +134,7 @@
 
     <section class="improve-section">
         <div class="container" data-aos="zoom-in" data-aos-duration="1000">
-            <h2 id="cms-explore-cta-title" class="cta-headline cms-editable">Improve the process<br>with <span>Look<span>for</span></span></h2>
+            <h2 id="cms-explore-cta-title" class="cta-headline cms-editable">Improve the process<br>with <span>Look<span>For</span></span></h2>
             <p id="cms-explore-cta-desc" class="cta-subtext cms-editable">
                 Join the community to enhance the lost and found system of STI College Novaliches from reporting and surrendering found items to finding and retrieving lost ones.
             </p>
@@ -215,7 +215,7 @@
                 }
 
                 if (data.explore_cta) {
-                    document.getElementById("cms-explore-cta-title").innerHTML = data.explore_cta.title || "Improve the process<br>with <span>Look<span>for</span></span>";
+                    document.getElementById("cms-explore-cta-title").innerHTML = data.explore_cta.title || "Improve the process<br>with <span>Look<span>For</span></span>";
                     document.getElementById("cms-explore-cta-desc").innerText = data.explore_cta.description || "Join the community to enhance the lost and found system of STI College Novaliches from reporting and surrendering found items to finding and retrieving lost ones.";
                 }
             } catch (error) {
@@ -326,5 +326,6 @@
             AOS.init({ once: true });
         });
     </script>
+    <script src="/static/session-keepalive.js?v=14"></script>
 </body>
 </html>

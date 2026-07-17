@@ -262,16 +262,8 @@
                 <div class="timeline-item">
                     <div class="timeline-dot"></div>
                     <div class="timeline-content">
-                        <span class="activity-time">2 hours ago</span>
-                        <p>Approved claim for <strong>"Blue Wallet"</strong></p>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content">
-                        <span class="activity-time">Yesterday</span>
-                        <p>Updated profile information</p>
+                        <span class="activity-time">Loading...</span>
+                        <p>Retrieving your latest activity.</p>
                     </div>
                 </div>
             </div>
@@ -543,6 +535,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('label-personnel').innerText = user.personnel || "N/A";
     document.getElementById('label-role').innerText = user.is_admin ? "Administrator" : "User";
     document.getElementById('label-email').innerText = user.email || "N/A";
+
+    await loadRecentActivity(token);
 });
 
 async function saveNewPassword() {
@@ -663,20 +657,76 @@ document.getElementById('imageUpload').onchange = () => {
     }
 }
 
-// Add this inside your existing DOMContentLoaded listener
-/*const activityResponse = await fetch('/api/admin/activity');
-const activities = await activityResponse.json();
+function formatActivityTime(timestamp) {
+    if (!timestamp) return 'Time unavailable';
 
-const timeline = document.getElementById('activity-timeline');
-timeline.innerHTML = activities.map(act => `
-    <div class="timeline-item">
-        <div class="timeline-dot"></div>
-        <div class="timeline-content">
-            <span class="activity-time">${act.time_relative}</span>
-            <p>${act.description}</p>
-        </div>
-    </div>
-`).join('');*/
+    const activityDate = new Date(timestamp);
+    if (Number.isNaN(activityDate.getTime())) return 'Time unavailable';
+
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - activityDate.getTime()) / 1000));
+    if (elapsedSeconds < 60) return 'Just now';
+
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    if (elapsedMinutes < 60) return `${elapsedMinutes} minute${elapsedMinutes === 1 ? '' : 's'} ago`;
+
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    if (elapsedHours < 24) return `${elapsedHours} hour${elapsedHours === 1 ? '' : 's'} ago`;
+
+    const elapsedDays = Math.floor(elapsedHours / 24);
+    if (elapsedDays < 7) return `${elapsedDays} day${elapsedDays === 1 ? '' : 's'} ago`;
+
+    return activityDate.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    });
+}
+
+async function loadRecentActivity(token) {
+    const timeline = document.getElementById('activity-timeline');
+    if (!timeline) return;
+
+    try {
+        const response = await fetch('/admin/recent-activity?limit=5', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const activities = await response.json();
+        if (!response.ok) {
+            throw new Error(activities.detail || 'Could not load recent activity.');
+        }
+
+        if (!activities.length) {
+            timeline.innerHTML = `
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <span class="activity-time">No activity yet</span>
+                        <p>Your recorded administrative actions will appear here.</p>
+                    </div>
+                </div>`;
+            return;
+        }
+
+        timeline.innerHTML = activities.map(activity => `
+            <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                    <span class="activity-time">${formatActivityTime(activity.created_at)}</span>
+                    <p><strong>${escapeHtml(activity.actor || 'Administrator')}</strong> — ${escapeHtml(activity.description || 'performed an administrative activity.')}</p>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        timeline.innerHTML = `
+            <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                    <span class="activity-time">Activity unavailable</span>
+                    <p>${escapeHtml(error.message)}</p>
+                </div>
+            </div>`;
+    }
+}
 
 let notifications = [];
 
@@ -818,7 +868,7 @@ function logout() {
 
 </script>
 
-<script src="/static/session-keepalive.js?v=13"></script>
+<script src="/static/session-keepalive.js?v=14"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>

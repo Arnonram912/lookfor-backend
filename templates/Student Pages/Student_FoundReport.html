@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Student Panel | LookFor STI</title>
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=15">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=19">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -126,6 +126,10 @@
                 <div class="profile-page-card">
                     <div class="action-bar">
                             <h2 class="section-title">Found Items <span></span></h2>
+                            <div class="view-toggle" role="group" aria-label="Choose found items view">
+                                <button type="button" id="foundThumbnailViewBtn" class="view-toggle-btn active" onclick="setFoundDisplayMode('thumbnail')" aria-label="Thumbnail view" title="Thumbnail view" aria-pressed="true"><i class="fas fa-th-large" aria-hidden="true"></i><span>Thumbnail</span></button>
+                                <button type="button" id="foundListViewBtn" class="view-toggle-btn" onclick="setFoundDisplayMode('list')" aria-label="List view" title="List view" aria-pressed="false"><i class="fas fa-list" aria-hidden="true"></i><span>List</span></button>
+                            </div>
                             <button class="upload-btn" id="studentFoundArchiveBtn" onclick="setStudentFoundView('archive')">Archive</button>
                             <button class="upload-btn" id="studentFoundDeletedBtn" onclick="setStudentFoundView('deleted')">Deleted Items</button>
                             <button class="upload-btn" onclick="openModal('reportModal')">
@@ -371,6 +375,25 @@ window.onclick = function(event) {
         }
 
         let studentFoundView = "active";
+        let foundDisplayMode = localStorage.getItem("lookfor-found-display-mode") === "list" ? "list" : "thumbnail";
+
+        function setFoundDisplayMode(mode) {
+            foundDisplayMode = mode === "list" ? "list" : "thumbnail";
+            localStorage.setItem("lookfor-found-display-mode", foundDisplayMode);
+            const grid = document.getElementById("foundItemsGrid");
+            const thumbnailBtn = document.getElementById("foundThumbnailViewBtn");
+            const listBtn = document.getElementById("foundListViewBtn");
+            const isList = foundDisplayMode === "list";
+            if (grid) grid.classList.toggle("list-view", isList);
+            if (thumbnailBtn) {
+                thumbnailBtn.classList.toggle("active", !isList);
+                thumbnailBtn.setAttribute("aria-pressed", String(!isList));
+            }
+            if (listBtn) {
+                listBtn.classList.toggle("active", isList);
+                listBtn.setAttribute("aria-pressed", String(isList));
+            }
+        }
 
         function setStudentFoundView(view) {
             studentFoundView = studentFoundView === view ? "active" : view;
@@ -381,6 +404,7 @@ window.onclick = function(event) {
 
         async function loadFoundItems() {
             const grid = document.getElementById("foundItemsGrid");
+            setFoundDisplayMode(foundDisplayMode);
             const token = getStudentToken();
 
             if (!token) {
