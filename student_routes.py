@@ -953,8 +953,33 @@ def get_my_lost_reports(
         models.Item.archived == archived,
         models.Item.deleted == deleted,
     ).all()
-    
-    return [serialize_student_item(report, current_user) for report in reports]
+
+    report_ids = [report.id for report in reports]
+    claimed_lost_ids = set()
+    if report_ids:
+        claimed_lost_ids = {
+            lost_item_id for (lost_item_id,) in db.query(models.Claim.lost_item_id).filter(
+                models.Claim.lost_item_id.in_(report_ids),
+                models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
+            ).all()
+        }
+
+    results = []
+    for report in reports:
+        is_claimed = report.id in claimed_lost_ids
+        item_data = serialize_student_item(
+            report,
+            current_user,
+            is_claimed=is_claimed,
+        )
+        item_data["display_status"] = (
+            "Claimed Item"
+            if is_claimed
+            else ("Matched" if report.is_matched else "Pending")
+        )
+        results.append(item_data)
+
+    return results
 
 
 def get_owned_student_report(db: Session, current_user: models.User, record_type: str, item_id: int):
