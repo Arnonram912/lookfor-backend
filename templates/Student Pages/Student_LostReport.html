@@ -4,8 +4,9 @@
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=26">
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=27">
     <link rel="stylesheet" href="/static/student-report-pages.css?v=1">
+    <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -139,6 +140,7 @@
                             <option value="all">All Items</option>
                             <option value="pending">Pending</option>
                             <option value="matched">Matched</option>
+                            <option value="claimed">Claimed Item</option>
                         </select>
                         <select id="studentLostCategoryFilter" class="inventory-filter" onchange="resetStudentLostPaginationAndRender()">
                             <option value="all">All Categories</option>
@@ -226,7 +228,7 @@
                     <div class="image-upload-section">
                             <div class="image-placeholder image-preview-carousel" id="imagePreview">
                                 <button type="button" class="image-slide-btn prev" id="imagePreviewPrev" onclick="changePreviewSlide(-1)" style="display:none;">&#8249;</button>
-                                <div class="image-preview-stage" id="imagePreviewStage">Image Preview</div>
+                                <div class="image-preview-stage" id="imagePreviewStage"><img src="/static/photos/boxw.png" alt="Default item image" style="max-width:100%;max-height:100%;object-fit:contain;"></div>
                                 <button type="button" class="image-slide-btn next" id="imagePreviewNext" onclick="changePreviewSlide(1)" style="display:none;">&#8250;</button>
                                 <div class="image-preview-status" id="imagePreviewStatus" style="display:none;"></div>
                             </div> 
@@ -252,11 +254,11 @@
                         <div class="details-column item-details">
                             <h3>ITEM DETAILS</h3>
                             <div class="input-group">
-                                <label>What is the item?</label>
+                                <label>What is the item? <span class="required-asterisk">*</span></label>
                                 <input type="text" id="itemName" placeholder="Item Name:">
                             </div>
                             <div class="input-group">
-                                <label for="itemCategory">Item Category</label>
+                                <label for="itemCategory">Item Category <span class="required-asterisk">*</span></label>
                                 <select id="itemCategory">
                                     <option value="">-- Loading Categories... --</option>
                                 </select>
@@ -276,29 +278,30 @@
                         <div class="details-column other-details">
                             <h3>OTHER DETAILS</h3>
                             <div class="input-group">
-                                <label>When was the item lost?</label>
+                                <label>When was the item lost? <span class="required-asterisk">*</span></label>
                                 <div class="datetime-row">
                                     <input type="date" id="reportDate">
                                     <input type="time" id="reportTime">
                                 </div>
                             </div>
                             <div class="input-group">
-                                <label>Where was the item last seen?</label>
+                                <label>Where was the item last seen? <span class="required-asterisk">*</span></label>
                                 <textarea id="reportLocation" rows="3" placeholder="Last location seen:"></textarea>
                             </div>
                         </div>
                     </div>
 
-                     <div class="modal-footer" style="display: flex; justify-content: center;">
-                    <button class="btn-found lost-submit-btn" onclick="submitReport()">Submit</button>
+                    <div class="modal-footer lost-upload-footer">
+                        <button type="button" class="lost-cancel-btn" onclick="handleCloseReport()">Cancel</button>
+                        <button type="button" class="btn-found lost-submit-btn" onclick="submitReport()">Submit</button>
                     </div>
                 </div>
             </div>
             <div id="confirmModal" class="modal-overlay" style="z-index: 1001;">
-                <div class="modal-content" style="max-width: 500px; padding: 30px;">
-                    <h2 style="text-align: center; margin-bottom: 20px;">Review <span>Report</span></h2>
+                <div class="modal-content report-review-card" style="max-width: 620px; padding: 30px;" role="dialog" aria-modal="true" aria-labelledby="reportReviewTitle">
+                    <h2 id="reportReviewTitle" class="report-review-title" style="text-align: center; margin-bottom: 20px;">Review <span>Report</span></h2>
                     
-                    <div id="submissionSummary" style="background: #f9f9f9; border-radius: 10px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #003366; text-align: left; font-size: 14px;">
+                    <div id="submissionSummary" class="report-review-summary" style="background: #f9f9f9; border-radius: 10px; padding: 15px; margin-bottom: 20px; border-left: 5px solid #003366; text-align: left; font-size: 14px;">
                         <p><strong>📦 Item:</strong> <span id="sumName"></span></p>
                         <p><strong>🏷️ Category:</strong> <span id="sumCategory"></span></p>
                         <p><strong>🎨 Color/Brand:</strong> <span id="sumColorBrand"></span></p>
@@ -307,11 +310,11 @@
                         <p><strong>Date:</strong> <span id="sumDate"></span></p>
                     </div>
 
-                    <p style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">
-                        Is everything correct? Our AI will now analyze this image for potential matches.
+                    <p class="report-review-message" style="text-align: center; color: #666; font-size: 13px; margin-bottom: 20px;">
+                        Is everything correct? Matching will run automatically when this report is saved.
                     </p>
                     
-                    <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div class="modal-footer report-review-footer" style="display: flex; flex-direction: column; gap: 10px;">
                         <button class="btn-found lost-submit-btn" id="finalConfirmBtn" onclick="executeSubmit()" style="width: 100%; margin: 0;">Confirm & Report</button>
                         
                         <div style="display: flex; gap: 10px; width: 100%;">
@@ -626,7 +629,7 @@ function renderStudentLostItems() {
             <div class="item-card">
                 <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
                     <img src="${imageUrl}" alt="${item.item_name || item.category || "Lost item"}" onerror="handleItemImageError(this)">
-                    <span class="inventory-state-tag ${displayStatus === "Matched" ? "matched" :
+                    <span class="inventory-state-tag ${["Matched", "Claimed Item"].includes(displayStatus) ? "matched" :
                     displayStatus === "Approved" ? "approved" : "pending"}">${displayStatus}</span>
                 </div>
                 <div class="card-body">
@@ -699,7 +702,7 @@ async function loadLostItems() {
                     <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
                         <img src="${imageUrl}" onerror="handleItemImageError(this)">
                         <span class="inventory-state-tag 
-                        ${displayStatus === "Matched" ? "matched" : 
+                        ${["Matched", "Claimed Item"].includes(displayStatus) ? "matched" :
                         displayStatus === "Approved" ? "approved" : 
                         "pending"}">${displayStatus}</span>
                     </div>
