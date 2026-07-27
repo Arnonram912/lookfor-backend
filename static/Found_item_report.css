@@ -1103,9 +1103,76 @@ body {
   max-height: calc(100vh - 48px);
 }
 
+.swal2-popup.lookfor-disposal-dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 30px 32px 26px;
+  border: 1px solid #dce7f2;
+  border-radius: 20px;
+  box-shadow: 0 24px 70px rgba(0, 33, 66, 0.28);
+}
+
+.lookfor-disposal-dialog .swal2-title {
+  color: #17324f;
+  font-size: 25px;
+}
+
+.lookfor-disposal-dialog .disposal-note-copy {
+  margin: 0 auto 4px;
+  color: #5f7082;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.lookfor-disposal-dialog .swal2-input-label {
+  justify-content: flex-start;
+  margin: 18px 0 7px;
+  color: #17324f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.lookfor-disposal-dialog .swal2-textarea {
+  width: 100%;
+  min-height: 105px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #bdcada;
+  border-radius: 10px;
+  color: #17324f;
+  background: #f9fbfd;
+  box-shadow: none;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.lookfor-disposal-dialog .swal2-textarea:focus {
+  border-color: #0b65b1;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(11, 101, 177, 0.13);
+}
+
+.lookfor-disposal-dialog .swal2-actions {
+  width: 100%;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.lookfor-disposal-dialog .swal2-confirm,
+.lookfor-disposal-dialog .swal2-cancel {
+  min-width: 128px;
+  min-height: 43px;
+  border-radius: 9px;
+  font-weight: 750;
+}
+
 @media (max-width: 768px) {
   #reportModal .report-upload-modal {
     max-height: 92vh;
     overflow-y: auto;
+  }
+
+  .swal2-popup.lookfor-disposal-dialog {
+    padding: 24px 20px 20px;
   }
 }

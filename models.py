@@ -1,7 +1,14 @@
 # models.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, func, Computed
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Date, ForeignKey, func, Computed, UniqueConstraint
 from datetime import datetime
 from database import Base
+from lookfor_constants import CLAIMED_DATABASE_STATUSES
+
+
+# `claimed` is canonical for new decisions. The legacy values remain accepted so
+# existing databases and older clients continue to behave correctly.
+CLAIMED_CLAIM_STATUSES = CLAIMED_DATABASE_STATUSES
+ACTIVE_CLAIM_STATUSES = ("pending", *CLAIMED_CLAIM_STATUSES)
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel
 
@@ -38,6 +45,15 @@ class AcademicTermSetting(Base):
     next_semester = Column(String(30), nullable=True)
     next_start_date = Column(Date, nullable=True)
     next_end_date = Column(Date, nullable=True)
+    # SHS uses an independent school-year schedule. The legacy fields above
+    # remain the tertiary semester schedule for backward compatibility.
+    shs_current_academic_year = Column(String(20), nullable=True)
+    shs_current_start_date = Column(Date, nullable=True)
+    shs_current_end_date = Column(Date, nullable=True)
+    shs_current_status = Column(String(20), nullable=False, default="active")
+    shs_next_academic_year = Column(String(20), nullable=True)
+    shs_next_start_date = Column(Date, nullable=True)
+    shs_next_end_date = Column(Date, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -55,6 +71,30 @@ class AcademicTermTransition(Base):
     replacement_end_date = Column(Date, nullable=True)
 
 
+class AcademicArchiveOperation(Base):
+    __tablename__ = "academic_archive_operations"
+    __table_args__ = (
+        UniqueConstraint(
+            "academic_classification",
+            "academic_year",
+            "term_label",
+            name="uq_academic_archive_operation_scope",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    academic_classification = Column(String(30), nullable=False)
+    academic_year = Column(String(20), nullable=False)
+    term_label = Column(String(30), nullable=False)
+    archived_user_ids = Column(Text, nullable=False, default="[]")
+    affected_count = Column(Integer, nullable=False, default=0)
+    performed_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    performed_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    status = Column(String(20), nullable=False, default="completed")
+
+    performed_by_admin = relationship("User", foreign_keys=[performed_by_admin_id])
+
+
 class Item(Base):
     __tablename__ = "items"
 
@@ -68,6 +108,7 @@ class Item(Base):
         "END"
     ))
     status = Column(String(50))
+    item_name = Column(String(255), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     category_relationship = relationship("Category", back_populates="items")
     category = Column(String(100))
@@ -89,6 +130,9 @@ class Item(Base):
     approved_at = Column(DateTime, nullable=True)
     archived = Column(Boolean, default=False)
     deleted = Column(Boolean, default=False, nullable=False)
+    student_archived = Column(Boolean, default=False, nullable=False)
+    student_deleted = Column(Boolean, default=False, nullable=False)
+    student_hidden = Column(Boolean, default=False, nullable=False)
     disposal_status = Column(String(30), nullable=False, default="active")
     disposal_note = Column(String(500), nullable=True)
     disposal_updated_at = Column(DateTime, nullable=True)
@@ -105,6 +149,7 @@ class ReferenceItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     source_item_id = Column(Integer, nullable=True, index=True)
+    item_name = Column(String(255), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     status = Column(String(50))
     category = Column(String(100))
@@ -142,6 +187,9 @@ class User(Base):
     course = Column(String(100), nullable=True)     # This is 'Program' (e.g., STEM, BSIT)
     department = Column(String(100), nullable=True) # For Admin Offices
     personnel = Column(String(50), nullable=True)   # Faculty / Staff classification
+    user_category = Column(String(30), nullable=True, index=True)
+    academic_classification = Column(String(30), nullable=True, index=True)
+    classification_review_required = Column(Boolean, default=False, nullable=False)
     section = Column(String(100), nullable=True) 
     level = Column(String(50), nullable=True)       # NEW: For 'Level' (e.g., G11, G12)
     batch_id = Column(String(100), nullable=True, index=True) # Index makes deleting FAST
@@ -166,7 +214,7 @@ class PendingItem(Base):
     __tablename__ = "pending_items"
     
     id = Column(Integer, primary_key=True, index=True)
-    item_name = Column(String(255), nullable=True)
+    item_name = Column(String(255), nullable=False)
     category = Column(String)
     description = Column(String)
     location = Column(String)
@@ -229,7 +277,8 @@ class Claim(Base):
     # Stores the AI similarity (e.g., 0.85 for 85%)
     similarity_score = Column(String(50)) 
     
-    # Claim Status: 'pending', 'approved', 'rejected', 'completed'
+    # Claim Status: 'pending', 'claimed', 'rejected'
+    # Legacy-compatible claimed values: 'approved', 'completed'
     status = Column(String(50), default="pending")
     
     # Admin details
@@ -327,6 +376,9 @@ class ConfiscatedItem(Base):
 
 class DisposalReport(Base):
     __tablename__ = "disposal_reports"
+    __table_args__ = (
+        UniqueConstraint("source_type", "source_id", name="uq_disposal_report_source"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     source_type = Column(String(50), nullable=False)

@@ -2,12 +2,13 @@ import secrets
 import uuid
 import json
 import io
+import re
 import numpy as np
 import shutil
 import threading
 from pathlib import Path
 from fastapi.responses import RedirectResponse, FileResponse
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, load_only
 import models
 from database import get_db, SessionLocal
@@ -22,7 +23,7 @@ import json
 from sqlalchemy.exc import IntegrityError
 from models import SettingsUpdate
 from security import get_current_user
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, root_validator
 from typing import List, Optional
 from utils import (
     public_file_url,
@@ -34,9 +35,35 @@ from utils import (
     item_display_id,
     item_display_code,
 )
-from sqlalchemy import or_, func, text
+from sqlalchemy import and_, or_, func, text
 from concurrent.futures import ThreadPoolExecutor
 from account_email import queue_account_access_email, queue_item_event_email
+from lookfor_constants import (
+    ACADEMIC_CLASSIFICATIONS,
+    IDENTIFIER_RE,
+    LEVEL_OPTIONS,
+    NAME_RE,
+    TERTIARY_TERMS,
+    USER_CATEGORIES,
+    USER_CATEGORY_CLASSIFICATION,
+    USER_CATEGORY_LABELS,
+    academic_archive_batch_id,
+    classification_for_category,
+    clean_text,
+    infer_legacy_classification,
+    normalize_level,
+    normalize_user_category,
+    valid_levels_for_category,
+)
+from lookfor_permissions import (
+    ADMIN_PERMISSION_KEYS,
+    DEFAULT_ADMIN_PERMISSION_KEYS,
+    PERMISSION_CATALOG,
+    has_permission,
+    normalize_permissions,
+    permission_groups_payload,
+    permission_response_values,
+)
 
 
 class AdminCreate(BaseModel):
@@ -81,8 +108,119 @@ class AcademicTermScheduleUpdate(BaseModel):
     next_end_date: date
 
 
+class ShsSchoolYearScheduleUpdate(BaseModel):
+    current_academic_year: str
+    current_start_date: date
+    current_end_date: date
+    next_academic_year: str
+    next_start_date: date
+    next_end_date: date
+
+
+class AcademicSchedulesUpdate(BaseModel):
+    tertiary: AcademicTermScheduleUpdate
+    shs: ShsSchoolYearScheduleUpdate
+
+
 class AcademicTermReactivateRequest(BaseModel):
     new_end_date: date
+
+
+class UnifiedUserCreate(BaseModel):
+    user_category: str
+    student_no: str = Field(..., min_length=1, max_length=50)
+    first_name: str = Field(..., min_length=1, max_length=100)
+    middle_name: str = Field("", max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    email: EmailStr
+    program: str | None = Field(None, max_length=100)
+    level: str | None = Field(None, max_length=50)
+    department: str | None = Field(None, max_length=100)
+    section: str | None = Field(None, max_length=100)
+    password: str | None = Field(None, max_length=128)
+    permissions: list[str] = Field(default_factory=list)
+
+    @root_validator(pre=True)
+    def normalize_and_validate(cls, values):
+        normalized = dict(values or {})
+        for field in (
+            "user_category", "student_no", "first_name", "middle_name", "last_name",
+            "email", "program", "level", "department", "section",
+        ):
+            if field in normalized and normalized[field] is not None:
+                normalized[field] = clean_text(normalized[field])
+
+        category = normalize_user_category(normalized.get("user_category"))
+        if not category:
+            raise ValueError("Select a valid user category.")
+        normalized["user_category"] = category
+
+        for field, label in (("first_name", "First name"), ("last_name", "Last name")):
+            value = normalized.get(field) or ""
+            if not value:
+                raise ValueError(f"{label} is required.")
+            if not NAME_RE.fullmatch(value):
+                raise ValueError(f"{label} contains unsupported characters.")
+
+        middle_name = normalized.get("middle_name") or ""
+        if middle_name and not NAME_RE.fullmatch(middle_name):
+            raise ValueError("Middle name contains unsupported characters.")
+        identifier = normalized.get("student_no") or ""
+        if not identifier or not IDENTIFIER_RE.fullmatch(identifier):
+            raise ValueError("Student/Employee number may contain only letters, numbers, dots, underscores, and hyphens.")
+
+        if category in {"COLLEGE_STUDENT", "SHS_STUDENT"}:
+            if not normalized.get("program"):
+                raise ValueError("Program is required for students.")
+            level = normalize_level(normalized.get("level"))
+            allowed_levels = set(valid_levels_for_category(category))
+            if level not in allowed_levels:
+                raise ValueError(f"Select a valid level for {USER_CATEGORY_LABELS[category]}.")
+            normalized["level"] = level
+            normalized["permissions"] = [STUDENT_ACCESS_PERMISSION]
+        else:
+            if not normalized.get("department"):
+                raise ValueError("Department is required for Faculty, Staff, and Admin accounts.")
+            normalized["program"] = None
+            normalized["level"] = None
+            if category == "FACULTY":
+                normalized["permissions"] = [STUDENT_ACCESS_PERMISSION]
+
+        password = str(normalized.get("password") or "")
+        if password and password != "AUTO_GENERATE":
+            if len(password) < 8 or not re.search(r"[A-Z]", password) or not re.search(r"[a-z]", password) or not re.search(r"\d", password):
+                raise ValueError("Password must be at least 8 characters and include uppercase, lowercase, and a number.")
+        return normalized
+
+
+class AcademicArchiveRequest(BaseModel):
+    academic_classification: str
+    academic_year: str
+    term_label: str
+
+    @root_validator(pre=True)
+    def validate_scope(cls, values):
+        normalized = dict(values or {})
+        classification = clean_text(normalized.get("academic_classification")).upper()
+        academic_year = clean_text(normalized.get("academic_year"))
+        term_label = clean_text(normalized.get("term_label"))
+        if classification not in {"SHS", "TERTIARY"}:
+            raise ValueError("Academic classification must be SHS or TERTIARY.")
+        if not re.fullmatch(r"\d{4}-\d{4}", academic_year):
+            raise ValueError("Academic year must use YYYY-YYYY.")
+        start, end = (int(part) for part in academic_year.split("-", 1))
+        if end != start + 1:
+            raise ValueError("Academic year must contain consecutive years.")
+        if classification == "SHS" and term_label != "School Year":
+            raise ValueError("SHS archives must use the School Year term.")
+        if classification == "TERTIARY" and term_label not in TERTIARY_TERMS:
+            raise ValueError("Select First Semester or Second Semester.")
+        normalized.update(
+            academic_classification=classification,
+            academic_year=academic_year,
+            term_label=term_label,
+        )
+        return normalized
 templates = Jinja2Templates(directory="templates")
 # Change your directory definition
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -97,58 +235,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 BULK_REGISTRATION_JOBS: dict[str, dict] = {}
 BULK_JOB_LOCK = threading.Lock()
 ROOT_ADMIN_EMAIL = "admin@novaliches.sti.edu.ph"
-ADMIN_PERMISSION_KEYS = [
-    "Dashboard",
-    "Messages",
-    "Messages-Send",
-    "Messages-Manage",
-    "User-Management",
-    "User-Management-Create",
-    "User-Management-Edit",
-    "User-Management-Reset",
-    "User-Management-Archive",
-    "User-Management-Delete",
-    "Lost-Reports",
-    "Lost-Reports-Create",
-    "Lost-Reports-Archive",
-    "Lost-Reports-Delete",
-    "Found-Reports",
-    "Found-Reports-Create",
-    "Found-Reports-Approve",
-    "Found-Reports-Archive",
-    "Found-Reports-Delete",
-    "Claim-Management",
-    "Claim-Management-Create",
-    "Claim-Management-Decide",
-    "Reports",
-    "Reports-Export",
-    "Reports-Manage",
-    "Confiscated-items",
-    "Confiscated-items-Create",
-    "Confiscated-items-Edit",
-    "Confiscated-items-Delete",
-    "For-Disposal",
-    "For-Disposal-Manage",
-    "Audit-Logs",
-    "Content-management",
-    "Content-management-Announcements",
-    "Content-management-Taxonomy",
-    "Content-management-Term",
-    "Content-management-Edit",
-]
-MODULE_PERMISSION_KEYS = {
-    "Dashboard",
-    "Messages",
-    "User-Management",
-    "Lost-Reports",
-    "Found-Reports",
-    "Claim-Management",
-    "Reports",
-    "Confiscated-items",
-    "For-Disposal",
-    "Audit-Logs",
-    "Content-management",
-}
+ADMIN_PERMISSION_KEYS = list(ADMIN_PERMISSION_KEYS)
 STUDENT_ACCESS_PERMISSION = "Student-Portal-Access"
 DELETE_QUEUE_PERMISSION = "__PENDING_DELETE__"
 
@@ -199,26 +286,14 @@ def deployed_static_path(path: str | None, fallback: str = DEFAULT_PROFILE_PIC) 
 
 
 def parse_permissions(raw_permissions) -> list[str]:
-    try:
-        if isinstance(raw_permissions, str):
-            return json.loads(raw_permissions)
-        return raw_permissions or []
-    except Exception:
-        return []
+    return normalize_permissions(raw_permissions)
 
 
 def normalize_admin_permissions(permissions) -> list[str]:
-    normalized = list(dict.fromkeys(
-        permission for permission in (permissions or [])
-        if permission in ADMIN_PERMISSION_KEYS
-    ))
-    for module_permission in MODULE_PERMISSION_KEYS:
-        if any(
-            permission.startswith(f"{module_permission}-")
-            for permission in normalized
-        ) and module_permission not in normalized:
-            normalized.insert(0, module_permission)
-    return normalized
+    return [
+        permission for permission in normalize_permissions(permissions, preserve_special=False)
+        if permission in PERMISSION_CATALOG
+    ]
 
 
 def is_root_admin(user: models.User | None) -> bool:
@@ -240,7 +315,7 @@ def ensure_pending_claim_for_pair(
     existing_claim = db.query(models.Claim).filter(
         models.Claim.lost_item_id == lost_item.id,
         models.Claim.found_item_id == found_item.id,
-        models.Claim.status.in_(["pending", "approved"])
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
     ).first()
     if existing_claim:
         return existing_claim
@@ -275,6 +350,7 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
         cleaned_matches.append({
             "id": match.get("id"),
             "score": match.get("score"),
+            "item_name": match.get("item_name"),
             "category": match.get("category"),
             "location": match.get("location"),
             "image_path": public_file_url(match.get("image_path")),
@@ -297,6 +373,7 @@ def serialize_found_item_match(
     return {
         "id": found_item.id,
         "score": round(float(score or 0), 4),
+        "item_name": found_item.item_name,
         "category": found_item.category,
         "location": found_item.location,
         "image_path": public_file_url(found_item.image_path),
@@ -312,7 +389,7 @@ def item_has_approved_claim(db: Session, item: models.Item) -> bool:
     if not item:
         return False
 
-    filters = [models.Claim.status == "approved"]
+    filters = [models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)]
     if item.status == "lost":
         filters.append(models.Claim.lost_item_id == item.id)
     elif item.status == "found":
@@ -335,6 +412,7 @@ def serialize_inventory_item(db: Session, item: models.Item) -> dict:
         "id": item.id,
         "item_id": report_item_id,
         "item_code": report_item_code,
+        "item_name": item.item_name,
         "lost_id": report_item_code if item.status == "lost" else None,
         "found_id": report_item_code if item.status == "found" else None,
         "status": item.status,
@@ -587,24 +665,29 @@ def check_permission(required_permission: str):
     ):
         if is_root_admin(admin):
             return admin
+        if required_permission in DEFAULT_ADMIN_PERMISSION_KEYS:
+            return admin
 
         # Convert string JSON to list if necessary
         permissions = parse_permissions(admin.permissions)
 
-        if required_permission not in permissions:
+        if not has_permission(permissions, required_permission):
             raise HTTPException(
                 status_code=403,
                 detail=f"Access Denied: Requires {required_permission}"
             )
 
         return admin
+    permission_dependency.required_permission = required_permission
     return permission_dependency
 
 
 def require_admin_permission(admin: models.User, required_permission: str) -> models.User:
     if is_root_admin(admin):
         return admin
-    if required_permission not in parse_permissions(admin.permissions):
+    if required_permission in DEFAULT_ADMIN_PERMISSION_KEYS:
+        return admin
+    if not has_permission(parse_permissions(admin.permissions), required_permission):
         raise HTTPException(
             status_code=403,
             detail=f"Access Denied: Requires {required_permission}",
@@ -674,9 +757,38 @@ def get_following_semester(academic_year: str, semester: str) -> tuple[str, str,
     return next_year, next_semester, start_date, end_date
 
 
+def validate_academic_year(academic_year: str) -> None:
+    if not re.fullmatch(r"\d{4}-\d{4}", academic_year or ""):
+        raise ValueError("Academic year must use the format YYYY-YYYY.")
+    start_year, end_year = (int(part) for part in academic_year.split("-", 1))
+    if end_year != start_year + 1:
+        raise ValueError("Academic year must contain two consecutive years.")
+
+
+def get_following_school_year(academic_year: str) -> str:
+    validate_academic_year(academic_year)
+    start_year = int(academic_year.split("-", 1)[0]) + 1
+    return f"{start_year}-{start_year + 1}"
+
+
 def get_or_create_academic_term_setting(db: Session) -> models.AcademicTermSetting:
     setting = db.query(models.AcademicTermSetting).filter(models.AcademicTermSetting.id == 1).first()
     if setting:
+        changed = False
+        if not setting.shs_current_academic_year:
+            setting.shs_current_academic_year = setting.current_academic_year
+            changed = True
+        if not setting.shs_next_academic_year and setting.shs_current_academic_year:
+            setting.shs_next_academic_year = get_following_school_year(setting.shs_current_academic_year)
+            changed = True
+        if not setting.shs_current_status:
+            setting.shs_current_status = "active"
+            changed = True
+        if changed:
+            # Flush into the caller's transaction. Committing here could split a
+            # classification archive operation and leave users archived without
+            # its matching audit record if a later step failed.
+            db.flush()
         return setting
 
     setting = models.AcademicTermSetting(
@@ -690,6 +802,9 @@ def get_or_create_academic_term_setting(db: Session) -> models.AcademicTermSetti
         next_semester="1st Semester",
         next_start_date=date(2026, 7, 28),
         next_end_date=date(2026, 12, 5),
+        shs_current_academic_year="2025-2026",
+        shs_current_status="active",
+        shs_next_academic_year="2026-2027",
     )
     db.add(setting)
     db.commit()
@@ -698,7 +813,7 @@ def get_or_create_academic_term_setting(db: Session) -> models.AcademicTermSetti
 
 
 def serialize_academic_term_setting(setting: models.AcademicTermSetting) -> dict:
-    return {
+    tertiary = {
         "current_academic_year": setting.current_academic_year,
         "current_semester": setting.current_semester,
         "current_start_date": setting.current_start_date.isoformat() if setting.current_start_date else None,
@@ -710,6 +825,19 @@ def serialize_academic_term_setting(setting: models.AcademicTermSetting) -> dict
         "next_end_date": setting.next_end_date.isoformat() if setting.next_end_date else None,
         "can_reactivate": setting.current_status == "ended",
     }
+    shs = {
+        "current_academic_year": setting.shs_current_academic_year,
+        "current_term": "School Year",
+        "current_start_date": setting.shs_current_start_date.isoformat() if setting.shs_current_start_date else None,
+        "current_end_date": setting.shs_current_end_date.isoformat() if setting.shs_current_end_date else None,
+        "current_status": setting.shs_current_status,
+        "next_academic_year": setting.shs_next_academic_year,
+        "next_term": "School Year",
+        "next_start_date": setting.shs_next_start_date.isoformat() if setting.shs_next_start_date else None,
+        "next_end_date": setting.shs_next_end_date.isoformat() if setting.shs_next_end_date else None,
+    }
+    # Flat fields are retained for older pages and clients; they mean tertiary.
+    return {**tertiary, "tertiary": tertiary, "shs": shs}
 
 
 def end_current_academic_term(
@@ -775,18 +903,46 @@ def start_next_academic_term(db: Session, setting: models.AcademicTermSetting) -
     )
 
 
-def process_academic_term_schedule(db: Session, today: date | None = None) -> models.AcademicTermSetting:
-    setting = get_or_create_academic_term_setting(db)
-    current_date = today or date.today()
-    if setting.current_status == "active" and setting.current_end_date and current_date >= setting.current_end_date:
-        end_current_academic_term(db, setting)
+def shift_date_one_year(value: date | None) -> date | None:
+    if value is None:
+        return None
+    try:
+        return value.replace(year=value.year + 1)
+    except ValueError:
+        return value.replace(year=value.year + 1, day=28)
+
+
+def start_next_shs_school_year(db: Session, setting: models.AcademicTermSetting) -> None:
     if (
-        setting.current_status == "ended"
-        and setting.next_start_date
-        and current_date >= setting.next_start_date
+        setting.shs_current_status != "ended"
+        or not setting.shs_next_academic_year
+        or not setting.shs_next_start_date
+        or not setting.shs_next_end_date
     ):
-        start_next_academic_term(db, setting)
-    return setting
+        raise ValueError("End the current SHS school year and configure the next SHS schedule first.")
+
+    setting.shs_current_academic_year = setting.shs_next_academic_year
+    setting.shs_current_start_date = setting.shs_next_start_date
+    setting.shs_current_end_date = setting.shs_next_end_date
+    setting.shs_current_status = "active"
+    setting.shs_next_academic_year = get_following_school_year(setting.shs_current_academic_year)
+    setting.shs_next_start_date = shift_date_one_year(setting.shs_current_start_date)
+    setting.shs_next_end_date = shift_date_one_year(setting.shs_current_end_date)
+    db.commit()
+
+    create_admin_notification(
+        db,
+        f"SHS {setting.shs_current_academic_year} School Year has started.",
+        "academic_term",
+        setting.id,
+        "/admin/User-Management?tab=student",
+    )
+
+
+def process_academic_term_schedule(db: Session, today: date | None = None) -> models.AcademicTermSetting:
+    # Retained as a compatibility entry point for registration. Ending and
+    # starting terms is now always an explicit authorized action.
+    return get_or_create_academic_term_setting(db)
 
 
 def update_bulk_job(job_id: str, **changes):
@@ -846,6 +1002,7 @@ def store_item_as_reference(
 
     reference_item = models.ReferenceItem(
         source_item_id=item.id,
+        item_name=item.item_name,
         category_id=item.category_id,
         status=item.status,
         category=item.category,
@@ -874,6 +1031,13 @@ def store_item_as_reference(
 
 
 def create_disposal_report(db: Session, source, source_type: str, admin_id: int | None):
+    existing = db.query(models.DisposalReport.id).filter(
+        models.DisposalReport.source_type == source_type,
+        models.DisposalReport.source_id == source.id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="A disposal report already exists for this item.")
+
     if source_type == "report":
         item_code = item_display_code(source)
         owner_name = source.report_owner_name or format_user_display_name(source.owner)
@@ -1084,18 +1248,24 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
         for s in users_list:
             source_type = str(s.get("source_type", "student")).strip().lower()
             is_employee_import = source_type == "employee"
+            requested_category = normalize_user_category(s.get("user_category"))
+            if not requested_category:
+                requested_category = "FACULTY" if is_employee_import else (
+                    "SHS_STUDENT" if normalize_level(s.get("level")) in {"Grade 11", "Grade 12"}
+                    else "COLLEGE_STUDENT"
+                )
 
             s_id = str(s.get("student_no", "")).strip()
             last_n = str(s.get("last_name", "")).strip()
             first_n = str(s.get("first_name", "")).strip()
             middle_n = str(s.get("middle_name", "")).strip()
             course = str(s.get("course", "")).strip()
-            level = str(s.get("level", "")).strip()
+            level = normalize_level(s.get("level")) or str(s.get("level", "")).strip()
             batch_val = str(s.get("batch_id", "")).strip()
             department = str(s.get("department", "")).strip()
             personnel = str(s.get("personnel", "")).strip().title()
             display_name = str(s.get("display_name", "")).strip()
-            initial_permissions = [STUDENT_ACCESS_PERMISSION] if is_employee_import else []
+            initial_permissions = [STUDENT_ACCESS_PERMISSION]
 
             last_6 = s_id[-6:] if s_id else ""
             email_addr = (
@@ -1123,6 +1293,8 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             row = {
                 "source_type": source_type,
                 "is_employee_import": is_employee_import,
+                "user_category": requested_category,
+                "academic_classification": classification_for_category(requested_category),
                 "student_no": s_id,
                 "last_name": last_n,
                 "first_name": first_n,
@@ -1140,7 +1312,20 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                 "hashed_password": None
             }
 
+            row_validation_errors = [
+                clean_text(error) for error in (s.get("validation_errors") or []) if clean_text(error)
+            ]
+            if requested_category == "SHS_STUDENT" and level not in {"Grade 11", "Grade 12"}:
+                row_validation_errors.append("SHS imports require Grade 11 or Grade 12")
+            elif requested_category == "COLLEGE_STUDENT" and level not in {
+                "1st Year", "2nd Year", "3rd Year", "4th Year"
+            }:
+                row_validation_errors.append("College imports require 1st Year through 4th Year")
+            elif requested_category == "FACULTY" and not department:
+                row_validation_errors.append("Faculty imports require a department")
+
             missing_fields = get_missing_registration_fields(row)
+            missing_fields.extend(row_validation_errors)
             if missing_fields:
                 ignored_count += 1
                 results.append({
@@ -1276,6 +1461,9 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
             user.is_archived = bool(keep_archived)
             user.is_admin = False
             user.permissions = row["permissions"]
+            user.user_category = row["user_category"]
+            user.academic_classification = row["academic_classification"]
+            user.classification_review_required = False
 
         rows_to_hash = []
         for row in normalized_rows:
@@ -1403,7 +1591,10 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 hashed_password=row["hashed_password"],
                                 is_admin=False,
                                 must_change_password=True,
-                                permissions=row["permissions"]
+                                permissions=row["permissions"],
+                                user_category=row["user_category"],
+                                academic_classification=row["academic_classification"],
+                                classification_review_required=False,
                             )
                             pending_creates.append(user_obj)
 
@@ -1470,7 +1661,10 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                             hashed_password=row["hashed_password"],
                             is_admin=False,
                             must_change_password=True,
-                            permissions=row["permissions"]
+                            permissions=row["permissions"],
+                            user_category=row["user_category"],
+                            academic_classification=row["academic_classification"],
+                            classification_review_required=False,
                         )
                         pending_creates.append(user_obj)
 
@@ -1561,7 +1755,10 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                     hashed_password=row["hashed_password"],
                                     is_admin=False,
                                     must_change_password=True,
-                                    permissions=row["permissions"]
+                                    permissions=row["permissions"],
+                                    user_category=row["user_category"],
+                                    academic_classification=row["academic_classification"],
+                                    classification_review_required=False,
                                 )
                                 db.flush()
                                 db.add(user_obj)
@@ -1654,7 +1851,10 @@ def process_bulk_registration_job(job_id: str, users_list: list[dict], duplicate
                                 hashed_password=row["hashed_password"],
                                 is_admin=False,
                                 must_change_password=True,
-                                permissions=row["permissions"]
+                                permissions=row["permissions"],
+                                user_category=row["user_category"],
+                                academic_classification=row["academic_classification"],
+                                classification_review_required=False,
                             )
                             db.add(user_obj)
                             db.commit()
@@ -1767,7 +1967,7 @@ async def toggle_archive(
     user_id: int, 
     archive: bool, 
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Archive"))
+    current_admin: models.User = Depends(check_permission("user_management.archive"))
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -1808,7 +2008,7 @@ async def bulk_toggle_archive(
     data: StudentActivationRequest,
     archive: bool,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Archive"))
+    current_admin: models.User = Depends(check_permission("user_management.archive"))
 ):
     user_ids = list(dict.fromkeys(data.user_ids))
     if not user_ids:
@@ -1872,7 +2072,7 @@ async def bulk_toggle_archive(
 async def move_user_to_delete(
     user_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Delete"))
+    current_admin: models.User = Depends(check_permission("user_management.delete"))
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
 
@@ -1903,7 +2103,7 @@ async def move_user_to_delete(
 async def bulk_move_users_to_delete(
     data: StudentActivationRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Delete"))
+    current_admin: models.User = Depends(check_permission("user_management.delete"))
 ):
     user_ids = list(dict.fromkeys(data.user_ids))
     if not user_ids:
@@ -1947,7 +2147,7 @@ async def bulk_move_users_to_delete(
 async def permanent_delete(
     user_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Delete"))
+    current_admin: models.User = Depends(check_permission("user_management.delete"))
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     
@@ -1982,7 +2182,7 @@ async def permanent_delete(
 async def bulk_permanent_delete(
     data: StudentActivationRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Delete"))
+    current_admin: models.User = Depends(check_permission("user_management.delete"))
 ):
     user_ids = list(dict.fromkeys(data.user_ids))
     if not user_ids:
@@ -2171,19 +2371,15 @@ def auto_archive_pending(db: Session):
 @router.get("/my-permissions")
 async def get_my_permissions(admin: models.User = Depends(get_current_admin)):
     if is_root_admin(admin):
-        return ADMIN_PERMISSION_KEYS
-
-    # If permissions are stored as a JSON string in DB, decode them
-    if isinstance(admin.permissions, str):
-        return json.loads(admin.permissions)
-    return admin.permissions # Return list directly if already a list
+        return permission_response_values(ADMIN_PERMISSION_KEYS)
+    return permission_response_values(admin.permissions)
 
 @router.post("/items/confirm-match/{lost_id}/{found_id}")
 async def confirm_match(
     lost_id: int,
     found_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Claim-Management-Create")),
+    current_admin: models.User = Depends(check_permission("claim_management.create")),
 ):
     lost_item = db.query(models.Item).filter(models.Item.id == lost_id).first()
     found_item = db.query(models.Item).filter(models.Item.id == found_id).first()
@@ -2203,7 +2399,7 @@ async def confirm_match(
 @router.get("/items/found")
 def get_found_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports")),
+    current_admin: models.User = Depends(check_permission("found_items.view")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
@@ -2215,7 +2411,7 @@ def get_found_items(
 @router.get("/items/found/archived")
 def get_archived_found_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports")),
+    current_admin: models.User = Depends(check_permission("found_items.view")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
@@ -2228,7 +2424,7 @@ def get_archived_found_items(
 @router.get("/items/found/deleted")
 def get_deleted_found_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports")),
+    current_admin: models.User = Depends(check_permission("found_items.view")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "found",
@@ -2239,7 +2435,7 @@ def get_deleted_found_items(
 @router.get("/items/lost")
 def get_lost_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Lost-Reports")),
+    current_admin: models.User = Depends(check_permission("lost_items.view")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
@@ -2251,7 +2447,7 @@ def get_lost_items(
 @router.get("/items/lost/archived")
 def get_archived_lost_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Lost-Reports")),
+    current_admin: models.User = Depends(check_permission("lost_items.view")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
@@ -2264,7 +2460,7 @@ def get_archived_lost_items(
 @router.get("/items/lost/deleted")
 def get_deleted_lost_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Lost-Reports")),
+    current_admin: models.User = Depends(check_permission("lost_items.view")),
 ):
     items = db.query(models.Item).filter(
         models.Item.status == "lost",
@@ -2366,7 +2562,7 @@ def admin_profile(
 def get_admin_recent_activity(
     limit: int = 5,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin),
+    current_user: models.User = Depends(check_permission("profile.view")),
 ):
     """Return audit entries created by the administrator viewing the profile."""
     limit = max(1, min(limit, 20))
@@ -2416,7 +2612,7 @@ async def update_profile(
     section: str = Form(None),
     profile_img: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_admin) 
+    current_user: models.User = Depends(check_permission("profile.edit"))
 ):
     user = current_user
     
@@ -2521,7 +2717,7 @@ async def content_editor_page(
 @router.get("/pending-items")
 def get_pending_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports"))
+    current_admin: models.User = Depends(check_permission("found_items.view"))
 ):
     auto_archive_pending(db)
 
@@ -2536,7 +2732,7 @@ def get_pending_items(
 @router.get("/pending-items/archived")
 def get_archived_pending_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports"))
+    current_admin: models.User = Depends(check_permission("found_items.view"))
 ):
     items = db.query(models.PendingItem).filter(
         models.PendingItem.archived == True,
@@ -2548,7 +2744,7 @@ def get_archived_pending_items(
 @router.get("/pending-items/deleted")
 def get_deleted_pending_items(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports")),
+    current_admin: models.User = Depends(check_permission("found_items.view")),
 ):
     items = db.query(models.PendingItem).filter(
         models.PendingItem.deleted == True
@@ -2576,7 +2772,7 @@ async def get_caregory(
 async def create_department(
     data: dict,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
+    admin: models.User = Depends(check_permission("content_management.manage_taxonomy"))
 ):
     name = str(data.get("name", "")).strip()
     if not name:
@@ -2605,7 +2801,7 @@ async def create_department(
 async def delete_department(
     department_id: int,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
+    admin: models.User = Depends(check_permission("content_management.manage_taxonomy"))
 ):
     department = db.query(models.Department).filter(models.Department.id == department_id).first()
     if not department:
@@ -2629,7 +2825,7 @@ async def delete_department(
 async def create_category(
     data: dict,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
+    admin: models.User = Depends(check_permission("content_management.manage_taxonomy"))
 ):
     name = str(data.get("name", "")).strip()
     if not name:
@@ -2658,7 +2854,7 @@ async def create_category(
 async def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Taxonomy"))
+    admin: models.User = Depends(check_permission("content_management.manage_taxonomy"))
 ):
     category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not category:
@@ -2678,12 +2874,293 @@ async def delete_category(
     return {"status": "success"}
 
 
+@router.get("/user-form-options")
+def get_user_form_options(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("user_management.view")),
+):
+    departments = [
+        row[0] for row in db.query(models.Department.name)
+        .order_by(models.Department.name.asc()).all()
+        if clean_text(row[0])
+    ]
+    programs = [
+        row[0] for row in db.query(models.User.course)
+        .filter(models.User.course.isnot(None), func.ltrim(func.rtrim(models.User.course)) != "")
+        .distinct().order_by(models.User.course.asc()).all()
+        if clean_text(row[0])
+    ]
+    categories = [
+        {"value": value, "label": USER_CATEGORY_LABELS[value]}
+        for value in USER_CATEGORIES
+        if value != "ADMIN" or "user_management.create" in get_assignable_permissions(current_admin)
+    ]
+    return {
+        "user_categories": categories,
+        "entry_modes": ["manual", "import"],
+        "import_supported_categories": ["COLLEGE_STUDENT", "SHS_STUDENT", "FACULTY"],
+        "levels": list(LEVEL_OPTIONS),
+        "departments": departments,
+        "programs": programs,
+        "permissions": sorted(
+            permission for permission in get_assignable_permissions(current_admin)
+            if permission in PERMISSION_CATALOG
+        ),
+        "permission_groups": permission_groups_payload(get_assignable_permissions(current_admin)),
+        "program_source": "existing_user_records",
+    }
+
+
+@router.post("/users")
+def create_user(
+    payload: UnifiedUserCreate,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("user_management.create")),
+):
+    category = payload.user_category
+    email = clean_text(payload.email).lower()
+
+    duplicate = db.query(models.User).filter(or_(
+        func.lower(models.User.email) == email.casefold(),
+        func.lower(models.User.student_no) == payload.student_no.casefold(),
+    )).first()
+    if duplicate:
+        field = "email" if clean_text(duplicate.email).casefold() == email.casefold() else "Student/Employee number"
+        raise HTTPException(status_code=409, detail=f"{field} is already registered.")
+
+    if payload.department:
+        known_department = db.query(models.Department.name).filter(
+            func.lower(models.Department.name) == payload.department.casefold()
+        ).scalar()
+        if not known_department:
+            raise HTTPException(status_code=400, detail="Select a department from the configured department list.")
+        department = known_department
+    else:
+        department = None
+
+    program = clean_text(payload.program) or None
+    if program:
+        known_programs = {
+            clean_text(row[0]).casefold(): clean_text(row[0])
+            for row in db.query(models.User.course)
+            .filter(models.User.course.isnot(None), func.ltrim(func.rtrim(models.User.course)) != "")
+            .distinct().all()
+        }
+        if known_programs and program.casefold() not in known_programs:
+            raise HTTPException(
+                status_code=400,
+                detail="Select a program from the existing program list. A canonical program-management source has not yet been configured.",
+            )
+        program = known_programs.get(program.casefold(), program)
+
+    permissions = normalize_admin_permissions(payload.permissions)
+    if category in {"COLLEGE_STUDENT", "SHS_STUDENT", "FACULTY"}:
+        permissions = [STUDENT_ACCESS_PERMISSION]
+    else:
+        assignable = get_assignable_permissions(current_admin)
+        invalid = [permission for permission in permissions if permission not in assignable]
+        if invalid:
+            raise HTTPException(status_code=403, detail=f"You cannot grant: {', '.join(invalid)}")
+        if not permissions:
+            raise HTTPException(status_code=400, detail="Select at least one permission for Staff or Admin.")
+
+    raw_password = payload.password or ""
+    if not raw_password or raw_password == "AUTO_GENERATE":
+        raw_password = f"Lf!{secrets.token_urlsafe(8)}1"
+
+    setting = get_or_create_academic_term_setting(db)
+    if category == "COLLEGE_STUDENT" and setting.current_status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail="The current tertiary semester has ended. Start the next semester before registering college students.",
+        )
+    if category == "SHS_STUDENT" and setting.shs_current_status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail="The current SHS school year has ended. Start the next SHS school year before registering SHS students.",
+        )
+    batch_id = None
+    if category == "COLLEGE_STUDENT":
+        batch_id = f"BATCH-{setting.current_academic_year} {setting.current_semester}"
+    elif category == "SHS_STUDENT":
+        batch_id = f"BATCH-{setting.shs_current_academic_year} School Year"
+
+    user = models.User(
+        first_name=payload.first_name,
+        middle_name=payload.middle_name or None,
+        last_name=payload.last_name,
+        full_name=" ".join(part for part in (payload.first_name, payload.middle_name, payload.last_name) if part),
+        student_no=payload.student_no,
+        email=email,
+        course=program,
+        department=department,
+        personnel=category.title() if category in {"FACULTY", "STAFF"} else ("Admin" if category == "ADMIN" else None),
+        section=clean_text(payload.section) or None,
+        level=payload.level,
+        batch_id=batch_id,
+        hashed_password=pwd_context.hash(raw_password),
+        is_admin=category in {"STAFF", "ADMIN"},
+        is_archived=False,
+        must_change_password=True,
+        permissions=json.dumps(permissions),
+        user_category=category,
+        academic_classification=USER_CATEGORY_CLASSIFICATION[category],
+        classification_review_required=False,
+    )
+    try:
+        db.add(user)
+        db.flush()
+        db.add(models.Notification(
+            message=f"{current_admin.full_name or current_admin.email} created {USER_CATEGORY_LABELS[category]} account {user.full_name}.",
+            type="user_management_admin" if user.is_admin else "user_management_students",
+            related_id=user.id,
+            created_by_admin_id=current_admin.id,
+            target_url="/admin/User-Management",
+            is_read=False,
+        ))
+        db.commit()
+        db.refresh(user)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Email or Student/Employee number is already registered.") from exc
+
+    queue_account_access_email(
+        user.email,
+        user.full_name,
+        raw_password,
+        account_type=category.casefold(),
+    )
+    return {
+        "message": f"{USER_CATEGORY_LABELS[category]} account created.",
+        "user_id": user.id,
+        "email": user.email,
+        "temp_password": raw_password,
+    }
+
+
+@router.put("/users/{user_id}")
+def update_user_details(
+    user_id: int,
+    payload: UnifiedUserCreate,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("user_management.edit")),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or (is_root_admin(user) and not is_root_admin(current_admin)):
+        raise HTTPException(status_code=404, detail="User not found.")
+    current_category = user.user_category or infer_legacy_classification(
+        is_admin=bool(user.is_admin),
+        personnel=user.personnel,
+        department=user.department,
+        course=user.course,
+        section=user.section,
+        level=user.level,
+    )[0]
+    if payload.user_category != current_category:
+        raise HTTPException(status_code=400, detail="User category changes require a separate authorized workflow.")
+
+    email = clean_text(payload.email).lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required when editing an account.")
+    duplicate = db.query(models.User.id).filter(
+        models.User.id != user.id,
+        or_(
+            func.lower(models.User.email) == email.casefold(),
+            func.lower(models.User.student_no) == payload.student_no.casefold(),
+        ),
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Email or Student/Employee number is already registered.")
+
+    department = None
+    if payload.department:
+        department = db.query(models.Department.name).filter(
+            func.lower(models.Department.name) == payload.department.casefold()
+        ).scalar()
+        if not department:
+            raise HTTPException(status_code=400, detail="Select a department from the configured department list.")
+
+    program = clean_text(payload.program) or None
+    if program:
+        known_programs = {
+            clean_text(row[0]).casefold(): clean_text(row[0])
+            for row in db.query(models.User.course)
+            .filter(models.User.course.isnot(None), func.ltrim(func.rtrim(models.User.course)) != "")
+            .distinct().all()
+        }
+        if known_programs and program.casefold() not in known_programs:
+            raise HTTPException(status_code=400, detail="Select a program from the existing program list.")
+        program = known_programs.get(program.casefold(), program)
+
+    permissions = parse_permissions(user.permissions)
+    if payload.user_category in {"COLLEGE_STUDENT", "SHS_STUDENT", "FACULTY"}:
+        permissions = [STUDENT_ACCESS_PERMISSION]
+    elif payload.permissions:
+        requested = normalize_admin_permissions(payload.permissions)
+        invalid = [permission for permission in requested if permission not in get_assignable_permissions(current_admin)]
+        if invalid:
+            raise HTTPException(status_code=403, detail=f"You cannot grant: {', '.join(invalid)}")
+        permissions = requested
+
+    user.student_no = payload.student_no
+    user.first_name = payload.first_name
+    user.middle_name = payload.middle_name or None
+    user.last_name = payload.last_name
+    user.full_name = " ".join(
+        part for part in (payload.first_name, payload.middle_name, payload.last_name) if part
+    )
+    user.email = email
+    user.course = program
+    user.level = payload.level
+    user.department = department
+    user.section = clean_text(payload.section) or None
+    user.permissions = json.dumps(permissions)
+    user.academic_classification = USER_CATEGORY_CLASSIFICATION[payload.user_category]
+    user.classification_review_required = False
+    if payload.password and payload.password != "AUTO_GENERATE":
+        user.hashed_password = pwd_context.hash(payload.password)
+        user.must_change_password = True
+
+    db.add(models.Notification(
+        message=f"{current_admin.full_name or current_admin.email} updated {user.full_name}.",
+        type="user_management_admin" if user.is_admin else "user_management_students",
+        related_id=user.id,
+        created_by_admin_id=current_admin.id,
+        target_url="/admin/User-Management",
+        is_read=False,
+    ))
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Email or Student/Employee number is already registered.") from exc
+    return {"message": "User details updated.", "user_id": user.id}
+
+
 @router.post("/create-new-admin")
 async def create_new_admin(
     admin_in: AdminCreate,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Create"))
+    current_admin: models.User = Depends(check_permission("user_management.create"))
 ):
+    # Backward-compatible endpoint for older clients. All creation now runs
+    # through the same normalized validation and persistence path as Add User.
+    legacy_category = "STAFF" if clean_text(admin_in.personnel).casefold() == "staff" else "ADMIN"
+    unified_payload = UnifiedUserCreate(
+        user_category=legacy_category,
+        student_no=admin_in.student_no,
+        first_name=admin_in.first_name,
+        middle_name=admin_in.middle_name or "",
+        last_name=admin_in.last_name,
+        email=admin_in.email,
+        department=admin_in.department,
+        section=admin_in.section,
+        permissions=admin_in.permissions,
+    )
+    return create_user(unified_payload, db, current_admin)
+
+    # Unreachable legacy implementation is retained for one release so any
+    # deployment-specific fields can be compared before its final removal.
     submitted_permissions = list(dict.fromkeys(admin_in.permissions))
     requested_permissions = normalize_admin_permissions(submitted_permissions)
     assignable_permissions = get_assignable_permissions(current_admin)
@@ -2780,11 +3257,8 @@ async def create_new_admin(
 @router.get("/academic-term")
 def get_academic_term(
     db: Session = Depends(get_db),
-    admin: models.User = Depends(get_current_admin),
+    admin: models.User = Depends(check_permission("academic_term.view")),
 ):
-    permissions = parse_permissions(admin.permissions)
-    if not is_root_admin(admin) and not ({"User-Management", "Content-management"} & set(permissions)):
-        raise HTTPException(status_code=403, detail="Access denied.")
     setting = process_academic_term_schedule(db)
     return serialize_academic_term_setting(setting)
 
@@ -2793,7 +3267,7 @@ def get_academic_term(
 def update_academic_term(
     data: AcademicTermScheduleUpdate,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Term")),
+    admin: models.User = Depends(check_permission("academic_term.manage")),
 ):
     if data.current_end_date <= data.current_start_date:
         raise HTTPException(status_code=400, detail="Current semester end date must be after its start date.")
@@ -2834,8 +3308,97 @@ def update_academic_term(
     create_admin_notification(
         db,
         f"{data.current_academic_year} {data.current_semester} is scheduled to end on "
-        f"{data.current_end_date.strftime('%B %d, %Y')}. Its active student accounts will be archived. "
+        f"{data.current_end_date.strftime('%B %d, %Y')}. Archiving remains a separate manual action. "
         f"{data.next_academic_year} {data.next_semester} starts on {data.next_start_date.strftime('%B %d, %Y')}.",
+        "academic_term",
+        setting.id,
+        "/admin/User-Management",
+    )
+    return serialize_academic_term_setting(setting)
+
+
+@router.put("/academic-term/schedules")
+def update_classification_schedules(
+    data: AcademicSchedulesUpdate,
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(check_permission("academic_term.manage")),
+):
+    tertiary = data.tertiary
+    shs = data.shs
+    try:
+        for academic_year in (
+            tertiary.current_academic_year,
+            tertiary.next_academic_year,
+            shs.current_academic_year,
+            shs.next_academic_year,
+        ):
+            validate_academic_year(academic_year)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if tertiary.current_semester not in {"1st Semester", "2nd Semester"} or tertiary.next_semester not in {"1st Semester", "2nd Semester"}:
+        raise HTTPException(status_code=400, detail="Select a valid tertiary semester.")
+    if tertiary.current_end_date <= tertiary.current_start_date:
+        raise HTTPException(status_code=400, detail="Tertiary current-semester end date must be after its start date.")
+    if tertiary.next_start_date <= tertiary.current_end_date:
+        raise HTTPException(status_code=400, detail="The next tertiary semester must start after the current semester ends.")
+    if tertiary.next_end_date <= tertiary.next_start_date:
+        raise HTTPException(status_code=400, detail="Tertiary next-semester end date must be after its start date.")
+    if shs.current_end_date <= shs.current_start_date:
+        raise HTTPException(status_code=400, detail="SHS school-year end date must be after its start date.")
+    if shs.next_start_date <= shs.current_end_date:
+        raise HTTPException(status_code=400, detail="The next SHS school year must start after the current school year ends.")
+    if shs.next_end_date <= shs.next_start_date:
+        raise HTTPException(status_code=400, detail="SHS next school-year end date must be after its start date.")
+
+    setting = get_or_create_academic_term_setting(db)
+    tertiary_current_changed = any([
+        tertiary.current_academic_year != setting.current_academic_year,
+        tertiary.current_semester != setting.current_semester,
+        tertiary.current_start_date != setting.current_start_date,
+        tertiary.current_end_date != setting.current_end_date,
+    ])
+    if setting.current_status == "active" and tertiary_current_changed:
+        raise HTTPException(
+            status_code=409,
+            detail="The active tertiary semester cannot be changed. End it before changing its current schedule.",
+        )
+
+    shs_has_configured_current_dates = bool(setting.shs_current_start_date and setting.shs_current_end_date)
+    shs_current_changed = any([
+        shs.current_academic_year != setting.shs_current_academic_year,
+        shs.current_start_date != setting.shs_current_start_date,
+        shs.current_end_date != setting.shs_current_end_date,
+    ])
+    if setting.shs_current_status == "active" and shs_has_configured_current_dates and shs_current_changed:
+        raise HTTPException(
+            status_code=409,
+            detail="The active SHS school year cannot be changed. End it before changing its current schedule.",
+        )
+
+    setting.current_academic_year = tertiary.current_academic_year
+    setting.current_semester = tertiary.current_semester
+    setting.current_start_date = tertiary.current_start_date
+    setting.current_end_date = tertiary.current_end_date
+    setting.next_academic_year = tertiary.next_academic_year
+    setting.next_semester = tertiary.next_semester
+    setting.next_start_date = tertiary.next_start_date
+    setting.next_end_date = tertiary.next_end_date
+    setting.shs_current_academic_year = shs.current_academic_year
+    setting.shs_current_start_date = shs.current_start_date
+    setting.shs_current_end_date = shs.current_end_date
+    setting.shs_next_academic_year = shs.next_academic_year
+    setting.shs_next_start_date = shs.next_start_date
+    setting.shs_next_end_date = shs.next_end_date
+    db.commit()
+
+    create_admin_notification(
+        db,
+        (
+            f"Academic schedules updated independently: Tertiary {tertiary.current_academic_year} "
+            f"{tertiary.current_semester}; SHS {shs.current_academic_year} School Year. "
+            "Archiving remains a separate manual action for each classification."
+        ),
         "academic_term",
         setting.id,
         "/admin/User-Management",
@@ -2846,23 +3409,33 @@ def update_academic_term(
 @router.post("/academic-term/end")
 def manually_end_academic_term(
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Term")),
+    admin: models.User = Depends(check_permission("academic_term.manage")),
 ):
-    setting = get_or_create_academic_term_setting(db)
-    archived_count = end_current_academic_term(db, setting, admin.id)
-    return {
-        "message": f"{setting.current_academic_year} {setting.current_semester} ended.",
-        "archived_count": archived_count,
-        "term": serialize_academic_term_setting(setting),
-    }
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "This legacy mixed-account archive action is disabled. "
+            "Use /admin/academic-archives/estimate and /admin/academic-archives/execute "
+            "with an explicit SHS or TERTIARY scope."
+        ),
+    )
 
 
 @router.post("/academic-term/reactivate")
 def reactivate_academic_term(
     data: AcademicTermReactivateRequest,
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Term")),
+    admin: models.User = Depends(check_permission("academic_term.manage")),
 ):
+    raise HTTPException(
+        status_code=410,
+        detail="Legacy term reactivation is disabled because scoped archive operations are immutable audit records.",
+    )
+    """
+    Legacy implementation retained below temporarily for data-forensics reference.
+    It is unreachable and should be removed after archived transition records have
+    been reconciled with academic_archive_operations.
+    """
     setting = get_or_create_academic_term_setting(db)
     if setting.current_status != "ended":
         raise HTTPException(status_code=409, detail="Only an ended semester can be reactivated.")
@@ -2943,7 +3516,7 @@ def reactivate_academic_term(
 @router.post("/academic-term/start")
 def manually_start_academic_term(
     db: Session = Depends(get_db),
-    admin: models.User = Depends(check_permission("Content-management-Term")),
+    admin: models.User = Depends(check_permission("academic_term.manage")),
 ):
     setting = get_or_create_academic_term_setting(db)
     try:
@@ -2955,12 +3528,145 @@ def manually_start_academic_term(
         "term": serialize_academic_term_setting(setting),
     }
 
+
+@router.post("/academic-term/shs/start")
+def manually_start_shs_school_year(
+    db: Session = Depends(get_db),
+    admin: models.User = Depends(check_permission("academic_term.manage")),
+):
+    setting = get_or_create_academic_term_setting(db)
+    try:
+        start_next_shs_school_year(db, setting)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "message": f"SHS {setting.shs_current_academic_year} School Year started.",
+        "term": serialize_academic_term_setting(setting),
+    }
+
+
+def academic_archive_candidates(db: Session, scope: AcademicArchiveRequest):
+    query = db.query(models.User).filter(
+        models.User.is_admin == False,
+        models.User.is_archived == False,
+        models.User.academic_classification == scope.academic_classification,
+        models.User.classification_review_required == False,
+    )
+    if scope.academic_classification == "SHS":
+        # Legacy SHS imports may carry the old semester suffix. Classification
+        # is the authoritative boundary; the year prefix safely includes them.
+        query = query.filter(models.User.batch_id.like(f"BATCH-{scope.academic_year} %"))
+    else:
+        query = query.filter(
+            models.User.batch_id == academic_archive_batch_id(
+                scope.academic_classification, scope.academic_year, scope.term_label
+            )
+        )
+    return query
+
+
+@router.post("/academic-archives/estimate")
+def estimate_academic_archive(
+    scope: AcademicArchiveRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("academic_archiving.execute")),
+):
+    existing = db.query(models.AcademicArchiveOperation.id).filter(
+        models.AcademicArchiveOperation.academic_classification == scope.academic_classification,
+        models.AcademicArchiveOperation.academic_year == scope.academic_year,
+        models.AcademicArchiveOperation.term_label == scope.term_label,
+        models.AcademicArchiveOperation.status == "completed",
+    ).first()
+    count = academic_archive_candidates(db, scope).with_entities(func.count(models.User.id)).scalar() or 0
+    ambiguous_count = db.query(func.count(models.User.id)).filter(
+        models.User.is_admin == False,
+        models.User.is_archived == False,
+        models.User.classification_review_required == True,
+        models.User.batch_id.like(f"BATCH-{scope.academic_year} %"),
+    ).scalar() or 0
+    return {
+        "academic_classification": scope.academic_classification,
+        "academic_year": scope.academic_year,
+        "term_label": scope.term_label,
+        "estimated_count": count,
+        "ambiguous_excluded_count": ambiguous_count,
+        "already_archived": bool(existing),
+    }
+
+
+@router.post("/academic-archives/execute")
+def execute_academic_archive(
+    scope: AcademicArchiveRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("academic_archiving.execute")),
+):
+    existing = db.query(models.AcademicArchiveOperation).filter(
+        models.AcademicArchiveOperation.academic_classification == scope.academic_classification,
+        models.AcademicArchiveOperation.academic_year == scope.academic_year,
+        models.AcademicArchiveOperation.term_label == scope.term_label,
+        models.AcademicArchiveOperation.status == "completed",
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="This classification and term has already been archived.")
+
+    users = academic_archive_candidates(db, scope).with_for_update().all()
+    operation = models.AcademicArchiveOperation(
+        academic_classification=scope.academic_classification,
+        academic_year=scope.academic_year,
+        term_label=scope.term_label,
+        archived_user_ids=json.dumps([user.id for user in users]),
+        affected_count=len(users),
+        performed_by_admin_id=current_admin.id,
+        performed_at=datetime.utcnow(),
+        status="completed",
+    )
+    for user in users:
+        user.is_archived = True
+    if scope.academic_classification == "TERTIARY":
+        setting = get_or_create_academic_term_setting(db)
+        current_term_label = {
+            "1st Semester": "First Semester",
+            "2nd Semester": "Second Semester",
+        }.get(setting.current_semester)
+        if setting.current_academic_year == scope.academic_year and current_term_label == scope.term_label:
+            setting.current_status = "ended"
+    else:
+        setting = get_or_create_academic_term_setting(db)
+        if setting.shs_current_academic_year == scope.academic_year:
+            setting.shs_current_status = "ended"
+    db.add(operation)
+    db.flush()
+    db.add(models.Notification(
+        message=(
+            f"{scope.academic_classification} - {scope.term_label}, Academic Year "
+            f"{scope.academic_year} ended manually. {len(users)} account(s) were archived."
+        ),
+        type="academic_term",
+        related_id=operation.id,
+        created_by_admin_id=current_admin.id,
+        target_url="/admin/User-Management?tab=archive",
+        is_read=False,
+    ))
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This classification and term has already been archived.") from exc
+    return {
+        "message": (
+            f"{scope.academic_classification} - {scope.term_label} archive completed "
+            f"for Academic Year {scope.academic_year}."
+        ),
+        "affected_count": len(users),
+        "operation_id": operation.id,
+    }
+
 @router.post("/update-permissions/{user_id}")
 async def update_user_permissions(
     user_id: int, 
     data: PermissionUpdate, 
     db: Session = Depends(get_db),
-    admin = Depends(check_permission("User-Management-Edit"))
+    admin = Depends(check_permission("user_management.edit"))
 ):
     # 1. Find the user in the database
     user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -3011,7 +3717,7 @@ async def update_user_permissions(
 def get_all_users(
     db: Session = Depends(get_db),
     # Ensure the person calling this is actually an admin with the right perms
-    admin = Depends(check_permission("User-Management")) 
+    admin = Depends(check_permission("user_management.view"))
 ):
     # Keep this endpoint in FastAPI's worker pool (plain `def`) because pyodbc
     # is synchronous. Selecting only the fields used by the page also avoids
@@ -3045,9 +3751,11 @@ def get_all_users(
         if is_root_admin(u) and not is_root_admin(admin):
             continue
 
-        # 1. Handle permissions safely
+        # Parse once and reuse it for all access-state flags.
         perms = parse_permissions(u.permissions)
-        is_student_active = True if u.is_admin else student_has_portal_access(u)
+        permission_set = set(perms)
+        is_student_active = True if u.is_admin else STUDENT_ACCESS_PERMISSION in permission_set
+        is_pending_delete = DELETE_QUEUE_PERMISSION in permission_set
 
         # 2. Append the formatted dictionary
         user_list.append({
@@ -3065,24 +3773,211 @@ def get_all_users(
             "section": u.section or "",
             "level": u.level or "",
             "course_section": f"{u.course or ''} {u.section or ''}".strip() or "N/A",
-            "profile_pic": deployed_static_path(u.profile_pic),
+            # Return a normalized URL without performing filesystem I/O per user.
+            "profile_pic": public_file_url(u.profile_pic, DEFAULT_PROFILE_PIC),
             "last_login": u.last_login.isoformat() if u.last_login else None,
             "is_admin": u.is_admin,
             "is_archived": u.is_archived,
             "must_change_password": u.must_change_password,
             "is_student_active": is_student_active,
-            "is_pending_delete": user_is_pending_delete(u),
+            "is_pending_delete": is_pending_delete,
             "permissions": perms
         })
         
     return user_list
 
 
+def serialize_user_management_user(user: models.User, viewer: models.User) -> dict:
+    permissions = parse_permissions(user.permissions)
+    permission_set = set(permissions)
+    category = user.user_category
+    classification = user.academic_classification
+    review_required = bool(user.classification_review_required)
+    if not category or not classification:
+        inferred_category, inferred_classification, inferred_review = infer_legacy_classification(
+            is_admin=bool(user.is_admin),
+            personnel=user.personnel,
+            department=user.department,
+            course=user.course,
+            section=user.section,
+            level=user.level,
+        )
+        category = category or inferred_category
+        classification = classification or inferred_classification
+        review_required = review_required or inferred_review
+    return {
+        "id": user.id,
+        "first_name": user.first_name or "",
+        "middle_name": user.middle_name or "",
+        "last_name": user.last_name or "",
+        "full_name": user.full_name or "N/A",
+        "student_no": displayed_student_no(user) or "N/A",
+        "email": displayed_email(user),
+        "batch_id": user.batch_id or "",
+        "department": user.department or "N/A",
+        "personnel": user.personnel or "",
+        "course": user.course or "",
+        "section": user.section or "",
+        "level": user.level or "",
+        "course_section": f"{user.course or ''} {user.section or ''}".strip() or "N/A",
+        "profile_pic": public_file_url(user.profile_pic, DEFAULT_PROFILE_PIC),
+        "last_login": user.last_login.isoformat() if user.last_login else None,
+        "is_admin": bool(user.is_admin),
+        "is_archived": bool(user.is_archived),
+        "must_change_password": bool(user.must_change_password),
+        "is_student_active": True if user.is_admin else STUDENT_ACCESS_PERMISSION in permission_set,
+        "is_pending_delete": DELETE_QUEUE_PERMISSION in permission_set,
+        "permissions": permissions,
+        "user_category": category,
+        "academic_classification": classification,
+        "classification_review_required": review_required,
+    }
+
+
+@router.get("/users")
+def list_users_paginated(
+    role: str = Query("admin"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: str = Query("", max_length=100),
+    batch_filter: str = Query("", max_length=150),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("user_management.view")),
+):
+    role = clean_text(role).casefold()
+    if role not in {"admin", "staff", "student", "faculty", "archive", "delete"}:
+        raise HTTPException(status_code=400, detail="Invalid user role filter.")
+
+    query = db.query(models.User)
+    pending_delete_match = models.User.permissions.contains(DELETE_QUEUE_PERMISSION)
+    if role == "admin":
+        query = query.filter(
+            models.User.is_archived == False,
+            models.User.is_admin == True,
+            or_(
+                models.User.user_category == "ADMIN",
+                and_(models.User.user_category.is_(None), or_(models.User.personnel.is_(None), func.lower(models.User.personnel) != "staff")),
+            ),
+        )
+    elif role == "staff":
+        query = query.filter(
+            models.User.is_archived == False,
+            models.User.is_admin == True,
+            or_(models.User.user_category == "STAFF", func.lower(models.User.personnel) == "staff"),
+        )
+    elif role == "student":
+        query = query.filter(
+            models.User.is_archived == False,
+            models.User.is_admin == False,
+            or_(
+                models.User.user_category.in_(("COLLEGE_STUDENT", "SHS_STUDENT")),
+                and_(
+                    models.User.user_category.is_(None),
+                    or_(models.User.department.is_(None), models.User.department == "", models.User.course.isnot(None)),
+                ),
+            ),
+        )
+    elif role == "faculty":
+        query = query.filter(
+            models.User.is_archived == False,
+            models.User.is_admin == False,
+            or_(
+                models.User.user_category == "FACULTY",
+                and_(
+                    models.User.user_category.is_(None),
+                    models.User.department.isnot(None),
+                    models.User.department != "",
+                    or_(models.User.course.is_(None), models.User.course == ""),
+                    or_(models.User.section.is_(None), models.User.section == ""),
+                ),
+            ),
+        )
+    elif role == "archive":
+        query = query.filter(models.User.is_archived == True, ~pending_delete_match)
+    else:
+        query = query.filter(models.User.is_archived == True, pending_delete_match)
+
+    if not is_root_admin(current_admin):
+        query = query.filter(or_(
+            models.User.email.is_(None),
+            func.lower(models.User.email) != ROOT_ADMIN_EMAIL,
+        ))
+
+    terms = [term for term in clean_text(search).casefold().split() if term]
+    for term in terms:
+        escaped = term.replace("%", r"\%").replace("_", r"\_")
+        pattern = f"%{escaped}%"
+        query = query.filter(or_(
+            func.lower(models.User.full_name).like(pattern, escape="\\"),
+            func.lower(models.User.email).like(pattern, escape="\\"),
+            func.lower(models.User.student_no).like(pattern, escape="\\"),
+            func.lower(models.User.course).like(pattern, escape="\\"),
+            func.lower(models.User.department).like(pattern, escape="\\"),
+        ))
+
+    filter_options = {"courses": [], "departments": []}
+    if role == "student":
+        filter_options["courses"] = [
+            value for (value,) in query.with_entities(models.User.course)
+            .filter(models.User.course.isnot(None), models.User.course != "")
+            .distinct().order_by(models.User.course.asc()).all()
+        ]
+    elif role == "faculty":
+        filter_options["departments"] = [
+            value for (value,) in query.with_entities(models.User.department)
+            .filter(models.User.department.isnot(None), models.User.department != "")
+            .distinct().order_by(models.User.department.asc()).all()
+        ]
+
+    normalized_batch_filter = clean_text(batch_filter)
+    if normalized_batch_filter:
+        filter_type, separator, selected_value = normalized_batch_filter.partition(":")
+        selected_value = clean_text(selected_value)
+        if not separator or not selected_value:
+            raise HTTPException(status_code=400, detail="Invalid user list filter.")
+        if role == "student" and filter_type == "course":
+            query = query.filter(models.User.course == selected_value)
+        elif role == "faculty" and filter_type == "department":
+            query = query.filter(models.User.department == selected_value)
+        else:
+            raise HTTPException(status_code=400, detail="This filter is not valid for the selected user category.")
+
+    total = query.with_entities(func.count(models.User.id)).scalar() or 0
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    users = (
+        query.options(load_only(
+            models.User.id, models.User.first_name, models.User.middle_name,
+            models.User.last_name, models.User.full_name, models.User.student_no,
+            models.User.archived_student_no, models.User.email, models.User.archived_email,
+            models.User.batch_id, models.User.department, models.User.personnel,
+            models.User.course, models.User.section, models.User.level, models.User.profile_pic,
+            models.User.last_login, models.User.is_admin, models.User.is_archived,
+            models.User.must_change_password, models.User.permissions, models.User.user_category,
+            models.User.academic_classification, models.User.classification_review_required,
+        ))
+        .order_by(func.lower(models.User.full_name).asc(), models.User.id.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return {
+        "items": [serialize_user_management_user(user, current_admin) for user in users],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_rows": total,
+            "total_pages": total_pages,
+        },
+        "filter_options": filter_options,
+    }
+
+
 @router.post("/activate-students")
 async def activate_students(
     data: StudentActivationRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Edit"))
+    current_admin: models.User = Depends(check_permission("user_management.edit"))
 ):
     user_ids = list(dict.fromkeys(data.user_ids))
     if not user_ids:
@@ -3132,7 +4027,7 @@ async def activate_students(
 async def deactivate_students(
     data: StudentActivationRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Edit"))
+    current_admin: models.User = Depends(check_permission("user_management.edit"))
 ):
     user_ids = list(dict.fromkeys(data.user_ids))
     if not user_ids:
@@ -3182,7 +4077,7 @@ async def deactivate_students(
 async def grant_admin_access(
     user_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Edit"))
+    current_admin: models.User = Depends(check_permission("user_management.edit"))
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
@@ -3223,7 +4118,7 @@ async def grant_admin_access(
 async def archive_students_by_batch(
     data: dict,
     db: Session = Depends(get_db),
-    admin = Depends(check_permission("User-Management-Archive"))
+    admin = Depends(check_permission("user_management.archive"))
 ):
     batch_id = str(data.get("batch_id", "")).strip()
     if not batch_id:
@@ -3260,7 +4155,7 @@ async def archive_students_by_batch(
 async def restore_students_by_batch(
     data: dict,
     db: Session = Depends(get_db),
-    admin = Depends(check_permission("User-Management-Archive"))
+    admin = Depends(check_permission("user_management.archive"))
 ):
     batch_id = str(data.get("batch_id", "")).strip()
     if not batch_id:
@@ -3297,7 +4192,7 @@ async def restore_students_by_batch(
 async def delete_students_by_batch(
     data: dict,
     db: Session = Depends(get_db),
-    admin = Depends(check_permission("User-Management-Delete"))
+    admin = Depends(check_permission("user_management.delete"))
 ):
     batch_id = str(data.get("batch_id", "")).strip()
     if not batch_id:
@@ -3339,10 +4234,12 @@ async def delete_students_by_batch(
 def bulk_register(
     data: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("User-Management-Create"))
+    current_admin: models.User = Depends(check_permission("user_management.create"))
 ):
     students_list = data.get("students", []) or data.get("users", [])
     duplicate_action = str(data.get("duplicate_action", "ignore")).strip().lower()
+    selected_category = normalize_user_category(data.get("user_category"))
+    selected_department = clean_text(data.get("department"))
     if duplicate_action not in {"ignore", "replace"}:
         duplicate_action = "ignore"
 
@@ -3355,16 +4252,55 @@ def bulk_register(
         )
 
     term_setting = process_academic_term_schedule(db)
-    if term_setting.current_status != "active":
+    if selected_category == "COLLEGE_STUDENT" and term_setting.current_status != "active":
         raise HTTPException(
             status_code=409,
-            detail="The previous semester has ended and the next semester has not started yet."
+            detail="The current tertiary semester has ended and the next semester has not started yet."
         )
+    if selected_category == "SHS_STUDENT" and term_setting.shs_current_status != "active":
+        raise HTTPException(
+            status_code=409,
+            detail="The current SHS school year has ended and the next school year has not started yet.",
+        )
+    if selected_category not in {"COLLEGE_STUDENT", "SHS_STUDENT", "FACULTY"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Import is supported only for College student, Senior High School student, and Faculty.",
+        )
+    if selected_category == "FACULTY":
+        selected_department = db.query(models.Department.name).filter(
+            func.lower(models.Department.name) == selected_department.casefold()
+        ).scalar() if selected_department else None
+        if not selected_department:
+            raise HTTPException(status_code=400, detail="Select a department from the configured department list.")
     automatic_batch_id = (
-        f"BATCH-{term_setting.current_academic_year} {term_setting.current_semester}"
+        f"BATCH-{term_setting.shs_current_academic_year} School Year"
+        if selected_category == "SHS_STUDENT"
+        else f"BATCH-{term_setting.current_academic_year} {term_setting.current_semester}"
     )
+    known_programs = {
+        clean_text(value).casefold()
+        for (value,) in db.query(models.User.course)
+        .filter(models.User.course.isnot(None), func.ltrim(func.rtrim(models.User.course)) != "")
+        .distinct().all()
+        if clean_text(value)
+    }
+    expected_source = "employee" if selected_category == "FACULTY" else "student"
     students_list = [
-        {**student, "batch_id": automatic_batch_id}
+        {
+            **student,
+            "batch_id": automatic_batch_id,
+            "user_category": selected_category,
+            "source_type": expected_source,
+            "department": selected_department if selected_category == "FACULTY" else student.get("department"),
+            "validation_errors": (
+                ["Program is not in the configured program list"]
+                if selected_category in {"COLLEGE_STUDENT", "SHS_STUDENT"}
+                and known_programs
+                and clean_text(student.get("course") or student.get("program")).casefold() not in known_programs
+                else []
+            ),
+        }
         for student in students_list
         if isinstance(student, dict)
     ]
@@ -3419,7 +4355,7 @@ def bulk_register(
 @router.get("/bulk-register-students/status/{job_id}")
 async def get_bulk_register_status(
     job_id: str,
-    current_admin: models.User = Depends(check_permission("User-Management-Create"))
+    current_admin: models.User = Depends(check_permission("user_management.create"))
 ):
     with BULK_JOB_LOCK:
         job = BULK_REGISTRATION_JOBS.get(job_id)
@@ -3431,7 +4367,7 @@ async def get_bulk_register_status(
         except Exception:
             current_permissions = []
 
-        if job.get("requested_by") != current_admin.id and "User-Management" not in current_permissions:
+        if job.get("requested_by") != current_admin.id and "user_management.view" not in current_permissions:
             raise HTTPException(status_code=403, detail="You do not have access to this bulk registration job.")
 
         return job
@@ -3441,7 +4377,7 @@ async def get_bulk_register_status(
 async def approve_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports-Approve"))
+    current_admin: models.User = Depends(check_permission("found_items.approve"))
 ):
     # 1. Find the pending item
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == item_id).first()
@@ -3452,6 +4388,7 @@ async def approve_item(
     # We carry over the 'matched_item_id' logic here
     new_item = models.Item(
         status="found",
+        item_name=(pending.item_name or "").strip() or (pending.category or "").strip() or "Unspecified Item",
         category=pending.category,
         description=pending.description,
         location=pending.location,
@@ -3524,7 +4461,7 @@ async def approve_item(
 def archive_pending(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Found-Reports-Archive"))
+    current_admin: models.User = Depends(check_permission("found_items.archive"))
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -3548,7 +4485,7 @@ def archive_pending(
 def dispose_pending_item(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Found-Reports-Delete"))
+    current_user: models.User = Depends(check_permission("found_items.delete"))
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -3557,6 +4494,7 @@ def dispose_pending_item(
     try:
         reference_item = models.ReferenceItem(
             source_item_id=None,
+            item_name=(pending.item_name or "").strip() or (pending.category or "").strip() or "Unspecified Item",
             category_id=None,
             status="found",
             category=pending.category,
@@ -3596,7 +4534,7 @@ def dispose_pending_item(
 def archive_found_item(
     item_id: int, 
     db: Session = Depends(get_db), 
-    current_admin: models.User = Depends(check_permission("Found-Reports-Archive"))
+    current_admin: models.User = Depends(check_permission("found_items.archive"))
 ):
     # 1. Search in the Items table
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
@@ -3616,7 +4554,7 @@ def archive_found_item(
 def recover_pending(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Found-Reports-Archive"))
+    current_user: models.User = Depends(check_permission("found_items.archive"))
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if pending:
@@ -3656,7 +4594,7 @@ def recover_pending(
 def move_pending_item_to_deleted(
     pending_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Found-Reports-Delete")),
+    current_user: models.User = Depends(check_permission("found_items.delete")),
 ):
     pending = db.query(models.PendingItem).filter(models.PendingItem.id == pending_id).first()
     if not pending:
@@ -3670,7 +4608,7 @@ def move_pending_item_to_deleted(
 def recover_lost_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Lost-Reports-Archive"))
+    current_user: models.User = Depends(check_permission("lost_items.archive"))
 ):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
@@ -3693,7 +4631,7 @@ def recover_lost_item(
 def recover_found_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Found-Reports-Archive"))
+    current_user: models.User = Depends(check_permission("found_items.archive"))
 ):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
@@ -3716,7 +4654,7 @@ def recover_found_item(
 async def reset_student_password(
     data: dict, 
     db: Session = Depends(get_db), 
-    current_admin: models.User = Depends(check_permission("User-Management-Reset"))
+    current_admin: models.User = Depends(check_permission("user_management.reset_password"))
 ):
     email = data.get("email")
     user = db.query(models.User).filter(models.User.email == email).first()
@@ -3788,8 +4726,14 @@ async def finalize_lost_upload(
     matched_item_id: int = Form(None), 
     db: Session = Depends(get_db),
     # 1. Add this dependency to get the logged-in user's info
-    current_user: models.User = Depends(check_permission("Lost-Reports-Create"))
+    current_user: models.User = Depends(check_permission("lost_items.create"))
 ):
+    item_name = item_name.strip()
+    if not item_name:
+        raise HTTPException(status_code=400, detail="Item name is required")
+    if len(item_name) > 255:
+        raise HTTPException(status_code=400, detail="Item name must be 255 characters or fewer")
+
     # 2. Save the file
     try:
         resolved_category = resolve_category_name(db, category_id=category_id, category_name=category)
@@ -3843,6 +4787,7 @@ async def finalize_lost_upload(
 
     new_item = models.Item(
         status="lost",
+        item_name=item_name.strip(),
         category_id=category_id,
         category=category,
         department=department,
@@ -3850,7 +4795,7 @@ async def finalize_lost_upload(
         report_owner_name=owner_name,
         report_owner_group=owner_group,
         user_id=current_user.id,  # <--- SETS THE UPLOADER RECORD
-        description=f"[{item_name}] {description}" if description else item_name,
+        description=(description or "").strip() or None,
         brand=brand,
         color=color,
         location=location,
@@ -3930,8 +4875,14 @@ async def finalize_found_upload(
     ai_score: float = Form(0.0),       
     matched_item_id: int = Form(None), 
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Found-Reports-Create"))
+    current_user: models.User = Depends(check_permission("found_items.create"))
 ):
+    item_name = item_name.strip()
+    if not item_name:
+        raise HTTPException(status_code=400, detail="Item name is required")
+    if len(item_name) > 255:
+        raise HTTPException(status_code=400, detail="Item name must be 255 characters or fewer")
+
     # 2. Save the file
     try:
         resolved_category = resolve_category_name(db, category_id=category_id, category_name=category)
@@ -3965,11 +4916,12 @@ async def finalize_found_upload(
     # 5. Create the Database Record 
     new_item = models.Item(
         status="found",
+        item_name=item_name.strip(),
         category_id=category_id,
         category=category,
         department=department,
         user_id=current_user.id,  # <--- SETS THE UPLOADER RECORD
-        description=f"[{item_name}] {description}" if description else item_name,
+        description=(description or "").strip() or None,
         brand=brand,
         color=color,
         location=location,
@@ -4044,7 +4996,7 @@ async def archive_item(
 
     require_admin_permission(
         current_user,
-        "Lost-Reports-Archive" if item.status == "lost" else "Found-Reports-Archive",
+        "lost_items.archive" if item.status == "lost" else "found_items.archive",
     )
 
     # 2. Update the status
@@ -4071,7 +5023,7 @@ async def move_item_to_deleted(
         raise HTTPException(status_code=404, detail="Item not found")
     require_admin_permission(
         current_user,
-        "Lost-Reports-Delete" if item.status == "lost" else "Found-Reports-Delete",
+        "lost_items.delete" if item.status == "lost" else "found_items.delete",
     )
     item.archived = True
     item.deleted = True
@@ -4089,7 +5041,7 @@ async def dispose_item(
         raise HTTPException(status_code=404, detail="Item not found")
     require_admin_permission(
         current_user,
-        "Lost-Reports-Delete" if item.status == "lost" else "Found-Reports-Delete",
+        "lost_items.delete" if item.status == "lost" else "found_items.delete",
     )
 
     try:
@@ -4125,8 +5077,11 @@ async def dispose_item(
 @router.get("/dashboard-stats")
 async def get_stats(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Dashboard")),
+    current_admin: models.User = Depends(check_permission("dashboard.view")),
 ):
+    claimed_count = db.query(models.Claim.id).filter(
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)
+    ).count()
     return {
         "welcome": f"Hello {current_admin.email}",
         "pending_count": db.query(models.PendingItem.id).filter(
@@ -4136,9 +5091,8 @@ async def get_stats(
             models.Item.status == "found",
             models.Item.archived == False
         ).count(),
-        "approved_claim_count": db.query(models.Claim.id).filter(
-            models.Claim.status == "approved"
-        ).count(),
+        "claimed_count": claimed_count,
+        "approved_claim_count": claimed_count,  # Legacy response key.
     }
 
 
@@ -4153,7 +5107,7 @@ def calculate_similarity(vec1_json, vec2_json):
 @router.get("/notifications")
 def get_notifications(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("notifications.view")),
     limit: int = 50,
 ):
     limit = max(1, min(limit, 100))
@@ -4174,7 +5128,7 @@ def get_notifications(
 @router.get("/notifications/unread-count")
 def get_notification_unread_count(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("notifications.view"))
 ):
     unread_count = db.query(models.Notification).filter(
         ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
@@ -4190,7 +5144,7 @@ def get_notification_unread_count(
 def mark_read(
     notif_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("notifications.manage"))
 ):
     notif = db.query(models.Notification).filter(
         models.Notification.id == notif_id,
@@ -4208,7 +5162,7 @@ def mark_read(
 @router.post("/notifications/mark-all-read")
 def mark_all_notifications_read(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin)
+    current_admin: models.User = Depends(check_permission("notifications.manage"))
 ):
     db.query(models.Notification).filter(
         ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
@@ -4254,7 +5208,7 @@ async def create_announcement(
     content: str = Form(...),
     file: UploadFile = File(...), # Changed from 'image' to 'file'
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Content-management-Announcements"))
+    current_admin: models.User = Depends(check_permission("announcements.publish"))
 ):
     try:
         validate_upload_file_size(file, label="Announcement image")
@@ -4322,7 +5276,7 @@ async def report_confiscated(
     student_number: str = Form(None),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.create")),
 ):
     student_name = (student_name or "").strip() or None
     student_number = (student_number or "").strip() or None
@@ -4378,7 +5332,7 @@ async def report_confiscated(
 @router.get("/confiscation-reasons")
 def get_confiscation_reasons(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.view")),
 ):
     reasons = db.query(models.ConfiscationReason).order_by(models.ConfiscationReason.name.asc()).all()
     if not reasons:
@@ -4393,7 +5347,7 @@ def get_confiscation_reasons(
 def create_confiscation_reason(
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.create")),
 ):
     name = str(payload.get("name") or "").strip()
     if not name:
@@ -4415,7 +5369,7 @@ def update_confiscation_reason(
     reason_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.edit")),
 ):
     reason = db.query(models.ConfiscationReason).filter(models.ConfiscationReason.id == reason_id).first()
     if not reason:
@@ -4439,7 +5393,7 @@ def update_confiscation_reason(
 def delete_confiscation_reason(
     reason_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items-Create")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.delete")),
 ):
     reason = db.query(models.ConfiscationReason).filter(models.ConfiscationReason.id == reason_id).first()
     if not reason:
@@ -4456,7 +5410,7 @@ async def get_confiscated_items(
 ):
     require_admin_permission(
         current_admin,
-        "For-Disposal" if view == "disposal" else "Confiscated-items",
+        "for_disposal.view" if view == "disposal" else "confiscated_items.view",
     )
     query = db.query(models.ConfiscatedItem)
     if view == "disposal":
@@ -4517,7 +5471,7 @@ def update_archived_item_disposal(
     item_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("For-Disposal-Manage")),
+    current_admin: models.User = Depends(check_permission("for_disposal.manage")),
 ):
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
@@ -4526,6 +5480,10 @@ def update_archived_item_disposal(
     statuses = {"schedule": "for_disposal", "cancel": "active", "complete": "disposed"}
     if action not in statuses:
         raise HTTPException(status_code=400, detail="Invalid disposal action")
+    if action == "schedule" and item.disposal_status != "active":
+        raise HTTPException(status_code=409, detail="Only active archived items can be moved to For Disposal")
+    if action == "cancel" and item.disposal_status != "for_disposal":
+        raise HTTPException(status_code=409, detail="Only items waiting for disposal can be returned to Archive")
     if action == "schedule" and item.deleted:
         raise HTTPException(status_code=400, detail="Deleted items cannot be moved to For Disposal")
     if action == "schedule":
@@ -4534,12 +5492,12 @@ def update_archived_item_disposal(
                 models.Claim.found_item_id == item.id,
                 models.Claim.lost_item_id == item.id,
             ),
-            models.Claim.status.in_(["pending", "approved"]),
+            models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
         ).first()
         if active_claim:
             raise HTTPException(
                 status_code=409,
-                detail="Items with an active or approved claim cannot be moved to For Disposal",
+                detail="Items with an active or claimed record cannot be moved to For Disposal",
             )
         # For Disposal is outside the live inventory, so active items are
         # archived automatically as part of this transition.
@@ -4554,12 +5512,21 @@ def update_archived_item_disposal(
     item.disposal_updated_at = datetime.utcnow()
     if action == "complete":
         create_disposal_report(db, item, "report", current_admin.id)
-    db.commit()
     label = {"schedule": "moved to For Disposal", "cancel": "returned to Archive", "complete": "recorded as disposed"}[action]
-    create_admin_notification(
-        db, f"{item.status.title()} item #{item.id} was {label}.", "item_disposal",
-        item.id, "/admin/For-Disposal", created_by_admin_id=current_admin.id,
-    )
+    db.add(models.Notification(
+        message=f"{item.status.title()} item #{item.id} was {label}.",
+        type="item_disposal",
+        related_id=item.id,
+        created_by_admin_id=current_admin.id,
+        target_url="/admin/For-Disposal",
+        is_read=False,
+        created_at=datetime.utcnow(),
+    ))
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {
         "message": f"Item {label}" + (" and disposal report created" if action == "complete" else ""),
         "status": item.disposal_status,
@@ -4572,7 +5539,7 @@ def update_confiscated_disposal(
     item_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("For-Disposal-Manage")),
+    current_admin: models.User = Depends(check_permission("for_disposal.manage")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
@@ -4585,6 +5552,10 @@ def update_confiscated_disposal(
     }
     if action not in statuses:
         raise HTTPException(status_code=400, detail="Invalid disposal action")
+    if action == "schedule" and item.disposal_status != "active":
+        raise HTTPException(status_code=409, detail="Only active confiscated items can be moved to For Disposal")
+    if action == "cancel" and item.disposal_status != "for_disposal":
+        raise HTTPException(status_code=409, detail="Only items waiting for disposal can be returned")
     if action == "complete" and item.disposal_status != "for_disposal":
         raise HTTPException(status_code=400, detail="Only items waiting for disposal can be confirmed")
     item.disposal_status = statuses[action]
@@ -4594,20 +5565,25 @@ def update_confiscated_disposal(
     item.disposal_updated_at = datetime.utcnow()
     if action == "complete":
         create_disposal_report(db, item, "confiscated", current_admin.id)
-    db.commit()
     labels = {
         "schedule": "marked for disposal",
         "cancel": "returned to confiscated items",
         "complete": "recorded as disposed",
     }
-    create_admin_notification(
-        db,
-        f"Confiscated item #{item_id} was {labels[action]}.",
-        "confiscated_disposal",
-        item_id,
-        "/admin/For-Disposal",
+    db.add(models.Notification(
+        message=f"Confiscated item #{item_id} was {labels[action]}.",
+        type="confiscated_disposal",
+        related_id=item_id,
         created_by_admin_id=current_admin.id,
-    )
+        target_url="/admin/For-Disposal",
+        is_read=False,
+        created_at=datetime.utcnow(),
+    ))
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {
         "message": f"Item {labels[action]}" + (" and disposal report created" if action == "complete" else ""),
         "status": item.disposal_status,
@@ -4620,7 +5596,7 @@ def get_audit_logs(
     search: str = "",
     limit: int = 200,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Audit-Logs")),
+    current_admin: models.User = Depends(check_permission("audit_logs.view")),
 ):
     limit = max(1, min(limit, 500))
     top_limit = int(limit)
@@ -4665,7 +5641,7 @@ def get_audit_logs(
 async def get_confiscated_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.view")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
@@ -4688,7 +5664,7 @@ async def update_confiscated_item(
     student_number: str = Form(None),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items-Edit")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.edit")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:
@@ -4740,7 +5716,7 @@ async def update_confiscated_item(
 async def delete_confiscated_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Confiscated-items-Delete")),
+    current_admin: models.User = Depends(check_permission("confiscated_items.delete")),
 ):
     item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == item_id).first()
     if not item:

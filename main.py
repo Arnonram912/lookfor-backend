@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPExcep
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session, joinedload, load_only
 from jose import JWTError, jwt
@@ -38,6 +38,7 @@ from clip_test import (
 )
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from admin_messages import router as admin_messages_router
 from admin_routes import (
     ADMIN_PERMISSION_KEYS,
@@ -45,11 +46,13 @@ from admin_routes import (
     router as admin_router,
     check_permission,
     create_admin_notification,
+    get_or_create_academic_term_setting,
     process_academic_term_schedule,
     require_admin_permission,
 )
 from student_routes import router as student_router
 from security import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
     pwd_context,
     create_access_token,
     get_current_user,
@@ -57,8 +60,10 @@ from security import (
     verify_password,
     get_password_hash,
     get_login_email_candidates,
+    resolve_authenticated_user,
 )
 from account_email import queue_item_event_email
+from lookfor_permissions import normalize_permissions
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -71,6 +76,7 @@ models.Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(title="LookFor Admin Dashboard")
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.include_router(admin_router)
 app.include_router(student_router)
@@ -140,6 +146,7 @@ PAGE_ALIASES = {
         "alias": "4a2eaf02-397b-5056-9df5-79abe6c14b94",
         "template": "index.html",
         "label": "Login",
+        "no_store": True,
     },
     "/explore": {
         "alias": "a5908eca-4f65-54c8-bdfb-78722c278680",
@@ -289,20 +296,62 @@ async def redirect_page_paths_to_aliases(request: Request, call_next):
         alias_path = f"/c/{PAGE_ALIASES[request.url.path]['alias']}"
         if request.url.query:
             alias_path = f"{alias_path}?{request.url.query}"
-        return RedirectResponse(alias_path, status_code=307)
+        redirect = RedirectResponse(alias_path, status_code=307)
+        if PAGE_ALIASES[request.url.path].get("no_store"):
+            set_no_store_headers(redirect)
+        return redirect
     return await call_next(request)
 
 
 @app.get("/c/{alias_id}")
-def hashed_page(alias_id: str, request: Request, response: Response):
+def hashed_page(
+    alias_id: str,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     page = PAGE_ALIAS_BY_ID.get(alias_id)
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
-    if page.get("no_store"):
-        set_no_store_headers(response)
+    page_path = str(page.get("path") or "")
+    if page_path.startswith(("/admin/", "/student/")):
+        token = (request.cookies.get("admin_access_token") or "").strip()
+        if not token:
+            return RedirectResponse("/login", status_code=303)
+        try:
+            authenticated_user = resolve_authenticated_user(token, db)
+        except Exception:
+            return RedirectResponse("/login", status_code=303)
+        if page_path.startswith("/admin/") and not authenticated_user.is_admin:
+            return RedirectResponse("/student/dashboard", status_code=303)
+        if page_path.startswith("/student/") and authenticated_user.is_admin:
+            return RedirectResponse("/admin/dashboard", status_code=303)
 
-    return templates.TemplateResponse(page["template"], {"request": request})
+        required_permission = {
+            "/admin/dashboard": "dashboard.view",
+            "/admin/User-Management": "user_management.view",
+            "/admin/Messages": "messages.view",
+            "/admin/Lost_Items_Report": "lost_items.view",
+            "/admin/Found_Items_Report": "found_items.view",
+            "/admin/Claim-Management": "claim_management.view",
+            "/admin/Reports": "reports.view",
+            "/admin/Audit-Logs": "audit_logs.view",
+            "/admin/Profile": "profile.view",
+            "/admin/Confiscated-items": "confiscated_items.view",
+            "/admin/For-Disposal": "for_disposal.view",
+            "/admin/Content-management": "content_management.view",
+            "/admin/Content-management/features": "content_management.view",
+            "/admin/Content-management/about": "content_management.view",
+            "/admin/Content-Editor": "content_management.edit",
+        }.get(page_path)
+        if required_permission:
+            require_admin_permission(authenticated_user, required_permission)
+
+    page_response = templates.TemplateResponse(page["template"], {"request": request})
+    if page.get("no_store") or page_path.startswith(("/admin/", "/student/")):
+        set_no_store_headers(page_response)
+    return page_response
 
 GMAIL_SENDER_EMAIL = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "").strip()
@@ -389,6 +438,50 @@ def ensure_user_settings_columns():
             connection.execute(text(statement))
 
 
+def ensure_academic_schedule_columns():
+    """Keep SHS schedule data separate from the legacy tertiary fields."""
+    statements = [
+        """
+        IF COL_LENGTH('academic_term_settings', 'shs_current_academic_year') IS NULL
+            ALTER TABLE academic_term_settings ADD shs_current_academic_year NVARCHAR(20) NULL
+        """,
+        """
+        IF COL_LENGTH('academic_term_settings', 'shs_current_start_date') IS NULL
+            ALTER TABLE academic_term_settings ADD shs_current_start_date DATE NULL
+        """,
+        """
+        IF COL_LENGTH('academic_term_settings', 'shs_current_end_date') IS NULL
+            ALTER TABLE academic_term_settings ADD shs_current_end_date DATE NULL
+        """,
+        """
+        IF COL_LENGTH('academic_term_settings', 'shs_current_status') IS NULL
+            ALTER TABLE academic_term_settings ADD shs_current_status NVARCHAR(20) NOT NULL
+                CONSTRAINT DF_academic_term_settings_shs_status DEFAULT 'active'
+        """,
+        """
+        IF COL_LENGTH('academic_term_settings', 'shs_next_academic_year') IS NULL
+            ALTER TABLE academic_term_settings ADD shs_next_academic_year NVARCHAR(20) NULL
+        """,
+        """
+        IF COL_LENGTH('academic_term_settings', 'shs_next_start_date') IS NULL
+            ALTER TABLE academic_term_settings ADD shs_next_start_date DATE NULL
+        """,
+        """
+        IF COL_LENGTH('academic_term_settings', 'shs_next_end_date') IS NULL
+            ALTER TABLE academic_term_settings ADD shs_next_end_date DATE NULL
+        """,
+        """
+        UPDATE academic_term_settings
+        SET shs_current_academic_year = current_academic_year
+        WHERE shs_current_academic_year IS NULL
+          AND current_academic_year LIKE '[1-2][0-9][0-9][0-9]-[1-2][0-9][0-9][0-9]'
+        """,
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
 def ensure_item_possible_matches_column():
     statement = """
     IF COL_LENGTH('items', 'possible_matches') IS NULL
@@ -400,12 +493,186 @@ def ensure_item_possible_matches_column():
         connection.execute(text(statement))
 
 
+def ensure_item_name_columns():
+    """Add the first-class item name field and safely populate legacy rows."""
+    statements = [
+        """
+        IF COL_LENGTH('items', 'item_name') IS NULL
+        BEGIN
+            ALTER TABLE items ADD item_name NVARCHAR(255) NULL
+        END
+        """,
+        """
+        UPDATE items
+        SET item_name = CASE
+            WHEN LEFT(LTRIM(ISNULL(description, '')), 1) = '['
+                 AND CHARINDEX(']', LTRIM(ISNULL(description, ''))) > 2
+                THEN SUBSTRING(
+                    LTRIM(description),
+                    2,
+                    CHARINDEX(']', LTRIM(description)) - 2
+                )
+            WHEN NULLIF(LTRIM(RTRIM(category)), '') IS NOT NULL THEN LTRIM(RTRIM(category))
+            ELSE 'Unspecified Item'
+        END
+        WHERE NULLIF(LTRIM(RTRIM(item_name)), '') IS NULL
+        """,
+        """
+        IF EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('items')
+              AND name = 'item_name'
+              AND is_nullable = 1
+        )
+        BEGIN
+            ALTER TABLE items ALTER COLUMN item_name NVARCHAR(255) NOT NULL
+        END
+        """,
+        """
+        IF COL_LENGTH('reference_items', 'item_name') IS NULL
+        BEGIN
+            ALTER TABLE reference_items ADD item_name NVARCHAR(255) NULL
+        END
+        """,
+        """
+        UPDATE reference_items
+        SET item_name = CASE
+            WHEN LEFT(LTRIM(ISNULL(description, '')), 1) = '['
+                 AND CHARINDEX(']', LTRIM(ISNULL(description, ''))) > 2
+                THEN SUBSTRING(
+                    LTRIM(description),
+                    2,
+                    CHARINDEX(']', LTRIM(description)) - 2
+                )
+            WHEN NULLIF(LTRIM(RTRIM(category)), '') IS NOT NULL THEN LTRIM(RTRIM(category))
+            ELSE 'Unspecified Item'
+        END
+        WHERE NULLIF(LTRIM(RTRIM(item_name)), '') IS NULL
+        """,
+        """
+        IF EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('reference_items')
+              AND name = 'item_name'
+              AND is_nullable = 1
+        )
+        BEGIN
+            ALTER TABLE reference_items ALTER COLUMN item_name NVARCHAR(255) NOT NULL
+        END
+        """,
+        """
+        UPDATE pending_items
+        SET item_name = CASE
+            WHEN NULLIF(LTRIM(RTRIM(category)), '') IS NOT NULL THEN LTRIM(RTRIM(category))
+            ELSE 'Unspecified Item'
+        END
+        WHERE NULLIF(LTRIM(RTRIM(item_name)), '') IS NULL
+        """,
+        """
+        IF EXISTS (
+            SELECT 1 FROM sys.columns
+            WHERE object_id = OBJECT_ID('pending_items')
+              AND name = 'item_name'
+              AND is_nullable = 1
+        )
+        BEGIN
+            ALTER TABLE pending_items ALTER COLUMN item_name NVARCHAR(255) NOT NULL
+        END
+        """,
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def ensure_user_classification_schema():
+    """Idempotent runtime companion to migrations/20260727_user_classification_and_archives.sql."""
+    statements = [
+        """
+        IF COL_LENGTH('users', 'user_category') IS NULL
+            ALTER TABLE users ADD user_category NVARCHAR(30) NULL
+        """,
+        """
+        IF COL_LENGTH('users', 'academic_classification') IS NULL
+            ALTER TABLE users ADD academic_classification NVARCHAR(30) NULL
+        """,
+        """
+        IF COL_LENGTH('users', 'classification_review_required') IS NULL
+            ALTER TABLE users ADD classification_review_required BIT NOT NULL
+                CONSTRAINT DF_users_classification_review DEFAULT 0
+        """,
+        """
+        UPDATE users
+        SET user_category = CASE
+                WHEN is_admin = 1 AND LOWER(LTRIM(RTRIM(ISNULL(personnel, '')))) = 'staff' THEN 'STAFF'
+                WHEN is_admin = 1 THEN 'ADMIN'
+                WHEN LOWER(LTRIM(RTRIM(ISNULL(personnel, '')))) = 'faculty' THEN 'FACULTY'
+                WHEN LOWER(LTRIM(RTRIM(ISNULL(personnel, '')))) = 'staff' THEN 'STAFF'
+                WHEN NULLIF(LTRIM(RTRIM(department)), '') IS NOT NULL
+                     AND NULLIF(LTRIM(RTRIM(course)), '') IS NULL
+                     AND NULLIF(LTRIM(RTRIM(section)), '') IS NULL THEN 'FACULTY'
+                WHEN LOWER(LTRIM(RTRIM(ISNULL(level, '')))) IN ('grade 11', 'g11', 'grade 12', 'g12') THEN 'SHS_STUDENT'
+                WHEN LOWER(LTRIM(RTRIM(ISNULL(level, '')))) IN
+                     ('1st year', 'first year', '2nd year', 'second year',
+                      '3rd year', 'third year', '4th year', 'fourth year') THEN 'COLLEGE_STUDENT'
+                ELSE user_category END,
+            academic_classification = CASE
+                WHEN is_admin = 1 THEN 'NON_ACADEMIC'
+                WHEN LOWER(LTRIM(RTRIM(ISNULL(personnel, '')))) IN ('faculty', 'staff') THEN 'NON_ACADEMIC'
+                WHEN NULLIF(LTRIM(RTRIM(department)), '') IS NOT NULL
+                     AND NULLIF(LTRIM(RTRIM(course)), '') IS NULL
+                     AND NULLIF(LTRIM(RTRIM(section)), '') IS NULL THEN 'NON_ACADEMIC'
+                WHEN LOWER(LTRIM(RTRIM(ISNULL(level, '')))) IN ('grade 11', 'g11', 'grade 12', 'g12') THEN 'SHS'
+                WHEN LOWER(LTRIM(RTRIM(ISNULL(level, '')))) IN
+                     ('1st year', 'first year', '2nd year', 'second year',
+                      '3rd year', 'third year', '4th year', 'fourth year') THEN 'TERTIARY'
+                ELSE academic_classification END
+        WHERE user_category IS NULL OR academic_classification IS NULL
+        """,
+        """
+        UPDATE users
+        SET classification_review_required =
+            CASE WHEN user_category IS NULL OR academic_classification IS NULL THEN 1 ELSE 0 END
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_users_category_archive' AND object_id = OBJECT_ID('users'))
+            CREATE INDEX ix_users_category_archive
+                ON users (user_category, academic_classification, is_archived, id)
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_users_personnel_archive' AND object_id = OBJECT_ID('users'))
+            CREATE INDEX ix_users_personnel_archive ON users (is_admin, personnel, is_archived, id)
+        """,
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
 def ensure_item_lifecycle_columns():
     statements = [
         """
         IF COL_LENGTH('items', 'deleted') IS NULL
         BEGIN
             ALTER TABLE items ADD deleted BIT NOT NULL CONSTRAINT DF_items_deleted DEFAULT 0
+        END
+        """,
+        """
+        IF COL_LENGTH('items', 'student_archived') IS NULL
+        BEGIN
+            ALTER TABLE items ADD student_archived BIT NOT NULL CONSTRAINT DF_items_student_archived DEFAULT 0
+        END
+        """,
+        """
+        IF COL_LENGTH('items', 'student_deleted') IS NULL
+        BEGIN
+            ALTER TABLE items ADD student_deleted BIT NOT NULL CONSTRAINT DF_items_student_deleted DEFAULT 0
+        END
+        """,
+        """
+        IF COL_LENGTH('items', 'student_hidden') IS NULL
+        BEGIN
+            ALTER TABLE items ADD student_hidden BIT NOT NULL CONSTRAINT DF_items_student_hidden DEFAULT 0
         END
         """,
         """
@@ -764,11 +1031,22 @@ def build_auth_response(user: models.User):
         }
     )
 
-    return {
+    payload = {
         "access_token": access_token,
         "token_type": "bearer",
         "is_admin": user.is_admin
     }
+    response = JSONResponse(payload)
+    response.set_cookie(
+        "admin_access_token",
+        access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=False,
+        secure=os.getenv("COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes"},
+        samesite="lax",
+        path="/",
+    )
+    return response
 
 
 def update_last_login(db: Session, user: models.User):
@@ -816,9 +1094,12 @@ def auto_archive_pending(db: Session):
 @app.on_event("startup")
 def create_default_admin():
     ensure_user_settings_columns()
+    ensure_user_classification_schema()
+    ensure_academic_schedule_columns()
     ensure_item_id_column()
     ensure_item_code_column()
     ensure_item_possible_matches_column()
+    ensure_item_name_columns()
     ensure_item_lifecycle_columns()
     ensure_confiscated_disposal_columns()
     ensure_item_report_owner_columns()
@@ -827,7 +1108,8 @@ def create_default_admin():
     ensure_claim_verification_columns()
     db = next(get_db())
     try:
-        process_academic_term_schedule(db)
+        # Academic archives are deliberately manual and classification-specific.
+        get_or_create_academic_term_setting(db)
         admin_email = ROOT_ADMIN_EMAIL
         admin_full_name = "LookForAdministrator"
         admin = db.query(models.User).filter(models.User.email == admin_email).first()
@@ -854,6 +1136,18 @@ def create_default_admin():
             models.User.id == admin.id
         ).first() if admin else None
 
+        # Persist legacy permission arrays as canonical module.action keys.
+        # Settings is intentionally absent from the catalog and is unaffected.
+        permission_storage_changed = False
+        for admin_account in db.query(models.User).filter(models.User.is_admin == True).all():
+            normalized_permissions = normalize_permissions(admin_account.permissions)
+            serialized_permissions = json.dumps(normalized_permissions)
+            if admin_account.permissions != serialized_permissions:
+                admin_account.permissions = serialized_permissions
+                permission_storage_changed = True
+        if permission_storage_changed:
+            db.commit()
+
         if target_admin:
             root_changed = False
             if not target_admin.is_admin:
@@ -871,7 +1165,7 @@ def create_default_admin():
 
             required_permissions = ADMIN_PERMISSION_KEYS
 
-            updated_permissions = list(dict.fromkeys(current_permissions + required_permissions))
+            updated_permissions = normalize_permissions(current_permissions + required_permissions)
             if updated_permissions != current_permissions:
                 target_admin.permissions = json.dumps(updated_permissions)
                 root_changed = True
@@ -1081,11 +1375,21 @@ def refresh_access_token(
         }
     )
 
-    return {
+    response = JSONResponse({
         "access_token": access_token,
         "token_type": "bearer",
         "is_admin": current_user.is_admin,
-    }
+    })
+    response.set_cookie(
+        "admin_access_token",
+        access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=False,
+        secure=os.getenv("COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes"},
+        samesite="lax",
+        path="/",
+    )
+    return response
 
 # --- 6. PAGE ROUTES (HTML) ---
 @app.get("/")
@@ -1325,9 +1629,11 @@ def quick_search(
 
     found_items = query.all()
 
+    normalized_query = q.lower()
     matches = [
         item for item in found_items
-        if q.lower() in item.description.lower()
+        if normalized_query in (item.item_name or "").lower()
+        or normalized_query in (item.description or "").lower()
     ]
 
     if not found_items:
@@ -1385,6 +1691,7 @@ async def quick_compare(
         "highest_score": highest_score,
         "matched_item": {
             "id": best_item.id if best_item else None,
+            "item_name": best_item.item_name if best_item else None,
             "category": best_item.category if best_item else None,
             "description": best_item.description if best_item else None,
             "image_path": public_file_url(best_item.image_path) if best_item else None,
@@ -1396,8 +1703,8 @@ def normalize_match_value(value):
 
 
 def build_item_dataset_text(item):
-    name_part = ""
-    if item.description:
+    name_part = (getattr(item, "item_name", None) or "").strip()
+    if not name_part and item.description:
         if item.description.startswith("[") and "]" in item.description:
             name_part = item.description[1:item.description.index("]")]
         else:
@@ -1536,6 +1843,7 @@ def compute_text_detail_matches(
                     matches.append({
                         "id": item.id,
                         "score": round(score, 4),
+                        "item_name": item.item_name,
                         "category": item_category_name(item),
                         "location": item.location,
                         "image_path": public_file_url(item.image_path),
@@ -1936,6 +2244,12 @@ async def save_found_item(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    item_name = item_name.strip()
+    if not item_name:
+        raise HTTPException(status_code=400, detail="Item name is required")
+    if len(item_name) > 255:
+        raise HTTPException(status_code=400, detail="Item name must be 255 characters or fewer")
+
     # 1. SAVE THE IMAGE FILE
     try:
         validate_upload_file_size(image, label="Main image")
@@ -2053,6 +2367,7 @@ async def save_found_item(
 @app.post("/api/lost-report-upload")
 async def lost_report_upload(
     category: str = Form(...),
+    item_name: str = Form(None),
     description: str = Form(None),
     location: str = Form(...),
     date: str = Form(...),
@@ -2064,6 +2379,10 @@ async def lost_report_upload(
     # Added to identify which student is reporting
     current_user: models.User = Depends(get_current_user) 
 ):
+    effective_item_name = (item_name or category).strip()
+    if len(effective_item_name) > 255:
+        raise HTTPException(status_code=400, detail="Item name must be 255 characters or fewer")
+
     try:
         validate_upload_file_size(image, label="Main image")
     except ValueError as exc:
@@ -2151,6 +2470,7 @@ async def lost_report_upload(
     
     new_lost_report = models.Item(
         status="lost",
+        item_name=effective_item_name,
         category=category,
         brand=brand,        # NEW
         color=color,        # NEW
@@ -2246,7 +2566,7 @@ def get_chat_history(
     current_user: models.User = Depends(get_current_user)
 ):
     if current_user.is_admin:
-        require_admin_permission(current_user, "Messages")
+        require_admin_permission(current_user, "messages.view")
     unread_messages = db.query(models.Message).filter(
         models.Message.sender_id == other_user_id,
         models.Message.recipient_id == current_user.id,
@@ -2277,7 +2597,7 @@ def mark_chat_as_read(
     current_user: models.User = Depends(get_current_user)
 ):
     if current_user.is_admin:
-        require_admin_permission(current_user, "Messages")
+        require_admin_permission(current_user, "messages.view")
     unread_messages = db.query(models.Message).filter(
         models.Message.sender_id == other_user_id,
         models.Message.recipient_id == current_user.id,
@@ -2297,7 +2617,7 @@ def delete_conversation(
     current_user: models.User = Depends(get_current_user)
 ):
     if current_user.is_admin:
-        require_admin_permission(current_user, "Messages-Manage")
+        require_admin_permission(current_user, "messages.manage")
     deleted_count = db.query(models.Message).filter(
         or_(
             (models.Message.sender_id == current_user.id) & (models.Message.recipient_id == other_user_id),
@@ -2316,7 +2636,7 @@ def send_message(
     current_user: models.User = Depends(get_current_user)
 ):
     if current_user.is_admin:
-        require_admin_permission(current_user, "Messages-Send")
+        require_admin_permission(current_user, "messages.send")
     recipient = db.query(models.User).filter(models.User.id == recipient_id).first()
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
@@ -2359,20 +2679,36 @@ def send_message(
 @app.get("/api/admin/claims")
 def get_claims(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Claim-Management"))
+    current_admin: models.User = Depends(check_permission("claim_management.view"))
 ):
     # Join Claim with Item to get both Lost and Found details in one go
-    claims = db.query(models.Claim).order_by(models.Claim.created_at.desc()).all()
+    claims = (
+        db.query(models.Claim)
+        .options(
+            joinedload(models.Claim.lost_item),
+            joinedload(models.Claim.found_item),
+            joinedload(models.Claim.claimant),
+            joinedload(models.Claim.proof),
+        )
+        .order_by(models.Claim.created_at.desc())
+        .all()
+    )
     
     if not claims:
         print("DEBUG: No claims found in the database.")
         return []
 
+    claim_ids = [claim.id for claim in claims]
+    reports_by_claim_id = {
+        report.claim_id: report
+        for report in db.query(models.ClaimDecisionReport)
+        .filter(models.ClaimDecisionReport.claim_id.in_(claim_ids)).all()
+    } if claim_ids else {}
     results = []
     for claim in claims:
-        lost = db.query(models.Item).filter(models.Item.id == claim.lost_item_id).first()
-        found = db.query(models.Item).filter(models.Item.id == claim.found_item_id).first()
-        proof = db.query(models.ClaimProof).filter(models.ClaimProof.claim_id == claim.id).first()
+        lost = claim.lost_item
+        found = claim.found_item
+        proof = claim.proof
         
         if not found:
             continue
@@ -2394,7 +2730,7 @@ def get_claims(
                 "id_image": public_file_url(proof.id_image_path) if proof else None,
                 "has_proof": bool(proof and proof.id_image_path)
             },
-            "report": build_claim_report_payload(claim, db)
+            "report": build_claim_report_payload(claim, db, reports_by_claim_id.get(claim.id))
         })
     return results
 
@@ -2405,7 +2741,7 @@ def sync_claim_item_match_flags(db: Session, lost_item_id: int | None, found_ite
         if lost_item:
             lost_has_active_claim = db.query(models.Claim).filter(
                 models.Claim.lost_item_id == lost_item_id,
-                models.Claim.status.in_(["pending", "approved"])
+                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
             ).first()
             lost_item.is_matched = bool(lost_has_active_claim)
 
@@ -2414,7 +2750,7 @@ def sync_claim_item_match_flags(db: Session, lost_item_id: int | None, found_ite
         if found_item:
             found_has_active_claim = db.query(models.Claim).filter(
                 models.Claim.found_item_id == found_item_id,
-                models.Claim.status.in_(["pending", "approved"])
+                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
             ).first()
             found_item.is_matched = bool(found_has_active_claim)
 
@@ -2445,7 +2781,7 @@ def apply_claim_decision(
         raise HTTPException(status_code=400, detail="Unsupported claim action")
 
     if action == "approve":
-        claim.status = "approved"
+        claim.status = "claimed"
         claim.admin_decision_date = datetime.utcnow()
 
         lost_item = db.query(models.Item).filter(models.Item.id == claim.lost_item_id).first()
@@ -2520,7 +2856,8 @@ def build_claim_report_payload(
     found_item_id = getattr(found, "item_id", None) or (found.id if found else None)
     lost_item_code = getattr(lost, "item_code", None) if lost else None
     found_item_code = getattr(found, "item_code", None) if found else None
-    status_label = "Claimed" if claim.status == "approved" else (claim.status.title() if claim.status else "Pending")
+    normalized_claim_status = str(claim.status or "pending").strip().lower()
+    status_label = "Claimed Item" if normalized_claim_status in models.CLAIMED_CLAIM_STATUSES else normalized_claim_status.title()
 
     return {
         "claim_id": claim.id,
@@ -2586,7 +2923,7 @@ def build_claim_report_payload(
 def approve_claim(
     claim_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Claim-Management-Decide"))
+    current_admin: models.User = Depends(check_permission("claim_management.decide"))
 ):
     claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
     if not claim:
@@ -2595,14 +2932,14 @@ def approve_claim(
     apply_claim_decision(db, claim, "approve")
 
     db.commit()
-    return {"status": "success", "message": "Claim approved"}
+    return {"status": "success", "message": "Claim marked as claimed"}
 
 
 @app.post("/api/admin/claims/{claim_id}/reject")
 def reject_claim(
     claim_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Claim-Management-Decide"))
+    current_admin: models.User = Depends(check_permission("claim_management.decide"))
 ):
     claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
     if not claim:
@@ -2627,7 +2964,7 @@ async def create_claim_decision_report(
     verification_method: str = Form(""),
     verification_note: str = Form(""),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Claim-Management-Decide"))
+    current_admin: models.User = Depends(check_permission("claim_management.decide"))
 ):
     claim = db.query(models.Claim).filter(models.Claim.id == claim_id).first()
     if not claim:
@@ -2646,8 +2983,11 @@ async def create_claim_decision_report(
     has_new_id_image = bool(claim_id_image and claim_id_image.filename)
 
     if action == "approve":
-        if not claimant_name or not claimant_student_no:
-            raise HTTPException(status_code=400, detail="Claimant name and Student/Employee ID are required for approval")
+        if not claimant_name or not claimant_student_no or not claimant_department_course:
+            raise HTTPException(
+                status_code=400,
+                detail="Claimant name, Student/Employee ID, and Department/Course are required for approval",
+            )
         if not id_verified:
             raise HTTPException(status_code=400, detail="Confirm that the claimant ID has been verified before approval")
         if not verification_method:
@@ -2701,7 +3041,7 @@ async def create_claim_decision_report(
     report.verification_method = verification_method or None
     report.verification_note = verification_note or None
 
-    report.decision_status = "approved" if action == "approve" else "rejected"
+    report.decision_status = "claimed" if action == "approve" else "rejected"
     report.created_by_admin_id = current_admin.id
     report.created_at = datetime.utcnow()
 
@@ -2743,7 +3083,7 @@ def saved_report_payload(report: models.SavedReport) -> dict:
 @app.get("/api/admin/saved-reports")
 def list_saved_reports(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Reports")),
+    current_admin: models.User = Depends(check_permission("reports.view")),
 ):
     reports = db.query(models.SavedReport).filter(
         models.SavedReport.created_by_admin_id == current_admin.id
@@ -2755,7 +3095,7 @@ def list_saved_reports(
 def create_saved_report(
     payload: SavedReportRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Reports-Manage")),
+    current_admin: models.User = Depends(check_permission("reports.manage")),
 ):
     name = " ".join(payload.name.split())
     if not name:
@@ -2780,7 +3120,7 @@ def update_saved_report(
     report_id: int,
     payload: SavedReportRequest,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Reports-Manage")),
+    current_admin: models.User = Depends(check_permission("reports.manage")),
 ):
     report = db.query(models.SavedReport).filter(
         models.SavedReport.id == report_id,
@@ -2805,7 +3145,7 @@ def update_saved_report(
 def delete_saved_report(
     report_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Reports-Manage")),
+    current_admin: models.User = Depends(check_permission("reports.manage")),
 ):
     report = db.query(models.SavedReport).filter(
         models.SavedReport.id == report_id,
@@ -2830,7 +3170,7 @@ def get_report_module_data(
     page: int = Query(1, ge=1),
     page_size: int = Query(250, ge=25, le=500),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Reports"))
+    current_admin: models.User = Depends(check_permission("reports.view"))
 ):
     normalized_report_type = " ".join(str(report_type or "all").strip().lower().replace("-", "_").split())
     report_type_aliases = {
@@ -3244,6 +3584,7 @@ def get_report_module_data(
             .options(
                 load_only(
                     models.ReferenceItem.id,
+                    models.ReferenceItem.item_name,
                     models.ReferenceItem.category,
                     models.ReferenceItem.status,
                     models.ReferenceItem.brand,
@@ -3273,7 +3614,7 @@ def get_report_module_data(
                 "row_id": f"REF-{ref.id}",
                 "item_id": ref.id,
                 "item_code": f"REF-{ref.id:06d}",
-                "item": ref.category or "Disposed Item",
+                "item": ref.item_name or ref.category or "Disposed Item",
                 "category": ref.category or "Uncategorized",
                 "location": ref.location or "Not specified",
                 "status": "Disposed",
@@ -3283,7 +3624,7 @@ def get_report_module_data(
                 "details": {
                     "Item ID": ref.id,
                     "Item Code": f"REF-{ref.id:06d}",
-                    "Title": ref.category or "Disposed Item",
+                    "Title": ref.item_name or ref.category or "Disposed Item",
                     "Status": ref.status or "Unknown",
                     "Deleted Reason": ref.deleted_reason or "Not specified",
                     "Brand": ref.brand or "Not specified",
@@ -3483,7 +3824,7 @@ def create_manual_claim(
     found_item_id: int = Form(...),
     lost_item_id: int = Form(...),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Claim-Management-Create"))
+    current_admin: models.User = Depends(check_permission("claim_management.create"))
 ):
     found_item = db.query(models.Item).filter(models.Item.id == found_item_id).first()
     lost_item = db.query(models.Item).filter(models.Item.id == lost_item_id).first()
@@ -3505,7 +3846,7 @@ def create_manual_claim(
     existing_active_claim = db.query(models.Claim).filter(
         models.Claim.lost_item_id == lost_item_id,
         models.Claim.found_item_id == found_item_id,
-        models.Claim.status.in_(["pending", "approved"])
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
     ).first()
     if existing_active_claim:
         lost_item.is_matched = True
@@ -3520,17 +3861,17 @@ def create_manual_claim(
 
     conflicting_found_claim = db.query(models.Claim).filter(
         models.Claim.found_item_id == found_item_id,
-        models.Claim.status == "approved"
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)
     ).first()
     if conflicting_found_claim:
-        raise HTTPException(status_code=409, detail="This found item is already part of an approved claim")
+        raise HTTPException(status_code=409, detail="This found item is already claimed")
 
     conflicting_lost_claim = db.query(models.Claim).filter(
         models.Claim.lost_item_id == lost_item_id,
-        models.Claim.status == "approved"
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)
     ).first()
     if conflicting_lost_claim:
-        raise HTTPException(status_code=409, detail="This lost item is already part of an approved claim")
+        raise HTTPException(status_code=409, detail="This lost item is already claimed")
 
     new_claim = models.Claim(
         lost_item_id=lost_item_id,
@@ -3563,7 +3904,7 @@ def create_direct_claim(
     claimant_user_id: int = Form(...),
     claim_id_image: UploadFile | None = File(None),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Claim-Management-Create"))
+    current_admin: models.User = Depends(check_permission("claim_management.create"))
 ):
     try:
         validate_upload_file_size(claim_id_image, label="Claim ID image")
@@ -3585,7 +3926,7 @@ def create_direct_claim(
         models.Claim.found_item_id == found_item_id,
         models.Claim.claimant_id == claimant_user_id,
         models.Claim.lost_item_id.is_(None),
-        models.Claim.status.in_(["pending", "approved"])
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
     ).first()
     if existing_active_claim:
         found_item.is_matched = True
@@ -3661,7 +4002,7 @@ def get_announcements(db: Session = Depends(get_db)):
 @app.get("/api/students")
 def get_students(
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(get_current_admin),
+    current_admin: models.User = Depends(check_permission("messages.view")),
 ):
     students = db.query(models.User).filter(models.User.is_admin == False).all()
     
@@ -3802,7 +4143,7 @@ async def update_bulk_content(
     about_cta_desc: str = Form(None),
     about_cta_img: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Content-management-Edit")),
+    current_admin: models.User = Depends(check_permission("content_management.edit")),
 ):
     try:
         async def upsert_landing_section(section_key: str, title: str = None, description: str = None, image: UploadFile = None):

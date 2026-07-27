@@ -372,6 +372,10 @@
             showLoginError('Invalid login session. Please try again.');
             return;
         }
+        // Keep the server-visible page session in sync with the bearer token.
+        // The server also sets this cookie; this assignment repairs older
+        // browser sessions that cached the pre-cookie login page.
+        document.cookie = `admin_access_token=${data.access_token}; max-age=900; path=/; SameSite=Lax`;
 
         const existingAdminToken = sessionStorage.getItem("admin_token");
         const existingStudentToken = localStorage.getItem("token");
@@ -397,8 +401,6 @@
                 }
             }
         }
-
-        document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
         localStorage.setItem("lookfor_last_activity_at", String(Date.now()));
         localStorage.setItem("is_admin", payload.is_admin);

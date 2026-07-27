@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=19">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=20">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
 
@@ -172,7 +172,7 @@
                             <option value="pending">Pending</option>
                             <option value="approved">Approved</option>
                             <option value="matched">Matched</option>
-                            <option value="claimed">Claimed</option>
+                            <option value="claimed">Claimed Item</option>
                             <option value="user-gave">User Gave Item</option>
                         </select>
                         <select id="foundCategoryFilter" class="inventory-filter" onchange="resetFoundPaginationAndRender()">
@@ -266,7 +266,6 @@
                             <button type="button" class="btn-archive-big" id="archiveBtn">Delete</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
                             <button type="button" class="btn-archive-big" id="manualClaimBtn" onclick="handleManualClaimButtonClick()" style="display:none; background:#0d6efd;">Create Manual Claim</button>
-                            <button type="button" class="btn-archive-big" id="claimedBtn" onclick="handleClaimedButtonClick()" style="display:none; background:#198754;">Claimed</button>
                             <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
                             <button type="button" class="btn-dispose-big" id="disposeBtn" style="display:none;">For Disposal</button>
                         </div>
@@ -771,7 +770,7 @@ function showAccessDeniedPopup(permName) {
         }
 
         if (item.is_claimed) {
-            return { label: "Claimed", className: "matched" };
+            return { label: "Claimed Item", className: "matched" };
         }
 
         if (item.is_matched) {
@@ -1065,7 +1064,7 @@ function handleClaimedButtonClick() {
     }
 
     if (activeDetailFoundItem.is_claimed) {
-        showFoundReportAlert('info', 'Already claimed', 'This item already has an approved claim.');
+        showFoundReportAlert('info', 'Already claimed', 'This item already has a claimed record.');
         return;
     }
 
@@ -1295,9 +1294,35 @@ async function submitDirectClaim() {
 }
 
 async function moveFoundItemToDisposal(itemId) {
-    const confirmed = await confirmFoundReportAction("Move to For Disposal?", "Move this item out of active inventory and into the For Disposals menu?", "Move Item");
-    if (!confirmed) return;
-    const note = prompt('Optional disposal note:') || '';
+    const confirmation = await fireSwalOnTop({
+        icon: 'warning',
+        title: 'Move to For Disposal?',
+        html: `
+            <p class="disposal-note-copy">
+                Move this item out of active inventory and into the For Disposals menu.
+                You may include a note for the disposal record.
+            </p>
+        `,
+        input: 'textarea',
+        inputLabel: 'Disposal note (optional)',
+        inputPlaceholder: 'Add the reason, item condition, or handling instructions...',
+        inputAttributes: {
+            maxlength: '500',
+            'aria-label': 'Optional disposal note'
+        },
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-recycle"></i> Move Item',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#c92a2a',
+        cancelButtonColor: '#114b7a',
+        focusCancel: true,
+        customClass: {
+            popup: 'lookfor-disposal-dialog'
+        },
+        preConfirm: value => String(value || '').trim()
+    });
+    if (!confirmation.isConfirmed) return;
+    const note = confirmation.value || '';
     const response = await fetch(`/admin/items/${itemId}/disposal`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}`, 'Content-Type': 'application/json' },
@@ -1806,11 +1831,9 @@ async function disposeItem(itemId, isPending = false) {
     </script>
       </div>
 </main>
-<script src="/static/session-keepalive.js?v=14"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 </body>
 </html>
-
-

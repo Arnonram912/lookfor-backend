@@ -53,7 +53,7 @@ def admin_messages(request: Request, db: Session = Depends(get_db)):
 def get_thread(
     thread_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages")),
+    current_admin: models.User = Depends(check_permission("messages.view")),
 ):
 
     messages = (
@@ -83,7 +83,7 @@ def get_thread(
 def send_message(
     data: schemas.SendMessageSchema,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages-Send")),
+    current_admin: models.User = Depends(check_permission("messages.send")),
 ):
 
     # 1️⃣ Create thread first
@@ -117,7 +117,7 @@ def send_message(
 def send_reply(
     data: schemas.ReplySchema,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages-Send")),
+    current_admin: models.User = Depends(check_permission("messages.send")),
 ):
 
     thread = db.query(models.Thread).filter(
@@ -148,7 +148,7 @@ def send_reply(
 def send_bulk_message(
     data: schemas.BulkSendMessageSchema,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Messages-Send"))
+    current_user: models.User = Depends(check_permission("messages.send"))
 ):
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only admins can send bulk messages.")
@@ -201,7 +201,7 @@ def send_bulk_message(
 def mark_all_as_read(
     student_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages")),
+    current_admin: models.User = Depends(check_permission("messages.view")),
 ):
     # Find all unread messages where this student is the sender
     # and the status is "unread"
@@ -223,7 +223,7 @@ def mark_all_as_read(
 @router.get("/api/messages/unread-count")
 def get_unread_count(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(check_permission("Messages")),
+    current_user: models.User = Depends(check_permission("messages.view")),
 ):
     # This ignores: 'Unread', 'UNREAD', and 'unread    ' (with spaces)
     count = db.query(models.Message).filter(
@@ -237,7 +237,7 @@ def get_unread_count(
 def mark_unread(
     message_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages")),
+    current_admin: models.User = Depends(check_permission("messages.view")),
 ):
 
     msg = db.query(models.Message).filter(
@@ -258,7 +258,7 @@ def mark_unread(
 def archive_message(
     message_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages-Manage")),
+    current_admin: models.User = Depends(check_permission("messages.manage")),
 ):
 
     msg = db.query(models.Message).filter(
@@ -279,7 +279,7 @@ def archive_message(
 def delete_message(
     message_id: int,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages-Manage")),
+    current_admin: models.User = Depends(check_permission("messages.manage")),
 ):
 
     msg = db.query(models.Message).filter(
@@ -303,7 +303,7 @@ def delete_message(
 def search_conversations(
     query: str,
     db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("Messages")),
+    current_admin: models.User = Depends(check_permission("messages.view")),
 ):
 
     threads = db.query(models.Thread).filter(

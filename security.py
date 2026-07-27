@@ -55,48 +55,54 @@ def create_access_token(data: dict):
 
 # Student or Admin
 # In your auth/security file
-def get_current_user(authorization: str = Header(None), db: Session = Depends(get_db)):
+def request_access_token(authorization: str | None, request: Request | None) -> str | None:
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.split(" ", 1)[1].strip()
+    if request is not None:
+        return (request.cookies.get("admin_access_token") or "").strip() or None
+    return None
+
+
+def resolve_authenticated_user(token: str, db: Session) -> models.User:
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    email = payload.get("sub")
+    user_id = payload.get("id")
+    login_candidates = get_login_email_candidates(email)
+    user = db.query(models.User).filter(models.User.id == user_id).first() if user_id is not None else None
+    if user is None and login_candidates:
+        user = db.query(models.User).filter(models.User.email.in_(login_candidates)).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+    if bool(getattr(user, "is_archived", False)):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="This account is archived and disabled.")
+    return user
+
+
+def get_current_user(
+    request: Request,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db),
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
     )
-    if not authorization:
+    token = request_access_token(authorization, request)
+    if not token:
         raise credentials_exception
     try:
-        token = authorization.split(" ")[1]
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        user_id = payload.get("id")
-        login_candidates = get_login_email_candidates(email)
-        
-        user = None
-        if user_id is not None:
-            user = db.query(models.User).filter(models.User.id == user_id).first()
-
-        if user is None and login_candidates:
-            user = db.query(models.User).filter(models.User.email.in_(login_candidates)).first()
-
-        if user is None:
-            raise credentials_exception
-        if bool(getattr(user, "is_archived", False)):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="This account is archived and disabled.",
-            )
-        return user # Now returns the object with .id, .email, etc.
+        return resolve_authenticated_user(token, db)
     except (JWTError, IndexError):
         raise credentials_exception
 
 
 # Admin Only
 def get_current_admin(
-    authorization: str = Header(None), 
+    request: Request,
+    authorization: str = Header(None),
     db: Session = Depends(get_db)
 ):
-    token = None
-
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ")[1]
+    token = request_access_token(authorization, request)
 
     if not token:
         raise HTTPException(
@@ -108,22 +114,9 @@ def get_current_admin(
     try:
         # Decode the token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        is_admin: bool = payload.get("is_admin")
-
-        if email is None or not is_admin:
-            raise HTTPException(status_code=403, detail="Faculty access only")
-        
-        # Fetch actual DB record to check permissions later
-        admin = db.query(models.User).filter(models.User.email == email).first()
-        if not admin:
-            raise HTTPException(status_code=401, detail="User not found")
-        if bool(getattr(admin, "is_archived", False)):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="This account is archived and disabled.",
-            )
-            
+        admin = resolve_authenticated_user(token, db)
+        if not bool(admin.is_admin):
+            raise HTTPException(status_code=403, detail="Administrative access required")
         return admin 
 
     except JWTError:

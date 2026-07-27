@@ -5,6 +5,7 @@
     <title>Student Panel | LookFor STI</title>
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
     <link rel="stylesheet" href="/static/Found_item_report.css?v=19">
+    <link rel="stylesheet" href="/static/student-report-pages.css?v=1">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -125,19 +126,47 @@
             <section class="content-body">
                 <div class="profile-page-card">
                     <div class="action-bar">
-                            <h2 class="section-title">Found Items <span></span></h2>
+                        <h2 class="section-title">Found Items <span></span></h2>
+                        <div class="inventory-actions">
+                            <select id="studentFoundStatusFilter" class="inventory-filter" onchange="resetStudentFoundPaginationAndRender()">
+                                <option value="all">All Items</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="matched">Matched</option>
+                                <option value="claimed">Claimed Item</option>
+                            </select>
+                            <select id="studentFoundCategoryFilter" class="inventory-filter" onchange="resetStudentFoundPaginationAndRender()">
+                                <option value="all">All Categories</option>
+                            </select>
+                            <input type="date" id="studentFoundDateFilter" class="inventory-filter date-filter" onchange="resetStudentFoundPaginationAndRender()" title="Filter by date" aria-label="Filter found items by date">
+                            <button class="upload-btn archive-toggle-btn" id="studentFoundArchiveBtn" onclick="setStudentFoundView('archive')">Archive</button>
+                            <button class="upload-btn archive-toggle-btn" id="studentFoundDeletedBtn" onclick="setStudentFoundView('deleted')">Deleted Items</button>
+                            <button class="upload-btn surrender-upload-btn" onclick="openModal('reportModal')">
+                                <span class="plus">+ Upload Found Item</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="items-grid" id="foundItemsGrid">
+                        <p style="text-align:center; grid-column: 1/-1;">Loading found items...</p>
+                    </div>
+                    <div id="studentFoundPaginationControls" class="found-pagination-controls" style="display:none;">
+                        <div class="pagination-page-size">
+                            <label for="studentFoundPageSize">Items per page</label>
+                            <select id="studentFoundPageSize" onchange="changeStudentFoundPageSize()">
+                                <option value="10" selected>10</option>
+                                <option value="20">20</option>
+                                <option value="30">30</option>
+                            </select>
                             <div class="view-toggle" role="group" aria-label="Choose found items view">
                                 <button type="button" id="foundThumbnailViewBtn" class="view-toggle-btn active" onclick="setFoundDisplayMode('thumbnail')" aria-label="Thumbnail view" title="Thumbnail view" aria-pressed="true"><i class="fas fa-th-large" aria-hidden="true"></i><span>Thumbnail</span></button>
                                 <button type="button" id="foundListViewBtn" class="view-toggle-btn" onclick="setFoundDisplayMode('list')" aria-label="List view" title="List view" aria-pressed="false"><i class="fas fa-list" aria-hidden="true"></i><span>List</span></button>
                             </div>
-                            <button class="upload-btn" id="studentFoundArchiveBtn" onclick="setStudentFoundView('archive')">Archive</button>
-                            <button class="upload-btn" id="studentFoundDeletedBtn" onclick="setStudentFoundView('deleted')">Deleted Items</button>
-                            <button class="upload-btn" onclick="openModal('reportModal')">
-                                <span class="plus">+ Upload Found Item</span>
-                            </button>
-                    </div>
-                    <div class="items-grid" id="foundItemsGrid">
-                        <p style="text-align:center; grid-column: 1/-1;">Loading found items...</p>
+                        </div>
+                        <div class="pagination-status" id="studentFoundPaginationStatus">Page 1 of 1</div>
+                        <div class="pagination-buttons">
+                            <button type="button" id="studentFoundPrevPageBtn" onclick="changeStudentFoundPage(-1)" aria-label="Previous page">&lt;</button>
+                            <button type="button" id="studentFoundNextPageBtn" onclick="changeStudentFoundPage(1)" aria-label="Next page">&gt;</button>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -171,7 +200,7 @@
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
-                        <div id="studentFoundLifecycleActions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;"></div>
+                        <div id="studentFoundLifecycleActions" class="modal-actions student-lifecycle-actions"></div>
                     </div>
                 </div>
             </div>
@@ -376,6 +405,9 @@ window.onclick = function(event) {
 
         let studentFoundView = "active";
         let foundDisplayMode = localStorage.getItem("lookfor-found-display-mode") === "list" ? "list" : "thumbnail";
+        let studentFoundItemsCache = [];
+        let studentFoundCurrentPage = 1;
+        let studentFoundPageSize = 10;
 
         function setFoundDisplayMode(mode) {
             foundDisplayMode = mode === "list" ? "list" : "thumbnail";
@@ -399,7 +431,99 @@ window.onclick = function(event) {
             studentFoundView = studentFoundView === view ? "active" : view;
             document.getElementById("studentFoundArchiveBtn").textContent = studentFoundView === "archive" ? "Show Active Items" : "Archive";
             document.getElementById("studentFoundDeletedBtn").textContent = studentFoundView === "deleted" ? "Show Active Items" : "Deleted Items";
+            document.getElementById("studentFoundArchiveBtn").classList.toggle("active-archive-view", studentFoundView === "archive");
+            document.getElementById("studentFoundDeletedBtn").classList.toggle("active-archive-view", studentFoundView === "deleted");
+            studentFoundCurrentPage = 1;
             loadFoundItems();
+        }
+
+        function populateStudentFoundCategories() {
+            const filter = document.getElementById("studentFoundCategoryFilter");
+            const selected = filter.value || "all";
+            const categories = [...new Set(studentFoundItemsCache
+                .map(item => String(item.data?.category || "").trim())
+                .filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b));
+            filter.innerHTML = '<option value="all">All Categories</option>';
+            categories.forEach(category => {
+                const option = document.createElement("option");
+                option.value = category;
+                option.textContent = category;
+                filter.appendChild(option);
+            });
+            filter.value = categories.includes(selected) ? selected : "all";
+        }
+
+        function getFilteredStudentFoundItems() {
+            const status = document.getElementById("studentFoundStatusFilter").value;
+            const category = document.getElementById("studentFoundCategoryFilter").value;
+            const date = document.getElementById("studentFoundDateFilter").value;
+            return studentFoundItemsCache.filter(item => {
+                const data = item.data || {};
+                const itemStatus = String(item.display_status || "Pending").toLowerCase();
+                return (status === "all" || itemStatus.includes(status))
+                    && (category === "all" || data.category === category)
+                    && (!date || String(data.date || "").slice(0, 10) === date);
+            });
+        }
+
+        function resetStudentFoundPaginationAndRender() {
+            studentFoundCurrentPage = 1;
+            renderStudentFoundItems();
+        }
+
+        function changeStudentFoundPageSize() {
+            studentFoundPageSize = Number(document.getElementById("studentFoundPageSize").value) || 10;
+            studentFoundCurrentPage = 1;
+            renderStudentFoundItems();
+        }
+
+        function changeStudentFoundPage(direction) {
+            const totalPages = Math.max(1, Math.ceil(getFilteredStudentFoundItems().length / studentFoundPageSize));
+            studentFoundCurrentPage = Math.min(totalPages, Math.max(1, studentFoundCurrentPage + direction));
+            renderStudentFoundItems();
+        }
+
+        function updateStudentFoundPagination(totalItems) {
+            const totalPages = Math.max(1, Math.ceil(totalItems / studentFoundPageSize));
+            studentFoundCurrentPage = Math.min(studentFoundCurrentPage, totalPages);
+            document.getElementById("studentFoundPaginationControls").style.display = totalItems ? "flex" : "none";
+            document.getElementById("studentFoundPaginationStatus").textContent =
+                `Page ${studentFoundCurrentPage} of ${totalPages} · ${totalItems} item${totalItems === 1 ? "" : "s"}`;
+            document.getElementById("studentFoundPrevPageBtn").disabled = studentFoundCurrentPage <= 1;
+            document.getElementById("studentFoundNextPageBtn").disabled = studentFoundCurrentPage >= totalPages;
+        }
+
+        function renderStudentFoundItems() {
+            const grid = document.getElementById("foundItemsGrid");
+            const filteredItems = getFilteredStudentFoundItems();
+            updateStudentFoundPagination(filteredItems.length);
+            setFoundDisplayMode(foundDisplayMode);
+            if (!filteredItems.length) {
+                grid.innerHTML = '<p class="inventory-empty-state" style="grid-column:1/-1;text-align:center;">No found items match the selected filters.</p>';
+                return;
+            }
+
+            const start = (studentFoundCurrentPage - 1) * studentFoundPageSize;
+            grid.innerHTML = filteredItems.slice(start, start + studentFoundPageSize).map(item => {
+                const data = item.data || {};
+                const imageUrl = getItemImageUrl(data.image_path);
+                const itemData = JSON.stringify({...data, display_status: item.display_status}).replace(/'/g, "\\'");
+                return `
+                    <div class="item-card">
+                        <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
+                            <img src="${imageUrl}" alt="${data.item_name || data.category || "Found item"}" onerror="handleItemImageError(this)">
+                            <span class="inventory-state-tag ${["Matched", "Claimed Item"].includes(item.display_status) ? "matched" :
+                            item.display_status === "Approved" ? "approved" : "pending"}">${item.display_status || "Pending"}</span>
+                        </div>
+                        <div class="card-body">
+                            <h3>${data.item_name || data.category || 'Unnamed Item'}</h3>
+                            <p><i class="fas fa-map-marker-alt"></i> ${data.location || 'Unknown'}</p>
+                            <p><strong>Found ID:</strong> ${data.found_id || data.item_code || 'N/A'}</p>
+                            <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details &rarr;</span>
+                        </div>
+                    </div>`;
+            }).join('');
         }
 
         async function loadFoundItems() {
@@ -434,6 +558,10 @@ window.onclick = function(event) {
                 }
 
                 const items = await response.json();
+                studentFoundItemsCache = items;
+                populateStudentFoundCategories();
+                renderStudentFoundItems();
+                return;
 
                 if (!items.length) {
                     grid.innerHTML = `<p style="grid-column: 1/-1; text-align:center;">No ${studentFoundView} found items.</p>`;
@@ -452,7 +580,7 @@ window.onclick = function(event) {
                         <div class="item-card">
                             <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
                                 <img src="${imageUrl}" onerror="handleItemImageError(this)">
-                                <span class="inventory-state-tag ${item.display_status === "Matched" ? "matched" :
+                                <span class="inventory-state-tag ${["Matched", "Claimed Item"].includes(item.display_status) ? "matched" :
                                 item.display_status === "Approved" ? "approved" :
                                 "pending"}">${item.display_status || "Pending"}</span>
                             </div>
@@ -649,19 +777,29 @@ window.onclick = function(event) {
 
         function renderStudentFoundActions(item) {
             const actions = document.getElementById("studentFoundLifecycleActions");
+            if (item.status === "found" && item.is_surrendered && !item.is_matched && !item.is_claimed) {
+                actions.innerHTML = '<span style="color:#6c757d;font-weight:600;">Approved surrendered items can only be managed by an administrator until matched or claimed.</span>';
+                return;
+            }
             const type = studentFoundRecordType(item);
-            const button = (label, action, color) =>
-                `<button type="button" onclick="studentFoundLifecycleAction('${action}','${type}',${item.id})" style="border:0;border-radius:8px;padding:10px 14px;color:white;background:${color};cursor:pointer;font-weight:700;">${label}</button>`;
+            const personalOnly = item.status === "found" && (item.is_matched || item.is_claimed);
+            const button = (label, action) =>
+                `<button type="button" class="student-lifecycle-btn action-${action}" onclick="studentFoundLifecycleAction('${action}','${type}',${item.id},${personalOnly})">${label}</button>`;
             actions.innerHTML = studentFoundView === "active"
-                ? button("Archive", "archive", "#114b7a") + button("Delete", "delete", "#dc3545")
+                ? button("Archive", "archive") + button("Delete", "delete")
                 : studentFoundView === "archive"
-                    ? button("Recover", "recover", "#198754") + button("Delete", "delete", "#dc3545")
-                    : button("Recover", "recover", "#198754") + button("Delete Permanently", "permanent", "#b02a37");
+                    ? button("Recover", "recover") + button("Delete", "delete")
+                    : button("Recover", "recover") + button(personalOnly ? "Remove from My Items" : "Delete Permanently", "permanent");
         }
 
-        async function studentFoundLifecycleAction(action, type, itemId) {
+        async function studentFoundLifecycleAction(action, type, itemId, personalOnly = false) {
             const permanent = action === "permanent";
-            if (!confirm(permanent ? "Permanently delete this report? This cannot be undone." : `Are you sure you want to ${action} this report?`)) return;
+            const confirmation = permanent && personalOnly
+                ? "Remove this report from your account? The item will remain visible to administrators and the matched user."
+                : permanent
+                    ? "Permanently delete this report? This cannot be undone."
+                    : `Are you sure you want to ${action} this report?`;
+            if (!confirm(confirmation)) return;
             const response = await fetch(`/student/items/${type}/${itemId}/${action}`, {
                 method: permanent ? "DELETE" : "PUT",
                 headers: { 'Authorization': `Bearer ${getStudentToken()}` }
@@ -901,7 +1039,7 @@ window.onclick = function(event) {
         };
     </script>
 
-    <script src="/static/session-keepalive.js?v=7"></script>
+    <script src="/static/session-keepalive.js?v=8"></script>
     <script src="/static/student-notifications.js?v=5"></script>
     <script src="/static/force-password-change.js"></script>
     <script src="/static/student-sidebar-access.js"></script>

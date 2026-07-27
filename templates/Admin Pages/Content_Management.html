@@ -200,14 +200,16 @@
         }
 
         .academic-schedule-modal-card {
-            width: min(980px, calc(100vw - 32px));
-            max-width: 980px;
+            width: min(1120px, calc(100vw - 32px));
+            max-width: 1120px;
             padding: 0;
             overflow: hidden;
             border: 1px solid #dce6f1;
             border-radius: 18px;
             background: #f8fafc;
             box-shadow: 0 24px 70px rgba(3, 35, 68, 0.3);
+            max-height: calc(100vh - 32px);
+            overflow-y: auto;
         }
 
         .academic-schedule-modal-card .close-modal {
@@ -221,7 +223,7 @@
             display: flex;
             align-items: flex-start;
             gap: 16px;
-            padding: 28px 64px 24px 28px;
+            padding: 20px 64px 18px 24px;
             color: #fff;
             background: linear-gradient(135deg, #003366, #0868b8);
         }
@@ -251,9 +253,37 @@
 
         .academic-schedule-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 11px 12px;
+            padding: 16px;
+        }
+
+        .academic-schedule-columns {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 16px;
-            padding: 26px 28px 20px;
+            padding: 16px 24px 0;
+        }
+
+        .academic-schedule-section {
+            min-width: 0;
+            margin: 0;
+            border: 1px solid #d6e2ee;
+            border-radius: 12px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .academic-schedule-section h3 {
+            margin: 0;
+            padding: 11px 15px;
+            color: #0a4f8a;
+            background: #edf6ff;
+            font-size: 15px;
+        }
+
+        .academic-schedule-section .academic-schedule-grid {
+            padding: 14px;
         }
 
         .academic-schedule-grid label {
@@ -265,9 +295,9 @@
         .academic-schedule-grid input,
         .academic-schedule-grid select {
             width: 100%;
-            min-height: 43px;
-            margin-top: 7px;
-            padding: 10px 12px;
+            min-height: 38px;
+            margin-top: 5px;
+            padding: 8px 10px;
             border: 1px solid #cbd7e2;
             border-radius: 8px;
             background: #fff;
@@ -281,8 +311,8 @@
         }
 
         .academic-schedule-status {
-            margin: 0 28px;
-            padding: 12px 14px;
+            margin: 0 14px 14px;
+            padding: 9px 11px;
             border-left: 4px solid #0b65b1;
             border-radius: 8px;
             color: #17466f;
@@ -295,7 +325,7 @@
             display: flex;
             justify-content: flex-end;
             gap: 10px;
-            padding: 22px 28px 28px;
+            padding: 16px 24px 20px;
         }
 
         .academic-schedule-actions .content-submit-btn,
@@ -309,17 +339,17 @@
             background: #e9f4ff;
         }
 
-        @media (max-width: 780px) {
-            .academic-schedule-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+        @media (max-width: 860px) {
+            .academic-schedule-columns {
+                grid-template-columns: 1fr;
+                padding-left: 20px;
+                padding-right: 20px;
             }
         }
 
         @media (max-width: 520px) {
-            .academic-schedule-grid {
+            .academic-schedule-section .academic-schedule-grid {
                 grid-template-columns: 1fr;
-                padding-left: 20px;
-                padding-right: 20px;
             }
 
             .academic-schedule-actions {
@@ -568,23 +598,45 @@
             <div class="academic-schedule-icon"><i class="fas fa-calendar-days"></i></div>
             <div>
                 <h2>Academic Term Schedule</h2>
-                <p>Configure semester dates. Defaults: 1st Semester runs July 28–December 5; 2nd Semester runs January 5–June 5.</p>
+                <p>Configure the tertiary semester and SHS school year independently. Saving a schedule does not archive either classification.</p>
             </div>
         </div>
-        <div class="academic-schedule-grid">
-            <label>Current Academic Year<input id="termCurrentYear" type="text" placeholder="2025-2026"></label>
-            <label>Current Semester<select id="termCurrentSemester"><option>1st Semester</option><option>2nd Semester</option></select></label>
-            <label>Current Start<input id="termCurrentStart" type="date"></label>
-            <label>Current End<input id="termCurrentEnd" type="date"></label>
-            <label>Next Academic Year<input id="termNextYear" type="text" placeholder="2026-2027"></label>
-            <label>Next Semester<select id="termNextSemester"><option>1st Semester</option><option>2nd Semester</option></select></label>
-            <label>Next Start<input id="termNextStart" type="date"></label>
-            <label>Next End<input id="termNextEnd" type="date"></label>
+        <div class="academic-schedule-columns">
+        <section class="academic-schedule-section">
+            <h3><i class="fas fa-graduation-cap"></i> Tertiary Semester Schedule</h3>
+            <div class="academic-schedule-grid">
+                <label>Current Academic Year<input id="termCurrentYear" type="text" placeholder="2025-2026"></label>
+                <label>Current Semester<select id="termCurrentSemester"><option>1st Semester</option><option>2nd Semester</option></select></label>
+                <label>Current Start<input id="termCurrentStart" type="date"></label>
+                <label>Current End<input id="termCurrentEnd" type="date"></label>
+                <label>Next Academic Year<input id="termNextYear" type="text" placeholder="2026-2027"></label>
+                <label>Next Semester<select id="termNextSemester"><option>1st Semester</option><option>2nd Semester</option></select></label>
+                <label>Next Start<input id="termNextStart" type="date"></label>
+                <label>Next End<input id="termNextEnd" type="date"></label>
+            </div>
+            <div id="tertiaryTermStatus" class="academic-schedule-status">Loading tertiary schedule...</div>
+        </section>
+        <section class="academic-schedule-section">
+            <h3><i class="fas fa-school"></i> SHS School Year Schedule</h3>
+            <div class="academic-schedule-grid">
+                <label>Current School Year<input id="shsCurrentYear" type="text" placeholder="2025-2026"></label>
+                <label>Term<input type="text" value="School Year" disabled></label>
+                <label>Current Start<input id="shsCurrentStart" type="date"></label>
+                <label>Current End<input id="shsCurrentEnd" type="date"></label>
+                <label>Next School Year<input id="shsNextYear" type="text" placeholder="2026-2027"></label>
+                <label>Term<input type="text" value="School Year" disabled></label>
+                <label>Next Start<input id="shsNextStart" type="date"></label>
+                <label>Next End<input id="shsNextEnd" type="date"></label>
+            </div>
+            <div id="shsTermStatus" class="academic-schedule-status">Loading SHS schedule...</div>
+        </section>
         </div>
-        <div id="academicTermStatus" class="academic-schedule-status">Loading schedule...</div>
+        <div id="academicTermStatus" class="academic-schedule-status" style="margin-top:20px;">
+            Tertiary and SHS archiving are separate manual actions.
+        </div>
         <div class="academic-schedule-actions">
             <button type="button" class="content-cancel-btn" onclick="closeModal('academicScheduleModal')">Cancel</button>
-            <button type="button" class="content-submit-btn academic-default-btn" onclick="applyDefaultSemesterDates()">Apply Default Dates</button>
+            <button type="button" class="content-submit-btn academic-default-btn" onclick="applyDefaultSemesterDates()">Apply Tertiary Defaults</button>
             <button type="button" class="content-submit-btn" onclick="saveAcademicTermSchedule()">Save Academic Schedule</button>
         </div>
     </div>
@@ -716,15 +768,24 @@ async function loadAcademicTermSchedule() {
     const response = await fetch('/admin/academic-term', { headers: getAdminAuthHeader() });
     const term = await response.json();
     if (!response.ok) throw new Error(term.detail || 'Failed to load academic schedule.');
-    document.getElementById('termCurrentYear').value = term.current_academic_year || '';
-    document.getElementById('termCurrentSemester').value = term.current_semester || '1st Semester';
-    document.getElementById('termCurrentStart').value = term.current_start_date || '';
-    document.getElementById('termCurrentEnd').value = term.current_end_date || '';
-    document.getElementById('termNextYear').value = term.next_academic_year || '';
-    document.getElementById('termNextSemester').value = term.next_semester || '1st Semester';
-    document.getElementById('termNextStart').value = term.next_start_date || '';
-    document.getElementById('termNextEnd').value = term.next_end_date || '';
-    const currentTermLocked = term.current_status === 'active';
+    const tertiary = term.tertiary || term;
+    const shs = term.shs || {};
+    document.getElementById('termCurrentYear').value = tertiary.current_academic_year || '';
+    document.getElementById('termCurrentSemester').value = tertiary.current_semester || '1st Semester';
+    document.getElementById('termCurrentStart').value = tertiary.current_start_date || '';
+    document.getElementById('termCurrentEnd').value = tertiary.current_end_date || '';
+    document.getElementById('termNextYear').value = tertiary.next_academic_year || '';
+    document.getElementById('termNextSemester').value = tertiary.next_semester || '1st Semester';
+    document.getElementById('termNextStart').value = tertiary.next_start_date || '';
+    document.getElementById('termNextEnd').value = tertiary.next_end_date || '';
+    document.getElementById('shsCurrentYear').value = shs.current_academic_year || tertiary.current_academic_year || '';
+    document.getElementById('shsCurrentStart').value = shs.current_start_date || '';
+    document.getElementById('shsCurrentEnd').value = shs.current_end_date || '';
+    document.getElementById('shsNextYear').value = shs.next_academic_year || '';
+    document.getElementById('shsNextStart').value = shs.next_start_date || '';
+    document.getElementById('shsNextEnd').value = shs.next_end_date || '';
+
+    const currentTermLocked = tertiary.current_status === 'active';
     ['termCurrentYear', 'termCurrentSemester', 'termCurrentStart', 'termCurrentEnd'].forEach(id => {
         const field = document.getElementById(id);
         field.disabled = currentTermLocked;
@@ -732,10 +793,25 @@ async function loadAcademicTermSchedule() {
             ? 'The current semester is active. End it before changing these details.'
             : '';
     });
-    document.getElementById('academicTermStatus').textContent =
+    const shsCurrentConfigured = Boolean(shs.current_start_date && shs.current_end_date);
+    const shsCurrentLocked = shs.current_status === 'active' && shsCurrentConfigured;
+    ['shsCurrentYear', 'shsCurrentStart', 'shsCurrentEnd'].forEach(id => {
+        const field = document.getElementById(id);
+        field.disabled = shsCurrentLocked;
+        field.title = shsCurrentLocked
+            ? 'The current SHS school year is active. End it before changing these details.'
+            : '';
+    });
+    document.getElementById('tertiaryTermStatus').textContent =
         currentTermLocked
-            ? `Active and locked — ${term.current_academic_year} ${term.current_semester}`
-            : `Current status: ${term.current_status} — current-term details may now be edited`;
+            ? `Tertiary: active and locked — ${tertiary.current_academic_year} ${tertiary.current_semester}`
+            : `Tertiary status: ${tertiary.current_status} — current-semester details may now be edited`;
+    document.getElementById('shsTermStatus').textContent =
+        shsCurrentLocked
+            ? `SHS: active and locked — ${shs.current_academic_year} School Year`
+            : shsCurrentConfigured
+                ? `SHS status: ${shs.current_status} — current-school-year details may now be edited`
+                : 'SHS schedule needs configuration. Its dates were not inferred from tertiary semester dates.';
 }
 
 function getDefaultTermDates(academicYear, semester) {
@@ -776,28 +852,41 @@ function applyDefaultSemesterDates() {
 
 async function saveAcademicTermSchedule() {
     const payload = {
-        current_academic_year: document.getElementById('termCurrentYear').value.trim(),
-        current_semester: document.getElementById('termCurrentSemester').value,
-        current_start_date: document.getElementById('termCurrentStart').value,
-        current_end_date: document.getElementById('termCurrentEnd').value,
-        next_academic_year: document.getElementById('termNextYear').value.trim(),
-        next_semester: document.getElementById('termNextSemester').value,
-        next_start_date: document.getElementById('termNextStart').value,
-        next_end_date: document.getElementById('termNextEnd').value
+        tertiary: {
+            current_academic_year: document.getElementById('termCurrentYear').value.trim(),
+            current_semester: document.getElementById('termCurrentSemester').value,
+            current_start_date: document.getElementById('termCurrentStart').value,
+            current_end_date: document.getElementById('termCurrentEnd').value,
+            next_academic_year: document.getElementById('termNextYear').value.trim(),
+            next_semester: document.getElementById('termNextSemester').value,
+            next_start_date: document.getElementById('termNextStart').value,
+            next_end_date: document.getElementById('termNextEnd').value
+        },
+        shs: {
+            current_academic_year: document.getElementById('shsCurrentYear').value.trim(),
+            current_start_date: document.getElementById('shsCurrentStart').value,
+            current_end_date: document.getElementById('shsCurrentEnd').value,
+            next_academic_year: document.getElementById('shsNextYear').value.trim(),
+            next_start_date: document.getElementById('shsNextStart').value,
+            next_end_date: document.getElementById('shsNextEnd').value
+        }
     };
-    if (Object.values(payload).some(value => !value)) {
-        alert('Complete all academic schedule fields.');
+    if ([...Object.values(payload.tertiary), ...Object.values(payload.shs)].some(value => !value)) {
+        alert('Complete both the tertiary semester and SHS school-year schedules.');
         return;
     }
-    if (!confirm(`Save this schedule? ${payload.current_academic_year} students will be archived when ${payload.current_semester} ends on ${payload.current_end_date}.`)) return;
-    const response = await fetch('/admin/academic-term', {
+    if (!confirm(
+        `Save separate schedules for Tertiary ${payload.tertiary.current_academic_year} ${payload.tertiary.current_semester} ` +
+        `and SHS ${payload.shs.current_academic_year} School Year? This does not archive accounts.`
+    )) return;
+    const response = await fetch('/admin/academic-term/schedules', {
         method: 'PUT',
         headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || 'Failed to save academic schedule.');
-    alert('Academic schedule saved. An admin notification was created.');
+    alert('The tertiary and SHS schedules were saved separately.');
     await loadAcademicTermSchedule();
     closeModal('academicScheduleModal');
 }
@@ -1173,7 +1262,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 </script>
 
-<script src="/static/session-keepalive.js?v=14"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

@@ -216,6 +216,43 @@ body.swal2-height-auto > .swal2-container {
 
 #bulkUploadSection {
     order: 5;
+    display: flex;
+    position: relative;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border: 1px dashed #9fb3c8;
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+#bulkUploadSection > input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+#bulkUploadSection .file-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 9px;
+    background: var(--sti-blue);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#bulkUploadSection #fileNameDisplay {
+    color: #667085;
+    font-size: 13px;
 }
 
 .bulk-modal-footer {
@@ -252,6 +289,44 @@ body.swal2-height-auto > .swal2-container {
 
 .bulk-register-content.manual-entry-active .bulk-modal-footer {
     order: 6;
+}
+
+.bulk-register-content.administrative-entry-active {
+    max-width: 780px !important;
+    border-top-color: #003b71 !important;
+}
+
+.administrative-entry-active .bulk-import-group {
+    margin-bottom: 8px !important;
+}
+
+.administrative-entry-active .administrative-form-intro {
+    margin: 2px 0 18px;
+    padding: 12px 14px;
+    border-left: 4px solid var(--sti-blue);
+    border-radius: 8px;
+    background: #f2f7fc;
+    color: #344054;
+    font-weight: 600;
+}
+
+.administrative-entry-active #bulkManualSection {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 22px;
+    border-color: #c9d8e8;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(0, 51, 102, 0.08);
+}
+
+.administrative-entry-active #unifiedPermissionFields {
+    grid-column: 1 / -1;
+    padding-top: 14px;
+    border-top: 1px solid #e4eaf0;
+}
+
+.administrative-entry-active .bulk-modal-footer {
+    padding-top: 4px;
 }
 
 .bulk-manual-heading {
@@ -296,7 +371,8 @@ body.swal2-height-auto > .swal2-container {
 
 @media (max-width: 760px) {
     .bulk-settings-grid,
-    .manual-entry-active #bulkManualSection {
+    .manual-entry-active #bulkManualSection,
+    .administrative-entry-active #bulkManualSection {
         grid-template-columns: 1fr;
     }
 
@@ -1692,10 +1768,11 @@ body.dark-theme #bulkEmails {
 }
 
 #academicTermModal .academic-term-modal-card {
-    width: min(620px, 100%);
-    max-width: 620px;
+    width: min(980px, 100%);
+    max-width: 980px;
+    max-height: calc(100vh - 40px);
     padding: 0;
-    overflow: hidden;
+    overflow-y: auto;
     border: 1px solid #dce6f1;
     border-radius: 18px;
     background: #f8fafc;
@@ -1726,7 +1803,7 @@ body.dark-theme #bulkEmails {
     display: flex;
     align-items: flex-start;
     gap: 16px;
-    padding: 30px 64px 24px 30px;
+    padding: 20px 64px 18px 24px;
     color: #fff;
     background: linear-gradient(135deg, #002f5f 0%, #075ca8 100%);
 }
@@ -1768,11 +1845,27 @@ body.dark-theme #bulkEmails {
 }
 
 .academic-term-summary {
-    padding: 24px 30px 0;
+    padding: 16px 24px 0;
+}
+
+.academic-term-classifications {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.academic-term-classification {
+    min-width: 0;
+}
+
+.academic-term-classification h3 {
+    margin: 0 0 8px;
+    color: #0a4f8a;
+    font-size: 15px;
 }
 
 .academic-term-panel {
-    padding: 18px 20px;
+    padding: 13px 15px;
     border: 1px solid #dce6f1;
     border-radius: 13px;
     background: #fff;
@@ -1828,7 +1921,7 @@ body.dark-theme #bulkEmails {
 .academic-term-name {
     display: block;
     color: #102f4d;
-    font-size: 18px;
+    font-size: 15px;
 }
 
 .academic-term-date {
@@ -1841,7 +1934,7 @@ body.dark-theme #bulkEmails {
 }
 
 .academic-term-flow {
-    height: 34px;
+    height: 25px;
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
@@ -1859,8 +1952,8 @@ body.dark-theme #bulkEmails {
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    margin: 20px 30px 0;
-    padding: 12px 14px;
+    margin: 14px 24px 0;
+    padding: 9px 12px;
     border-radius: 10px;
     color: #5d4a10;
     background: #fff7dc;
@@ -1873,11 +1966,16 @@ body.dark-theme #bulkEmails {
     color: #d69e00;
 }
 
+#academicTermModal .academic-term-modal-card > .bulk-settings-grid {
+    margin: 12px 24px 0 !important;
+}
+
 .academic-term-actions {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    padding: 22px 30px 28px;
+    flex-wrap: wrap;
+    padding: 14px 24px 20px;
 }
 
 .academic-term-btn {
@@ -1937,7 +2035,11 @@ body.dark-theme #bulkEmails {
     color: #64788d;
 }
 
-@media (max-width: 620px) {
+@media (max-width: 760px) {
+    .academic-term-classifications {
+        grid-template-columns: 1fr;
+    }
+
     .academic-term-modal-header,
     .academic-term-summary {
         padding-left: 20px;
@@ -1997,3 +2099,159 @@ body.dark-theme #bulkEmails {
     th, td { border: 1px solid black; padding: 8px; text-align: left; }
 }
 
+.inline-field-error {
+  min-height: 18px;
+  margin-top: 4px;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.permission-module-group {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    margin-bottom: 8px;
+    border: 1px solid #d9e2ec;
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.permission-module-group[open] {
+    border-color: #a9bfd4;
+    box-shadow: 0 4px 12px rgba(0, 51, 102, 0.08);
+}
+
+.permission-module-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 10px 13px;
+    color: #003b71;
+    background: #fbfdff;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.permission-module-heading::-webkit-details-marker {
+    display: none;
+}
+
+.permission-module-heading:hover {
+    background: #f2f7fc;
+}
+
+.permission-module-name {
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.permission-module-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.permission-module-meta {
+    color: #667085;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.permission-module-meta i {
+    color: #365f84;
+    font-size: 10px;
+    transition: transform 0.18s ease;
+}
+
+.permission-module-group[open] .permission-module-meta i {
+    transform: rotate(180deg);
+}
+
+.permission-module-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border-top: 1px solid #e5ebf1;
+    background: #f8fbff;
+}
+
+.permission-module-actions .perm-item {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.permission-module-actions .perm-item.professional {
+    min-height: 58px;
+    padding: 10px 12px;
+    border-radius: 8px;
+}
+
+.permission-module-actions .perm-item input[type="checkbox"] {
+    flex: 0 0 auto;
+    margin-top: 3px;
+}
+
+.permission-module-actions .perm-copy {
+    display: block;
+    min-width: 0;
+}
+
+.permission-module-actions .perm-title,
+.permission-module-actions .perm-desc {
+    display: block;
+    overflow-wrap: break-word;
+}
+
+.permission-module-actions .perm-title {
+    margin-bottom: 3px;
+    color: #12344d;
+    font-weight: 700;
+}
+
+.permission-module-actions .perm-desc {
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.permission-key {
+    display: block;
+    margin-top: 4px;
+    color: #52677d;
+    font-size: 11px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+#unifiedPermissionFields {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+}
+
+#unifiedPermissionOptions {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+@media (max-width: 560px) {
+    .permission-module-actions {
+        grid-template-columns: 1fr;
+    }
+}
+
+.admin-input.field-invalid {
+  border-color: #d92d20 !important;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.12);
+}

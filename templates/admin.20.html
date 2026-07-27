@@ -188,12 +188,12 @@
 
                         <div class="card" onclick="openPendingSurrenderWithAccess(); return false;">
                             <h3 id="pendingCount">0</h3>
-                            <p>Pending Found Items</p> 
+                            <p>Pending Surrender</p>
                         </div>
 
                         <div class="card" onclick="openClaimedItemsWithAccess(); return false;"> 
                             <h3 id="claimedCount">0</h3>
-                            <p>Successfully Claimed Items</p> 
+                            <p>Claimed Item</p>
                         </div> 
                     </div>
                 </div>
@@ -240,7 +240,7 @@
         <div id="adminActionModal" class="modal">
             <div class="modal-content" style="max-width: 760px; width: min(760px, 92vw);">
                 <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
-                    <h2 id="adminModalTitle">Pending Found Items</h2>
+                    <h2 id="adminModalTitle">Pending Surrender</h2>
                     <span class="close-modal" onclick="closeModal('adminActionModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
                 </div>
                 <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
@@ -256,12 +256,12 @@
         <div id="claimedItemsModal" class="modal">
             <div class="modal-content" style="max-width: 860px; width: min(860px, 94vw);">
                 <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
-                    <h2 id="claimedItemsModalTitle">Approved Claimed Items</h2>
+                    <h2 id="claimedItemsModalTitle">Claimed Item Records</h2>
                     <span class="close-modal" onclick="closeModal('claimedItemsModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
                 </div>
                 <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
                     <div id="claimedItemsList">
-                        <p style="text-align:center; padding:20px;">Loading approved claimed items...</p>
+                        <p style="text-align:center; padding:20px;">Loading claimed items...</p>
                     </div>
                 </div>
                 <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
@@ -548,7 +548,7 @@ async function handleNotifClick(notifId) {
             const stats = await response.json();
             document.getElementById('pendingCount').innerText = Number(stats.pending_count || 0);
             document.getElementById('foundCount').innerText = Number(stats.found_count || 0);
-            document.getElementById('claimedCount').innerText = Number(stats.approved_claim_count || 0);
+            document.getElementById('claimedCount').innerText = Number(stats.claimed_count ?? stats.approved_claim_count ?? 0);
         } catch (err) {
             console.error("Stats sync failed");
         }
@@ -608,7 +608,7 @@ async function handleNotifClick(notifId) {
     const token = sessionStorage.getItem("admin_token");
 
     // 1. Set UI to loading state and show modal
-    title.innerText = "Pending Found Items";
+    title.innerText = "Pending Surrender";
     container.innerHTML = `<div style="text-align:center; padding:30px;">
         <p>Fetching pending items...</p>
     </div>`;
@@ -670,9 +670,9 @@ async function openClaimedItemsModal() {
     const title = document.getElementById('claimedItemsModalTitle');
     const token = sessionStorage.getItem("admin_token");
 
-    title.innerText = "Approved Claimed Items";
+    title.innerText = "Claimed Item Records";
     container.innerHTML = `<div style="text-align:center; padding:30px;">
-        <p>Loading approved claimed items...</p>
+        <p>Loading claimed items...</p>
     </div>`;
     openModal('claimedItemsModal');
 
@@ -684,20 +684,20 @@ async function openClaimedItemsModal() {
         if (!res.ok) throw new Error("Server error");
 
         const claims = await res.json();
-        const approvedClaims = Array.isArray(claims)
-            ? claims.filter(claim => String(claim.status || '').toLowerCase() === 'approved')
+        const claimedClaims = Array.isArray(claims)
+            ? claims.filter(claim => ['claimed', 'approved', 'completed'].includes(String(claim.status || '').toLowerCase()))
             : [];
 
-        window.allApprovedClaims = approvedClaims;
+        window.allApprovedClaims = claimedClaims;
         const countEl = document.getElementById('claimedCount');
-        if (countEl) countEl.innerText = approvedClaims.length;
+        if (countEl) countEl.innerText = claimedClaims.length;
 
-        if (!approvedClaims.length) {
-            container.innerHTML = "<p style='text-align:center; padding:20px;'>No approved claimed items found.</p>";
+        if (!claimedClaims.length) {
+            container.innerHTML = "<p style='text-align:center; padding:20px;'>No claimed items found.</p>";
             return;
         }
 
-        container.innerHTML = approvedClaims.map(claim => {
+        container.innerHTML = claimedClaims.map(claim => {
             const report = claim.report || {};
             const claimant = report.claimant || claim.claimant || {};
             const itemDetails = report.item_description || {};
@@ -708,7 +708,7 @@ async function openClaimedItemsModal() {
             const location = escapeHtml(itemDetails.location_lost || 'Not specified');
             const brand = escapeHtml(itemDetails.brand || 'Not specified');
             const color = escapeHtml(itemDetails.color || 'Not specified');
-            const status = escapeHtml(report.status || claim.status || 'Approved');
+            const status = escapeHtml(report.status || claim.status || 'Claimed Item');
             const dateClaimed = report.date_claimed
                 ? new Date(report.date_claimed).toLocaleDateString()
                 : 'No date available';
@@ -740,7 +740,7 @@ async function openClaimedItemsModal() {
         }).join('');
     } catch (err) {
         console.error("Claimed items modal load failed:", err);
-        container.innerHTML = `<p style="text-align:center; color:red; padding:20px;">Failed to load approved claimed items. Please try again.</p>`;
+        container.innerHTML = `<p style="text-align:center; color:red; padding:20px;">Failed to load claimed items. Please try again.</p>`;
     }
 }
 
@@ -1008,11 +1008,10 @@ async function processAction(itemId, actionType) {
     };
 </script>
 
-<script src="/static/session-keepalive.js?v=14"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 </body> 
 
 </html> 
-

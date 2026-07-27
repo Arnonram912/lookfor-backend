@@ -4,7 +4,8 @@
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=23">
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=26">
+    <link rel="stylesheet" href="/static/student-report-pages.css?v=1">
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -133,19 +134,45 @@
              <div class="profile-page-card">
                 <div class="action-bar">
                     <h2 class="section-title">Lost Items</h2>
-                    <div class="view-toggle" role="group" aria-label="Choose lost items view">
-                        <button type="button" id="lostThumbnailViewBtn" class="view-toggle-btn active" onclick="setLostDisplayMode('thumbnail')" aria-label="Thumbnail view" title="Thumbnail view" aria-pressed="true"><i class="fas fa-th-large" aria-hidden="true"></i><span>Thumbnail</span></button>
-                        <button type="button" id="lostListViewBtn" class="view-toggle-btn" onclick="setLostDisplayMode('list')" aria-label="List view" title="List view" aria-pressed="false"><i class="fas fa-list" aria-hidden="true"></i><span>List</span></button>
+                    <div class="inventory-actions">
+                        <select id="studentLostStatusFilter" class="inventory-filter" onchange="resetStudentLostPaginationAndRender()">
+                            <option value="all">All Items</option>
+                            <option value="pending">Pending</option>
+                            <option value="matched">Matched</option>
+                        </select>
+                        <select id="studentLostCategoryFilter" class="inventory-filter" onchange="resetStudentLostPaginationAndRender()">
+                            <option value="all">All Categories</option>
+                        </select>
+                        <input type="date" id="studentLostDateFilter" class="inventory-filter date-filter" onchange="resetStudentLostPaginationAndRender()" title="Filter by date" aria-label="Filter lost items by date">
+                        <button class="upload-btn archive-toggle-btn" id="studentLostArchiveBtn" onclick="setStudentLostView('archive')">Archive</button>
+                        <button class="upload-btn archive-toggle-btn" id="studentLostDeletedBtn" onclick="setStudentLostView('deleted')">Deleted Items</button>
+                        <button class="upload-btn" onclick="openModal('reportModal')">
+                            <span class="plus">+ Upload Lost Item</span>
+                        </button>
                     </div>
-                    <button class="upload-btn" id="studentLostArchiveBtn" onclick="setStudentLostView('archive')">Archive</button>
-                    <button class="upload-btn" id="studentLostDeletedBtn" onclick="setStudentLostView('deleted')">Deleted Items</button>
-                    <button class="upload-btn" onclick="openModal('reportModal')"> 
-                        <span class="plus">+ Upload Lost Item </span>
-                    </button> 
                 </div>
 
                 <div class="items-grid" id="lostItemsGrid">
                     <p style="text-align:center; grid-column: 1/-1;">Loading lost items...</p>
+                </div>
+                <div id="studentLostPaginationControls" class="lost-pagination-controls" style="display:none;">
+                    <div class="pagination-page-size">
+                        <label for="studentLostPageSize">Items per page</label>
+                        <select id="studentLostPageSize" onchange="changeStudentLostPageSize()">
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="30">30</option>
+                        </select>
+                        <div class="view-toggle" role="group" aria-label="Choose lost items view">
+                            <button type="button" id="lostThumbnailViewBtn" class="view-toggle-btn active" onclick="setLostDisplayMode('thumbnail')" aria-label="Thumbnail view" title="Thumbnail view" aria-pressed="true"><i class="fas fa-th-large" aria-hidden="true"></i><span>Thumbnail</span></button>
+                            <button type="button" id="lostListViewBtn" class="view-toggle-btn" onclick="setLostDisplayMode('list')" aria-label="List view" title="List view" aria-pressed="false"><i class="fas fa-list" aria-hidden="true"></i><span>List</span></button>
+                        </div>
+                    </div>
+                    <div class="pagination-status" id="studentLostPaginationStatus">Page 1 of 1</div>
+                    <div class="pagination-buttons">
+                        <button type="button" id="studentLostPrevPageBtn" onclick="changeStudentLostPage(-1)" aria-label="Previous page">&lt;</button>
+                        <button type="button" id="studentLostNextPageBtn" onclick="changeStudentLostPage(1)" aria-label="Next page">&gt;</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -183,7 +210,7 @@
                         <p><strong>Possible Matches:</strong></p>
                         <div id="modalPossibleMatches" class="description-text">Loading possible matches...</div>
                     </div>
-                    <div id="studentLostLifecycleActions" style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;"></div>
+                    <div id="studentLostLifecycleActions" class="modal-actions student-lifecycle-actions"></div>
                     
                     </div>
                 </div>
@@ -492,6 +519,9 @@ window.onclick = function(event) {
        // --- LOAD ONLY MY ITEMS ---
 let studentLostView = "active";
 let lostDisplayMode = localStorage.getItem("lookfor-lost-display-mode") === "list" ? "list" : "thumbnail";
+let studentLostItemsCache = [];
+let studentLostCurrentPage = 1;
+let studentLostPageSize = 10;
 
 function setLostDisplayMode(mode) {
     lostDisplayMode = mode === "list" ? "list" : "thumbnail";
@@ -515,7 +545,98 @@ function setStudentLostView(view) {
     studentLostView = studentLostView === view ? "active" : view;
     document.getElementById("studentLostArchiveBtn").textContent = studentLostView === "archive" ? "Show Active Items" : "Archive";
     document.getElementById("studentLostDeletedBtn").textContent = studentLostView === "deleted" ? "Show Active Items" : "Deleted Items";
+    document.getElementById("studentLostArchiveBtn").classList.toggle("active-archive-view", studentLostView === "archive");
+    document.getElementById("studentLostDeletedBtn").classList.toggle("active-archive-view", studentLostView === "deleted");
+    studentLostCurrentPage = 1;
     loadLostItems();
+}
+
+function populateStudentLostCategories() {
+    const filter = document.getElementById("studentLostCategoryFilter");
+    const selected = filter.value || "all";
+    const categories = [...new Set(studentLostItemsCache
+        .map(item => String(item.category || "").trim())
+        .filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b));
+    filter.innerHTML = '<option value="all">All Categories</option>';
+    categories.forEach(category => {
+        const option = document.createElement("option");
+        option.value = category;
+        option.textContent = category;
+        filter.appendChild(option);
+    });
+    filter.value = categories.includes(selected) ? selected : "all";
+}
+
+function getFilteredStudentLostItems() {
+    const status = document.getElementById("studentLostStatusFilter").value;
+    const category = document.getElementById("studentLostCategoryFilter").value;
+    const date = document.getElementById("studentLostDateFilter").value;
+    return studentLostItemsCache.filter(item => {
+        const itemStatus = String(item.display_status || (item.is_matched ? "Matched" : "Pending")).toLowerCase();
+        return (status === "all" || itemStatus.includes(status))
+            && (category === "all" || item.category === category)
+            && (!date || String(item.date || "").slice(0, 10) === date);
+    });
+}
+
+function resetStudentLostPaginationAndRender() {
+    studentLostCurrentPage = 1;
+    renderStudentLostItems();
+}
+
+function changeStudentLostPageSize() {
+    studentLostPageSize = Number(document.getElementById("studentLostPageSize").value) || 10;
+    studentLostCurrentPage = 1;
+    renderStudentLostItems();
+}
+
+function changeStudentLostPage(direction) {
+    const totalPages = Math.max(1, Math.ceil(getFilteredStudentLostItems().length / studentLostPageSize));
+    studentLostCurrentPage = Math.min(totalPages, Math.max(1, studentLostCurrentPage + direction));
+    renderStudentLostItems();
+}
+
+function updateStudentLostPagination(totalItems) {
+    const totalPages = Math.max(1, Math.ceil(totalItems / studentLostPageSize));
+    studentLostCurrentPage = Math.min(studentLostCurrentPage, totalPages);
+    document.getElementById("studentLostPaginationControls").style.display = totalItems ? "flex" : "none";
+    document.getElementById("studentLostPaginationStatus").textContent =
+        `Page ${studentLostCurrentPage} of ${totalPages} · ${totalItems} item${totalItems === 1 ? "" : "s"}`;
+    document.getElementById("studentLostPrevPageBtn").disabled = studentLostCurrentPage <= 1;
+    document.getElementById("studentLostNextPageBtn").disabled = studentLostCurrentPage >= totalPages;
+}
+
+function renderStudentLostItems() {
+    const grid = document.getElementById("lostItemsGrid");
+    const filteredItems = getFilteredStudentLostItems();
+    updateStudentLostPagination(filteredItems.length);
+    setLostDisplayMode(lostDisplayMode);
+    if (!filteredItems.length) {
+        grid.innerHTML = '<p class="inventory-empty-state" style="grid-column:1/-1;text-align:center;">No lost items match the selected filters.</p>';
+        return;
+    }
+
+    const start = (studentLostCurrentPage - 1) * studentLostPageSize;
+    grid.innerHTML = filteredItems.slice(start, start + studentLostPageSize).map(item => {
+        const imageUrl = getItemImageUrl(item.image_path);
+        const itemData = JSON.stringify(item).replace(/'/g, "\\'");
+        const displayStatus = item.display_status || (item.is_matched ? "Matched" : "Pending");
+        return `
+            <div class="item-card">
+                <div class="card-img-container" onclick='viewItemDetails(${itemData})'>
+                    <img src="${imageUrl}" alt="${item.item_name || item.category || "Lost item"}" onerror="handleItemImageError(this)">
+                    <span class="inventory-state-tag ${displayStatus === "Matched" ? "matched" :
+                    displayStatus === "Approved" ? "approved" : "pending"}">${displayStatus}</span>
+                </div>
+                <div class="card-body">
+                    <h3>${item.item_name || item.category || 'Unnamed Item'}</h3>
+                    <p><i class="fas fa-map-marker-alt"></i> ${item.location || 'Unknown'}</p>
+                    <p><strong>Lost ID:</strong> ${item.lost_id || item.item_code || 'N/A'}</p>
+                    <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details &rarr;</span>
+                </div>
+            </div>`;
+    }).join('');
 }
 
 async function loadLostItems() {
@@ -537,6 +658,11 @@ async function loadLostItems() {
         if (!response.ok) throw new Error("Could not fetch your reports.");
         
         const items = await response.json();
+        studentLostItemsCache = items;
+        populateStudentLostCategories();
+        renderStudentLostItems();
+        openNotificationMatchFromUrl(items);
+        return;
         grid.innerHTML = "";
 
         if (items.length === 0) {
@@ -1203,13 +1329,13 @@ function viewItemDetails(item) {
 
 function renderStudentLostActions(item) {
     const actions = document.getElementById("studentLostLifecycleActions");
-    const button = (label, action, color) =>
-        `<button type="button" onclick="studentLostLifecycleAction('${action}',${item.id})" style="border:0;border-radius:8px;padding:10px 14px;color:white;background:${color};cursor:pointer;font-weight:700;">${label}</button>`;
+    const button = (label, action) =>
+        `<button type="button" class="student-lifecycle-btn action-${action}" onclick="studentLostLifecycleAction('${action}',${item.id})">${label}</button>`;
     actions.innerHTML = studentLostView === "active"
-        ? button("Archive", "archive", "#114b7a") + button("Delete", "delete", "#dc3545")
+        ? button("Archive", "archive") + button("Delete", "delete")
         : studentLostView === "archive"
-            ? button("Recover", "recover", "#198754") + button("Delete", "delete", "#dc3545")
-            : button("Recover", "recover", "#198754") + button("Delete Permanently", "permanent", "#b02a37");
+            ? button("Recover", "recover") + button("Delete", "delete")
+            : button("Recover", "recover") + button("Delete Permanently", "permanent");
 }
 
 async function studentLostLifecycleAction(action, itemId) {
@@ -1327,7 +1453,7 @@ async function studentLostLifecycleAction(action, itemId) {
             }
         };
     </script>
-<script src="/static/session-keepalive.js?v=7"></script>
+<script src="/static/session-keepalive.js?v=8"></script>
 <script src="/static/student-notifications.js?v=5"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js"></script>

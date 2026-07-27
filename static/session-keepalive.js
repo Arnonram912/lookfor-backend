@@ -11,46 +11,6 @@
     let refreshInFlight = false;
     let idleTimeoutId = null;
     const ROOT_ADMIN_EMAIL = "admin@novaliches.sti.edu.ph";
-    const ADMIN_PERMISSION_KEYS = [
-        "Dashboard",
-        "Messages",
-        "Messages-Send",
-        "Messages-Manage",
-        "User-Management",
-        "User-Management-Create",
-        "User-Management-Edit",
-        "User-Management-Reset",
-        "User-Management-Archive",
-        "User-Management-Delete",
-        "Lost-Reports",
-        "Lost-Reports-Create",
-        "Lost-Reports-Archive",
-        "Lost-Reports-Delete",
-        "Found-Reports",
-        "Found-Reports-Create",
-        "Found-Reports-Approve",
-        "Found-Reports-Archive",
-        "Found-Reports-Delete",
-        "Claim-Management",
-        "Claim-Management-Create",
-        "Claim-Management-Decide",
-        "Reports",
-        "Reports-Export",
-        "Reports-Manage",
-        "Confiscated-items",
-        "Confiscated-items-Create",
-        "Confiscated-items-Edit",
-        "Confiscated-items-Delete",
-        "For-Disposal",
-        "For-Disposal-Manage",
-        "Audit-Logs",
-        "Content-management",
-        "Content-management-Announcements",
-        "Content-management-Taxonomy",
-        "Content-management-Term",
-        "Content-management-Edit"
-    ];
-
     function decodeJwtPayload(token) {
         try {
             const payload = token.split(".")[1];
@@ -131,13 +91,11 @@
         if (isAdminToken(newToken)) {
             sessionStorage.setItem("admin_token", newToken);
             localStorage.removeItem("admin_token");
-            document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             preloadAdminPermissions();
             return;
         }
 
         localStorage.setItem("token", newToken);
-        document.cookie = "admin_access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
         const existingAdminToken = sessionStorage.getItem("admin_token");
         if (existingAdminToken && !isAdminToken(existingAdminToken)) {
@@ -231,13 +189,11 @@
     function getAdminPermissionsCacheKey(token) {
         const payload = decodeJwtPayload(token);
         const userKey = payload?.id || payload?.sub || "admin";
-        return `admin_permissions:${userKey}`;
+        return `admin_permissions:v2:${userKey}`;
     }
 
     function readCachedAdminPermissions(token) {
         if (!token) return null;
-        if (isRootAdminToken(token)) return ADMIN_PERMISSION_KEYS;
-
         try {
             const raw = sessionStorage.getItem(getAdminPermissionsCacheKey(token));
             const cached = raw ? JSON.parse(raw) : null;
@@ -261,11 +217,6 @@
 
         const cached = readCachedAdminPermissions(token);
         if (!forceRefresh && cached) return cached;
-
-        if (isRootAdminToken(token)) {
-            writeCachedAdminPermissions(token, ADMIN_PERMISSION_KEYS);
-            return ADMIN_PERMISSION_KEYS;
-        }
 
         const response = await fetch("/admin/my-permissions", {
             headers: { "Authorization": `Bearer ${token}` }
@@ -369,8 +320,50 @@
     window.checkAccess = cachedCheckAccess;
 
     function addAdminSidebarMenuItems() {
+        const currentAdminPath = (window.location.pathname || "").toLowerCase();
+        if (
+            currentAdminPath === "/admin/settings"
+            || currentAdminPath === "/c/7d38a2ff-96c7-5851-875e-7a3112aeddf1"
+        ) {
+            return;
+        }
         const nav = document.querySelector("body > .sidebar .nav-links");
         if (!nav) return;
+        const menuPermissionByPath = {
+            "/admin/dashboard": "dashboard.view",
+            "/admin/messages": "messages.view",
+            "/admin/user-management": "user_management.view",
+            "/admin/lost_items_report": "lost_items.view",
+            "/admin/found_items_report": "found_items.view",
+            "/admin/claim-management": "claim_management.view",
+            "/admin/reports": "reports.view",
+            "/admin/audit-logs": "audit_logs.view",
+            "/admin/profile": "profile.view",
+            "/admin/confiscated-items": "confiscated_items.view",
+            "/admin/for-disposal": "for_disposal.view",
+            "/admin/content-management": "content_management.view",
+            "/admin/content-management/features": "content_management.view",
+            "/admin/content-management/about": "content_management.view",
+            "/admin/content-editor": "content_management.edit"
+        };
+        getAdminPermissions(false).then(permissions => {
+            nav.querySelectorAll("li").forEach(item => {
+                const link = item.querySelector("a");
+                const linkSource = [
+                    link?.getAttribute("href"),
+                    link?.getAttribute("onclick")
+                ].filter(Boolean).join(" ").toLowerCase();
+                const matchedPath = Object.keys(menuPermissionByPath).find(path =>
+                    linkSource.includes(path)
+                );
+                if (!matchedPath) return; // Settings and non-module controls keep existing rules.
+                const permission = menuPermissionByPath[matchedPath];
+                item.dataset.permission = permission;
+                item.style.display = permissions.includes(permission) ? "" : "none";
+            });
+        }).catch(() => {
+            // The page-level backend guard remains authoritative if loading fails.
+        });
         const dashboardLink = Array.from(nav.querySelectorAll("a")).find(link =>
             String(link.getAttribute("href") || link.getAttribute("onclick") || "")
                 .toLowerCase()
@@ -378,9 +371,9 @@
         );
         if (dashboardLink?.closest("li")) {
             const dashboardItem = dashboardLink.closest("li");
-            dashboardItem.dataset.permission = "Dashboard";
+            dashboardItem.dataset.permission = "dashboard.view";
             getAdminPermissions(false).then(permissions => {
-                dashboardItem.style.display = permissions.includes("Dashboard") ? "" : "none";
+                dashboardItem.style.display = permissions.includes("dashboard.view") ? "" : "none";
             }).catch(() => {
                 dashboardItem.style.display = "none";
             });
@@ -475,7 +468,7 @@
             "adminForDisposalNav",
             "For Disposal",
             "/admin/For-Disposal",
-            "For-Disposal",
+            "for_disposal.view",
             "/static/photos/handw.png"
         );
         insertAfterLink(
@@ -483,7 +476,7 @@
             "adminAuditLogsNav",
             "Audit Logs",
             "/admin/Audit-Logs",
-            "Audit-Logs",
+            "audit_logs.view",
             "/static/photos/folderw.png"
         );
 
@@ -499,85 +492,85 @@
 
     const ADMIN_ACTION_UI_RULES = {
         messages: [
-            { permission: "Messages-Send", selectors: [
+            { permission: "messages.send", selectors: [
                 '[onclick*="openNewMessagePage"]',
                 '[onclick*="sendNewMessage"]',
                 '[onclick*="sendReply"]'
             ] },
-            { permission: "Messages-Manage", selectors: [
+            { permission: "messages.manage", selectors: [
                 '[onclick*="archiveMessage"]',
                 '[onclick*="deleteMessage"]',
                 '[onclick*="handleDeleteConversation"]'
             ] }
         ],
         lost: [
-            { permission: "Lost-Reports-Create", selectors: [
+            { permission: "lost_items.create", selectors: [
                 '.action-bar [onclick*="openModal(\'reportModal\')"]',
                 '#reportModal [onclick*="submitReport"]',
                 '#confirmModal [onclick*="executeSubmit"]'
             ] },
-            { permission: "Claim-Management-Create", selectors: [
+            { permission: "claim_management.create", selectors: [
                 '#possibleMatchesPanel button',
                 '[onclick*="applySelectedPossibleMatch"]'
             ] },
-            { permission: "Lost-Reports-Archive", selectors: [
+            { permission: "lost_items.archive", selectors: [
                 '[onclick*="runAdminBulkItemAction(\'lost\', \'archive\')"]',
                 '#recoverBtn'
             ] },
-            { permission: "Lost-Reports-Delete", selectors: [
+            { permission: "lost_items.delete", selectors: [
                 '[onclick*="runAdminBulkItemAction(\'lost\', \'delete\')"]',
                 '#deleteBtn'
             ] }
         ],
         found: [
-            { permission: "Found-Reports-Create", selectors: [
+            { permission: "found_items.create", selectors: [
                 '.action-bar [onclick*="openModal(\'reportModal\')"]',
                 '#reportModal [onclick*="submitReport"]',
                 '#confirmModal [onclick*="executeSubmit"]'
             ] },
-            { permission: "Found-Reports-Approve", selectors: ['#approveBtn'] },
-            { permission: "Found-Reports-Archive", selectors: ['#rejectBtn'] },
-            { permission: "Claim-Management-Create", selectors: [
+            { permission: "found_items.approve", selectors: ['#approveBtn'] },
+            { permission: "found_items.archive", selectors: ['#rejectBtn'] },
+            { permission: "claim_management.create", selectors: [
                 '#manualClaimBtn',
                 '#claimedBtn',
                 '#confirmDirectClaimBtn'
             ] },
-            { permission: "Found-Reports-Archive", selectors: [
+            { permission: "found_items.archive", selectors: [
                 '[onclick*="runAdminBulkItemAction(\'found\', \'archive\')"]',
                 '#recoverBtn'
             ] },
-            { permission: "Found-Reports-Delete", selectors: [
+            { permission: "found_items.delete", selectors: [
                 '[onclick*="runAdminBulkItemAction(\'found\', \'delete\')"]',
                 '#deleteBtn'
             ] },
-            { permission: "For-Disposal-Manage", selectors: [
+            { permission: "for_disposal.manage", selectors: [
                 '[onclick*="runAdminBulkItemAction(\'found\', \'dispose\')"]',
                 '#disposeBtn'
             ] }
         ],
         claims: [
-            { permission: "Claim-Management-Decide", selectors: [
+            { permission: "claim_management.decide", selectors: [
                 '[onclick*="openDecisionModal"]',
                 '[onclick*="saveDecisionReport"]'
             ] }
         ],
         reports: [
-            { permission: "Reports-Export", selectors: [
+            { permission: "reports.export", selectors: [
                 '[onclick*="generateReportPdf"]',
                 '[onclick*="printClaimReport"]'
             ] },
-            { permission: "Reports-Manage", selectors: [
+            { permission: "reports.manage", selectors: [
                 '.report-action.edit',
                 '.report-action.delete',
                 '#deleteSelectedButton',
                 '[onclick*="saveClaimReport"]'
             ] },
-            { permission: "Claim-Management-Decide", selectors: [
+            { permission: "claim_management.decide", selectors: [
                 '[onclick*="saveClaimReport"]'
             ] }
         ],
         confiscated: [
-            { permission: "Confiscated-items-Create", selectors: [
+            { permission: "confiscated_items.create", selectors: [
                 '[onclick*="openConfiscatedModal"]',
                 '[onclick*="submitConfiscated"]',
                 '[onclick*="openReasonManager"]',
@@ -585,35 +578,35 @@
                 '[onclick*="saveConfiscationReason"]',
                 '[onclick*="deleteConfiscationReason"]'
             ] },
-            { permission: "Confiscated-items-Edit", selectors: ['[onclick*="editConfiscated"]'] },
-            { permission: "Confiscated-items-Delete", selectors: ['[onclick*="deleteConfiscated"]'] },
-            { permission: "For-Disposal-Manage", selectors: [
+            { permission: "confiscated_items.edit", selectors: ['[onclick*="editConfiscated"]'] },
+            { permission: "confiscated_items.delete", selectors: ['[onclick*="deleteConfiscated"]'] },
+            { permission: "for_disposal.manage", selectors: [
                 '[onclick*="updateDisposal"]',
                 '[onclick*="bulkDisposalAction"]'
             ] }
         ],
         disposal: [
-            { permission: "For-Disposal-Manage", selectors: [
+            { permission: "for_disposal.manage", selectors: [
                 '[onclick*="updateDisposal"]',
                 '[onclick*="bulkDisposalAction"]'
             ] }
         ],
         content: [
-            { permission: "Content-management-Announcements", selectors: [
+            { permission: "announcements.publish", selectors: [
                 '[onclick*="openModal(\'announcementModal\')"]',
                 '[onclick*="submitAnnouncement"]',
                 '[onclick*="executeSubmitAnnouncement"]'
             ] },
-            { permission: "Content-management-Taxonomy", selectors: [
+            { permission: "content_management.manage_taxonomy", selectors: [
                 '[onclick*="createCategory"]',
                 '[onclick*="createDepartment"]',
                 '[onclick*="deleteCategory"]',
                 '[onclick*="deleteDepartment"]'
             ] },
-            { permission: "Content-management-Term", selectors: [
+            { permission: "academic_term.manage", selectors: [
                 '[onclick*="saveAcademicTermSchedule"]'
             ] },
-            { permission: "Content-management-Edit", selectors: [
+            { permission: "content_management.edit", selectors: [
                 '[onclick*="toggleEditMode"]',
                 '[onclick*="saveDirectChanges"]',
                 '[onclick*="saveAboutChanges"]',

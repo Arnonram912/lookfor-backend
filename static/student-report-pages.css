@@ -1,0 +1,159 @@
+.profile-page-card .action-bar {
+  gap: 14px;
+}
+
+.profile-page-card .inventory-actions {
+  align-items: center;
+}
+
+.profile-page-card .inventory-actions .surrender-upload-btn,
+.profile-page-card .inventory-actions .upload-btn:last-child {
+  background: #ffe000;
+  color: #102a43;
+}
+
+.profile-page-card .inventory-actions .surrender-upload-btn:hover,
+.profile-page-card .inventory-actions .upload-btn:last-child:hover {
+  background: #f3d500;
+}
+
+.items-grid .item-card {
+  cursor: default;
+}
+
+.items-grid .card-img-container,
+.items-grid .view-link {
+  cursor: pointer;
+}
+
+.inventory-empty-state {
+  margin: 28px 0 10px;
+  padding: 42px 20px;
+  border: 1px dashed #b9c8d8;
+  border-radius: 12px;
+  background: #fff;
+  color: #60758a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.student-lifecycle-actions {
+  margin-top: 18px;
+}
+
+.student-lifecycle-btn {
+  flex: 1 1 140px;
+  min-height: 40px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #114b7a;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.student-lifecycle-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.student-lifecycle-btn.action-delete,
+.student-lifecycle-btn.action-permanent {
+  background: #dc3545;
+}
+
+.student-lifecycle-btn.action-recover {
+  background: #198754;
+}
+
+@media (max-width: 1100px) {
+  .profile-page-card .inventory-actions {
+    align-items: stretch;
+  }
+
+  .profile-page-card .inventory-actions button:first-of-type {
+    margin-left: 0;
+  }
+
+  .profile-page-card .inventory-filter {
+    flex: 1 1 190px;
+  }
+}
+
+@media (max-width: 768px) {
+  .content-body {
+    padding: 18px;
+  }
+
+  .profile-page-card {
+    padding: 20px;
+    border-radius: 16px;
+  }
+
+  .section-title {
+    font-size: 1.55rem;
+  }
+
+  .profile-page-card .inventory-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .profile-page-card .inventory-filter,
+  .profile-page-card .inventory-actions .upload-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .profile-page-card .inventory-filter.date-filter,
+  .profile-page-card .inventory-actions .upload-btn:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .items-grid {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+    margin-top: 22px;
+  }
+
+  .found-pagination-controls,
+  .lost-pagination-controls {
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 520px) {
+  .content-body {
+    padding: 12px;
+  }
+
+  .profile-page-card {
+    padding: 16px;
+  }
+
+  .profile-page-card .inventory-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-page-card .inventory-filter.date-filter,
+  .profile-page-card .inventory-actions .upload-btn:last-child {
+    grid-column: auto;
+  }
+
+  .items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .found-pagination-controls,
+  .lost-pagination-controls,
+  .pagination-page-size {
+    width: 100%;
+  }
+
+  .pagination-page-size {
+    flex-wrap: wrap;
+  }
+}

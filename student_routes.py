@@ -135,6 +135,7 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
         cleaned_matches.append({
             "id": match.get("id"),
             "score": match.get("score"),
+            "item_name": match.get("item_name"),
             "category": match.get("category"),
             "location": match.get("location"),
             "image_path": public_file_url(match.get("image_path")),
@@ -153,6 +154,7 @@ def serialize_pending_found_match(pending_item: models.PendingItem, score: float
     return {
         "id": pending_item.id,
         "score": round(float(score or 0), 4),
+        "item_name": pending_item.item_name,
         "category": pending_item.category,
         "location": pending_item.location,
         "image_path": public_file_url(pending_item.image_path),
@@ -167,6 +169,7 @@ def serialize_found_item_match(found_item: models.Item, score: float | None = No
     return {
         "id": found_item.id,
         "score": round(float(score or 0), 4),
+        "item_name": found_item.item_name,
         "category": found_item.category,
         "location": found_item.location,
         "image_path": public_file_url(found_item.image_path),
@@ -211,7 +214,7 @@ def ensure_student_claim_for_pair(
     existing_claim = db.query(models.Claim).filter(
         models.Claim.lost_item_id == lost_item.id,
         models.Claim.found_item_id == found_item.id,
-        models.Claim.status.in_(["pending", "approved"])
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
     ).first()
     if existing_claim:
         return existing_claim
@@ -228,11 +231,19 @@ def ensure_student_claim_for_pair(
     return new_claim
 
 
-def serialize_student_item(item: models.Item, owner: models.User | None) -> dict:
+def serialize_student_item(
+    item: models.Item,
+    owner: models.User | None,
+    *,
+    is_claimed: bool = False,
+) -> dict:
     report_item_id = item_display_id(item)
     report_item_code = item_display_code(item)
     report_owner_name = str(getattr(item, "report_owner_name", "") or "").strip()
     report_owner_group = str(getattr(item, "report_owner_group", "") or "").strip()
+    uses_personal_lifecycle = (
+        item.status == "found" and (bool(item.is_matched) or bool(is_claimed))
+    )
     return {
         "id": item.id,
         "item_id": report_item_id,
@@ -242,7 +253,7 @@ def serialize_student_item(item: models.Item, owner: models.User | None) -> dict
         "status": item.status,
         "category_id": item.category_id,
         "category": item.category,
-        "item_name": item.category,
+        "item_name": item.item_name,
         "brand": item.brand,
         "color": item.color,
         "description": item.description,
@@ -251,8 +262,14 @@ def serialize_student_item(item: models.Item, owner: models.User | None) -> dict
         "date": item.date.isoformat() if item.date else None,
         "time_found": item.time_found,
         "is_matched": bool(item.is_matched),
-        "archived": bool(item.archived),
-        "deleted": bool(getattr(item, "deleted", False)),
+        "is_claimed": bool(is_claimed),
+        "is_surrendered": bool(item.is_surrendered),
+        "archived": bool(
+            item.student_archived if uses_personal_lifecycle else item.archived
+        ),
+        "deleted": bool(
+            item.student_deleted if uses_personal_lifecycle else getattr(item, "deleted", False)
+        ),
         "user_id": item.user_id,
         "report_owner_user_id": getattr(item, "report_owner_user_id", None),
         "uploader_name": report_owner_name or format_user_display_name(owner, "Self"),
@@ -364,6 +381,12 @@ async def report_found_item(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
+    item_name = item_name.strip()
+    if not item_name:
+        raise HTTPException(status_code=400, detail="Item name is required")
+    if len(item_name) > 255:
+        raise HTTPException(status_code=400, detail="Item name must be 255 characters or fewer")
+
     # 2. Image Handling
     allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
     if image.content_type not in allowed_types:
@@ -681,9 +704,21 @@ def get_my_found_items(
     approved = db.query(models.Item).filter(
         models.Item.user_id == current_user.id,
         models.Item.status == "found",
-        models.Item.archived == archived,
-        models.Item.deleted == deleted,
+        models.Item.archived == False,
+        models.Item.deleted == False,
+        models.Item.student_archived == archived,
+        models.Item.student_deleted == deleted,
+        models.Item.student_hidden == False,
     ).all()
+    approved_ids = [item.id for item in approved]
+    claimed_found_ids = set()
+    if approved_ids:
+        claimed_found_ids = {
+            found_id for (found_id,) in db.query(models.Claim.found_item_id).filter(
+                models.Claim.found_item_id.in_(approved_ids),
+                models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
+            ).all()
+        }
 
     results = []
     
@@ -694,10 +729,11 @@ def get_my_found_items(
         })
         
     for a in approved:
-        display_status = "Matched" if a.is_matched else "Approved"
+        is_claimed = a.id in claimed_found_ids
+        display_status = "Claimed Item" if is_claimed else ("Matched" if a.is_matched else "Approved")
         results.append({
             "display_status": display_status,
-            "data": serialize_student_item(a, current_user)
+            "data": serialize_student_item(a, current_user, is_claimed=is_claimed)
         })
         
     return results
@@ -735,6 +771,12 @@ async def submit_user_lost_report(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user)
 ):
+    item_name = item_name.strip()
+    if not item_name:
+        raise HTTPException(status_code=400, detail="Item name is required")
+    if len(item_name) > 255:
+        raise HTTPException(status_code=400, detail="Item name must be 255 characters or fewer")
+
     # 1. Handle the image upload using your save_file helper
     saved_path = None
     query_images = []
@@ -798,6 +840,7 @@ async def submit_user_lost_report(
 
     new_report = models.Item(
         status="lost",
+        item_name=item_name.strip(),
         category_id=category_id,
         category=category,
         brand=brand,
@@ -932,6 +975,35 @@ def get_owned_student_report(db: Session, current_user: models.User, record_type
     ).first()
 
 
+def matched_or_claimed_found_item(db: Session, item, record_type: str) -> bool:
+    if record_type != "found":
+        return False
+    if bool(getattr(item, "is_matched", False)):
+        return True
+    return db.query(models.Claim.id).filter(
+        models.Claim.found_item_id == item.id,
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
+    ).first() is not None
+
+
+def ensure_student_lifecycle_change_allowed(
+    db: Session,
+    item,
+    record_type: str,
+) -> bool:
+    use_personal_lifecycle = matched_or_claimed_found_item(db, item, record_type)
+    if (
+        record_type == "found"
+        and bool(getattr(item, "is_surrendered", False))
+        and not use_personal_lifecycle
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Approved surrendered items can only be managed by an administrator until matched or claimed",
+        )
+    return use_personal_lifecycle
+
+
 @router.put("/items/{record_type}/{item_id}/archive")
 def archive_my_report(
     record_type: str,
@@ -942,8 +1014,13 @@ def archive_my_report(
     item = get_owned_student_report(db, current_user, record_type, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Report not found")
-    item.archived = True
-    item.deleted = False
+    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    if use_personal_lifecycle:
+        item.student_archived = True
+        item.student_deleted = False
+    else:
+        item.archived = True
+        item.deleted = False
     db.commit()
     return {"message": "Report archived"}
 
@@ -958,8 +1035,13 @@ def delete_my_report(
     item = get_owned_student_report(db, current_user, record_type, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Report not found")
-    item.archived = True
-    item.deleted = True
+    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    if use_personal_lifecycle:
+        item.student_archived = True
+        item.student_deleted = True
+    else:
+        item.archived = True
+        item.deleted = True
     db.commit()
     return {"message": "Report moved to Deleted Items"}
 
@@ -974,8 +1056,13 @@ def recover_my_report(
     item = get_owned_student_report(db, current_user, record_type, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Report not found")
-    item.archived = False
-    item.deleted = False
+    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    if use_personal_lifecycle:
+        item.student_archived = False
+        item.student_deleted = False
+    else:
+        item.archived = False
+        item.deleted = False
     db.commit()
     return {"message": "Report recovered"}
 
@@ -988,7 +1075,18 @@ def permanently_delete_my_report(
     current_user: models.User = Depends(get_active_student_user),
 ):
     item = get_owned_student_report(db, current_user, record_type, item_id)
-    if not item or not bool(getattr(item, "deleted", False)):
+    if not item:
+        raise HTTPException(status_code=404, detail="Deleted report not found")
+    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    if use_personal_lifecycle:
+        if not bool(getattr(item, "student_deleted", False)):
+            raise HTTPException(status_code=404, detail="Deleted report not found")
+        item.student_archived = False
+        item.student_deleted = False
+        item.student_hidden = True
+        db.commit()
+        return {"message": "Report removed from your items"}
+    if not bool(getattr(item, "deleted", False)):
         raise HTTPException(status_code=404, detail="Deleted report not found")
     if record_type != "pending-found":
         linked_claims = db.query(models.Claim).filter(or_(

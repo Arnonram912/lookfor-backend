@@ -167,7 +167,7 @@
                 <select id="claimStatusFilter" class="claim-filter" onchange="renderClaims()">
                     <option value="all">All Claims</option>
                     <option value="pending">Pending</option>
-                    <option value="approved">Claimed</option>
+                    <option value="claimed">Claimed Item</option>
                     <option value="rejected">Rejected</option>
                 </select>
                 <select id="claimCategoryFilter" class="claim-filter" onchange="renderClaims()">
@@ -214,7 +214,7 @@
             <div id="decisionReportContent" style="border:1px solid #e5e7eb; border-radius:14px; padding:18px; background:#fff;">
                 <div style="margin-bottom:18px;">
                     <h4 style="margin:0 0 10px; color:#003366;">Claim details</h4>
-                    <p style="margin:6px 0;"><strong>Item name:</strong> <span id="reportItemName">-</span></p>
+                    <p style="margin:6px 0;"><strong>Item Name:</strong> <span id="reportItemName">-</span></p>
                     <p style="margin:6px 0;"><strong>Date claimed:</strong> <span id="reportDateClaimed">-</span></p>
                     <p style="margin:6px 0;"><strong>Status:</strong> <span id="reportStatus">Pending</span></p>
                 </div>
@@ -393,7 +393,7 @@ function getClaimImageUrl(path, fallback = 'https://via.placeholder.com/50?text=
 
 function getClaimStatusLabel(status) {
     const normalized = String(status || 'pending').toLowerCase();
-    if (normalized === 'approved' || normalized === 'completed') return 'Claimed';
+    if (['claimed', 'approved', 'completed'].includes(normalized)) return 'Claimed Item';
     if (normalized === 'rejected') return 'Rejected';
     return 'Pending';
 }
@@ -433,7 +433,7 @@ function getFilteredClaims() {
         const claimStatus = String(claim.status || 'pending').toLowerCase();
         const matchesStatus = status === 'all'
             || claimStatus === status
-            || (status === 'approved' && claimStatus === 'completed');
+            || (status === 'claimed' && ['approved', 'completed'].includes(claimStatus));
         const claimCategories = [
             normalizeClaimCategory(claim.lost_item?.category),
             normalizeClaimCategory(claim.found_item?.category)
@@ -475,7 +475,7 @@ function renderClaims() {
                     <button class="btn-approve" type="button" onclick="openDecisionModal(${claim.id}, 'approve')">Approve</button>
                     <button class="btn-reject" type="button" onclick="openDecisionModal(${claim.id}, 'reject')">Reject</button>
                 `
-            : `<span style="display:inline-flex; align-items:center; justify-content:center; min-width:110px; padding:8px 14px; border-radius:999px; background:#e5e7eb; color:#374151; font-weight:600;">${getClaimStatusLabel(claim.status) === 'Claimed' ? 'Claim' : 'Rejected'}</span>`;
+            : `<span style="display:inline-flex; align-items:center; justify-content:center; min-width:110px; padding:8px 14px; border-radius:999px; background:#e5e7eb; color:#374151; font-weight:600;">${getClaimStatusLabel(claim.status) === 'Claimed Item' ? 'Claimed Item' : 'Rejected'}</span>`;
         return `
             <tr>
                 <td><span class="badge badge-similarity">${claim.similarity}</span></td>
@@ -533,7 +533,7 @@ function openDecisionModal(claimId, action) {
     const report = claim.report || {};
     const claimant = report.claimant || {};
     const item = report.item_description || {};
-    const statusLabel = action === 'approve' ? 'Claimed' : 'Rejected';
+    const statusLabel = action === 'approve' ? 'Claimed Item' : 'Rejected';
 
     document.getElementById('decisionStatusBadge').innerText = statusLabel;
     document.getElementById('decisionStatusBadge').style.background = action === 'approve' ? '#dcfce7' : '#fee2e2';
@@ -602,18 +602,19 @@ async function saveDecisionReport() {
     const idVerified = document.getElementById('idVerifiedCheckbox').checked;
     const claimIdImage = document.getElementById('claimIdImage').files[0];
     const existingIdImage = activeDecisionClaim.report?.claimant?.proof_id_image;
-    if (activeDecisionAction === 'approve' && (!claimantName || !claimantId || !verificationMethod || !idVerified || (!claimIdImage && !existingIdImage))) {
+    const claimantDepartment = document.getElementById('reportClaimantDept').value.trim();
+    if (activeDecisionAction === 'approve' && (!claimantName || !claimantId || !claimantDepartment || !verificationMethod || !idVerified || (!claimIdImage && !existingIdImage))) {
         await fireSwalOnTop({
             icon: 'warning',
             title: 'Complete ID verification',
-            text: 'Enter the claimant name and ID, select a verification method, confirm verification, and provide an ID image.',
+            text: 'Enter the claimant name, ID, and Department/Course; select a verification method, confirm verification, and provide an ID image.',
             confirmButtonColor: '#114b7a'
         });
         return;
     }
     formData.append('claimant_name', claimantName);
     formData.append('claimant_student_no', claimantId);
-    formData.append('claimant_department_course', document.getElementById('reportClaimantDept').value.trim());
+    formData.append('claimant_department_course', claimantDepartment);
     formData.append('id_verified', String(idVerified));
     formData.append('verification_method', verificationMethod);
     formData.append('verification_note', document.getElementById('idVerificationNote').value.trim());
@@ -785,7 +786,7 @@ function renderSavedReport(report) {
                 <div>
                     <div class="section">
                         <h2>Claim details</h2>
-                        <p><strong>Item name:</strong> ${report.item_name || '-'}</p>
+                        <p><strong>Item Name:</strong> ${report.item_name || '-'}</p>
                         <p><strong>Date claimed:</strong> ${formatDisplayDate(report.date_claimed)}</p>
                         <p><strong>Status:</strong> ${report.status || '-'}</p>
                     </div>
@@ -854,7 +855,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=14"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>

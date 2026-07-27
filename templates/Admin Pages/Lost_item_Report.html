@@ -5,7 +5,7 @@
     <title>Admin Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
     
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=24">
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=26">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -158,7 +158,7 @@
                             <option value="all">All Items</option>
                             <option value="pending">Pending</option>
                             <option value="matched">Matched</option>
-                            <option value="claimed">Claimed</option>
+                            <option value="claimed">Claimed Item</option>
                         </select>
                         <select id="lostCategoryFilter" class="inventory-filter" onchange="resetLostPaginationAndRender()">
                             <option value="all">All Categories</option>
@@ -833,11 +833,27 @@ function showAccessDeniedPopup(permName) {
             const imageUrl = getItemImageUrl(item.image_path);
             const itemData = JSON.stringify(item).replace(/'/g, "\\'");
             const statusTag = item.is_claimed
-                ? '<span class="inventory-state-tag matched">Claimed</span>'
+                ? '<span class="inventory-state-tag matched">Claimed Item</span>'
                 : (item.is_matched
                     ? '<span class="inventory-state-tag matched">Matched</span>'
                     : '<span class="inventory-state-tag surrendered">Pending</span>');
 
+            if (lostDisplayMode === "list") {
+                return `
+                    <div class="lost-list-row" onclick='viewItemDetails(${itemData})'>
+                        <div class="lost-list-select" onclick="event.stopPropagation()">${adminBulkCheckboxHtml('lost', item)}</div>
+                        <div class="lost-list-primary">
+                            <strong>${escapeModalHtml(item.item_name || 'Unnamed Item')}</strong>
+                            <span>${escapeModalHtml(item.category || 'Uncategorized')}</span>
+                        </div>
+                        <div><span class="lost-list-label">Date lost</span>${escapeModalHtml(item.date || 'Not specified')}</div>
+                        <div><span class="lost-list-label">Location</span>${escapeModalHtml(item.location || 'Unknown')}</div>
+                        <div><span class="lost-list-label">Reporter</span>${escapeModalHtml(item.uploader_name || 'Unknown User')}</div>
+                        <div class="lost-list-status">${statusTag}</div>
+                        <button type="button" class="lost-list-view-btn" onclick='event.stopPropagation(); viewItemDetails(${itemData})'>View</button>
+                    </div>
+                `;
+            }
             return `
                 <div class="item-card">
                     ${adminBulkCheckboxHtml('lost', item)}
@@ -972,7 +988,7 @@ function showAccessDeniedPopup(permName) {
 }
 
         // --- VIEW DETAILS ---
-       function viewItemDetails(item) {
+    function viewItemDetails(item) {
     const modalImg = document.getElementById("modalImg");
     modalImg.src = getItemImageUrl(item.image_path);
     modalImg.onerror = () => handleItemImageError(modalImg);
@@ -1960,10 +1976,9 @@ async function disposeItem(itemId) {
         window.location.href = "/";
     }
     </script>
-<script src="/static/session-keepalive.js?v=14"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=5"></script>
 </body>
 </html>
-
