@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Student Panel | LookFor STI</title>
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=21">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=22">
     <link rel="stylesheet" href="/static/student-report-pages.css?v=1">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
     
@@ -779,12 +779,8 @@ window.onclick = function(event) {
 
         function renderStudentFoundActions(item) {
             const actions = document.getElementById("studentFoundLifecycleActions");
-            if (item.status === "found" && item.is_surrendered && !item.is_matched && !item.is_claimed) {
-                actions.innerHTML = '<span style="color:#6c757d;font-weight:600;">Approved surrendered items can only be managed by an administrator until matched or claimed.</span>';
-                return;
-            }
             const type = studentFoundRecordType(item);
-            const personalOnly = item.status === "found" && (item.is_matched || item.is_claimed);
+            const personalOnly = item.status === "found";
             const button = (label, action) =>
                 `<button type="button" class="student-lifecycle-btn action-${action}" onclick="studentFoundLifecycleAction('${action}','${type}',${item.id},${personalOnly})">${label}</button>`;
             actions.innerHTML = studentFoundView === "active"
@@ -796,11 +792,14 @@ window.onclick = function(event) {
 
         async function studentFoundLifecycleAction(action, type, itemId, personalOnly = false) {
             const permanent = action === "permanent";
+            const pending = type === "pending-found";
             const confirmation = permanent && personalOnly
                 ? "Remove this report from your account? The item will remain visible to administrators and the matched user."
-                : permanent
-                    ? "Permanently delete this report? This cannot be undone."
-                    : `Are you sure you want to ${action} this report?`;
+                : permanent && pending
+                    ? "Permanently delete this unapproved report? It will also be removed from the administrator's pending records. This cannot be undone."
+                    : action === "delete" && pending
+                        ? "Move this unapproved report to Deleted Items? It will also move to the administrator's Deleted Items."
+                        : `Are you sure you want to ${action} this report?`;
             if (!confirm(confirmation)) return;
             const response = await fetch(`/student/items/${type}/${itemId}/${action}`, {
                 method: permanent ? "DELETE" : "PUT",

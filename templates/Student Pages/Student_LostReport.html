@@ -4,7 +4,7 @@
     <meta charset="UTF-8"> 
     <title>Student Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=27">
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=28">
     <link rel="stylesheet" href="/static/student-report-pages.css?v=1">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
     
@@ -1332,18 +1332,26 @@ function viewItemDetails(item) {
 
 function renderStudentLostActions(item) {
     const actions = document.getElementById("studentLostLifecycleActions");
+    const personalOnly = Boolean(item.is_matched || item.is_claimed);
     const button = (label, action) =>
-        `<button type="button" class="student-lifecycle-btn action-${action}" onclick="studentLostLifecycleAction('${action}',${item.id})">${label}</button>`;
+        `<button type="button" class="student-lifecycle-btn action-${action}" onclick="studentLostLifecycleAction('${action}',${item.id},${personalOnly})">${label}</button>`;
     actions.innerHTML = studentLostView === "active"
         ? button("Archive", "archive") + button("Delete", "delete")
         : studentLostView === "archive"
             ? button("Recover", "recover") + button("Delete", "delete")
-            : button("Recover", "recover") + button("Delete Permanently", "permanent");
+            : button("Recover", "recover") + button(personalOnly ? "Remove from My Items" : "Delete Permanently", "permanent");
 }
 
-async function studentLostLifecycleAction(action, itemId) {
+async function studentLostLifecycleAction(action, itemId, personalOnly = false) {
     const permanent = action === "permanent";
-    if (!confirm(permanent ? "Permanently delete this report? This cannot be undone." : `Are you sure you want to ${action} this report?`)) return;
+    const confirmation = permanent && personalOnly
+        ? "Remove this report from your account? The matched item will remain visible to administrators."
+        : permanent
+            ? "Permanently delete this unmatched lost report from the system? This will also remove it from the administrator's records and cannot be undone."
+            : action === "delete" && !personalOnly
+                ? "Move this unmatched lost report to Deleted Items? It will also move to the administrator's Deleted Items."
+                : `Are you sure you want to ${action} this report?`;
+    if (!confirm(confirmation)) return;
     const response = await fetch(`/student/items/lost/${itemId}/${action}`, {
         method: permanent ? "DELETE" : "PUT",
         headers: { 'Authorization': `Bearer ${getStudentToken()}` }
