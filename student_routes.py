@@ -241,8 +241,14 @@ def serialize_student_item(
     report_item_code = item_display_code(item)
     report_owner_name = str(getattr(item, "report_owner_name", "") or "").strip()
     report_owner_group = str(getattr(item, "report_owner_group", "") or "").strip()
+    # Approved found items and matched/claimed lost items have a student-only
+    # lifecycle. Unmatched lost reports still use the shared admin lifecycle.
     uses_personal_lifecycle = (
-        item.status == "found" and (bool(item.is_matched) or bool(is_claimed))
+        item.status == "found"
+        or (
+            item.status == "lost"
+            and (bool(item.is_matched) or bool(is_claimed))
+        )
     )
     return {
         "id": item.id,
@@ -950,8 +956,6 @@ def get_my_lost_reports(
             ) if current_user_name else False,
         ),
         models.Item.status == "lost",
-        models.Item.archived == archived,
-        models.Item.deleted == deleted,
     ).all()
 
     report_ids = [report.id for report in reports]
@@ -967,6 +971,22 @@ def get_my_lost_reports(
     results = []
     for report in reports:
         is_claimed = report.id in claimed_lost_ids
+        uses_personal_lifecycle = bool(report.is_matched) or is_claimed
+        if uses_personal_lifecycle:
+            belongs_in_view = (
+                not bool(report.archived)
+                and not bool(report.deleted)
+                and not bool(report.student_hidden)
+                and bool(report.student_archived) == archived
+                and bool(report.student_deleted) == deleted
+            )
+        else:
+            belongs_in_view = (
+                bool(report.archived) == archived
+                and bool(report.deleted) == deleted
+            )
+        if not belongs_in_view:
+            continue
         item_data = serialize_student_item(
             report,
             current_user,
@@ -1000,33 +1020,22 @@ def get_owned_student_report(db: Session, current_user: models.User, record_type
     ).first()
 
 
-def matched_or_claimed_found_item(db: Session, item, record_type: str) -> bool:
-    if record_type != "found":
-        return False
-    if bool(getattr(item, "is_matched", False)):
-        return True
-    return db.query(models.Claim.id).filter(
-        models.Claim.found_item_id == item.id,
-        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
-    ).first() is not None
-
-
-def ensure_student_lifecycle_change_allowed(
+def uses_student_personal_lifecycle(
     db: Session,
     item,
     record_type: str,
 ) -> bool:
-    use_personal_lifecycle = matched_or_claimed_found_item(db, item, record_type)
-    if (
-        record_type == "found"
-        and bool(getattr(item, "is_surrendered", False))
-        and not use_personal_lifecycle
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Approved surrendered items can only be managed by an administrator until matched or claimed",
-        )
-    return use_personal_lifecycle
+    """Return whether a student action must leave the admin record unchanged."""
+    if record_type == "found":
+        return True
+    if record_type != "lost":
+        return False
+    if bool(getattr(item, "is_matched", False)):
+        return True
+    return db.query(models.Claim.id).filter(
+        models.Claim.lost_item_id == item.id,
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
+    ).first() is not None
 
 
 @router.put("/items/{record_type}/{item_id}/archive")
@@ -1039,7 +1048,7 @@ def archive_my_report(
     item = get_owned_student_report(db, current_user, record_type, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Report not found")
-    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    use_personal_lifecycle = uses_student_personal_lifecycle(db, item, record_type)
     if use_personal_lifecycle:
         item.student_archived = True
         item.student_deleted = False
@@ -1060,15 +1069,19 @@ def delete_my_report(
     item = get_owned_student_report(db, current_user, record_type, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Report not found")
-    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    use_personal_lifecycle = uses_student_personal_lifecycle(db, item, record_type)
     if use_personal_lifecycle:
         item.student_archived = True
         item.student_deleted = True
+        message = "Report moved to your Deleted Items; administrator inventory unchanged"
     else:
+        # An unapproved found upload is still a shared PendingItem, so deleting
+        # it must also remove it from the administrator's active pending queue.
         item.archived = True
         item.deleted = True
+        message = "Pending report moved to Deleted Items for both student and administrator"
     db.commit()
-    return {"message": "Report moved to Deleted Items"}
+    return {"message": message}
 
 
 @router.put("/items/{record_type}/{item_id}/recover")
@@ -1081,7 +1094,7 @@ def recover_my_report(
     item = get_owned_student_report(db, current_user, record_type, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Report not found")
-    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    use_personal_lifecycle = uses_student_personal_lifecycle(db, item, record_type)
     if use_personal_lifecycle:
         item.student_archived = False
         item.student_deleted = False
@@ -1102,7 +1115,7 @@ def permanently_delete_my_report(
     item = get_owned_student_report(db, current_user, record_type, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Deleted report not found")
-    use_personal_lifecycle = ensure_student_lifecycle_change_allowed(db, item, record_type)
+    use_personal_lifecycle = uses_student_personal_lifecycle(db, item, record_type)
     if use_personal_lifecycle:
         if not bool(getattr(item, "student_deleted", False)):
             raise HTTPException(status_code=404, detail="Deleted report not found")
@@ -1131,7 +1144,13 @@ def permanently_delete_my_report(
             ).delete(synchronize_session=False)
     db.delete(item)
     db.commit()
-    return {"message": "Report permanently deleted"}
+    return {
+        "message": (
+            "Pending report permanently deleted for both student and administrator"
+            if record_type == "pending-found"
+            else "Report permanently deleted"
+        )
+    }
 
 # --- Your existing page routes below ---
 

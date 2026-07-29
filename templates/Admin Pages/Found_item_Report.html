@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=20">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=22">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
 
@@ -855,6 +855,16 @@ function showAccessDeniedPopup(permName) {
         }
     }
 
+    function escapeFoundListHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, character => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        })[character]);
+    }
+
     function renderFoundItems() {
         const grid = document.getElementById("lostItemsGrid");
         setFoundDisplayMode(foundDisplayMode);
@@ -873,13 +883,44 @@ function showAccessDeniedPopup(permName) {
         const pageItems = filteredItems.slice(pageStart, pageStart + currentFoundPageSize);
         setAdminBulkVisibleItems('found', pageItems);
 
-        grid.innerHTML = pageItems.map(item => {
+        const listHeader = foundDisplayMode === "list" ? `
+            <div class="inventory-list-header" role="row">
+                <span aria-hidden="true"></span>
+                <span>Name</span>
+                <span>Date found</span>
+                <span>Type</span>
+                <span>Location</span>
+                <span>Reporter</span>
+                <span>Status</span>
+                <span aria-label="Actions"></span>
+            </div>
+        ` : "";
+
+        grid.innerHTML = listHeader + pageItems.map(item => {
             const imageUrl = getItemImageUrl(item.image_path);
             const itemData = JSON.stringify(item).replace(/'/g, "\\'");
             const statusInfo = getFoundCardStatus(item);
             const sourceLabel = item.is_pending
                 ? "Pending Surrender"
                 : (item.is_surrendered ? "User Gave Item" : "Office Logged");
+
+            if (foundDisplayMode === "list") {
+                return `
+                    <div class="inventory-list-row" role="row" tabindex="0" onclick='viewItemDetails(${itemData})' onkeydown='if(event.key === "Enter") viewItemDetails(${itemData})'>
+                        <div class="found-list-select" onclick="event.stopPropagation()">${adminBulkCheckboxHtml('found', item)}</div>
+                        <div class="inventory-list-name" title="${escapeFoundListHtml(item.item_name || 'Unnamed Item')}">
+                            <i class="fas fa-file-alt" aria-hidden="true"></i>
+                            <strong>${escapeFoundListHtml(item.item_name || 'Unnamed Item')}</strong>
+                        </div>
+                        <div class="inventory-list-cell">${escapeFoundListHtml(item.date || 'Not specified')}</div>
+                        <div class="inventory-list-cell">${escapeFoundListHtml(item.category || 'Uncategorized')}</div>
+                        <div class="inventory-list-cell">${escapeFoundListHtml(item.location || 'Unknown')}</div>
+                        <div class="inventory-list-cell">${escapeFoundListHtml(item.uploader_name || sourceLabel)}</div>
+                        <div class="inventory-list-status"><span class="inventory-state-tag ${statusInfo.className}">${escapeFoundListHtml(statusInfo.label)}</span></div>
+                        <button type="button" class="inventory-list-view-btn" onclick='event.stopPropagation(); viewItemDetails(${itemData})'>View</button>
+                    </div>
+                `;
+            }
 
             return `
                 <div class="item-card">

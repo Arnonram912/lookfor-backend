@@ -5,7 +5,7 @@
     <title>Admin Panel | LookFor STI</title> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
     
-    <link rel="stylesheet" href="/static/Lost_item_report.css?v=26">
+    <link rel="stylesheet" href="/static/Lost_item_report.css?v=28">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -829,7 +829,20 @@ function showAccessDeniedPopup(permName) {
         const pageItems = filteredItems.slice(pageStart, pageStart + currentLostPageSize);
         setAdminBulkVisibleItems('lost', pageItems);
 
-        grid.innerHTML = pageItems.map(item => {
+        const listHeader = lostDisplayMode === "list" ? `
+            <div class="inventory-list-header" role="row">
+                <span aria-hidden="true"></span>
+                <span>Name</span>
+                <span>Date lost</span>
+                <span>Type</span>
+                <span>Location</span>
+                <span>Reporter</span>
+                <span>Status</span>
+                <span aria-label="Actions"></span>
+            </div>
+        ` : "";
+
+        grid.innerHTML = listHeader + pageItems.map(item => {
             const imageUrl = getItemImageUrl(item.image_path);
             const itemData = JSON.stringify(item).replace(/'/g, "\\'");
             const statusTag = item.is_claimed
@@ -840,17 +853,18 @@ function showAccessDeniedPopup(permName) {
 
             if (lostDisplayMode === "list") {
                 return `
-                    <div class="lost-list-row" onclick='viewItemDetails(${itemData})'>
+                    <div class="inventory-list-row" role="row" tabindex="0" onclick='viewItemDetails(${itemData})' onkeydown='if(event.key === "Enter") viewItemDetails(${itemData})'>
                         <div class="lost-list-select" onclick="event.stopPropagation()">${adminBulkCheckboxHtml('lost', item)}</div>
-                        <div class="lost-list-primary">
+                        <div class="inventory-list-name" title="${escapeModalHtml(item.item_name || 'Unnamed Item')}">
+                            <i class="fas fa-file-alt" aria-hidden="true"></i>
                             <strong>${escapeModalHtml(item.item_name || 'Unnamed Item')}</strong>
-                            <span>${escapeModalHtml(item.category || 'Uncategorized')}</span>
                         </div>
-                        <div><span class="lost-list-label">Date lost</span>${escapeModalHtml(item.date || 'Not specified')}</div>
-                        <div><span class="lost-list-label">Location</span>${escapeModalHtml(item.location || 'Unknown')}</div>
-                        <div><span class="lost-list-label">Reporter</span>${escapeModalHtml(item.uploader_name || 'Unknown User')}</div>
-                        <div class="lost-list-status">${statusTag}</div>
-                        <button type="button" class="lost-list-view-btn" onclick='event.stopPropagation(); viewItemDetails(${itemData})'>View</button>
+                        <div class="inventory-list-cell">${escapeModalHtml(item.date || 'Not specified')}</div>
+                        <div class="inventory-list-cell">${escapeModalHtml(item.category || 'Uncategorized')}</div>
+                        <div class="inventory-list-cell">${escapeModalHtml(item.location || 'Unknown')}</div>
+                        <div class="inventory-list-cell">${escapeModalHtml(item.uploader_name || 'Unknown User')}</div>
+                        <div class="inventory-list-status">${statusTag}</div>
+                        <button type="button" class="inventory-list-view-btn" onclick='event.stopPropagation(); viewItemDetails(${itemData})'>View</button>
                     </div>
                 `;
             }
