@@ -1,4 +1,4 @@
-import os, shutil, json, time, numpy as np, io
+import os, shutil, json, time, numpy as np, io, re
 import asyncio
 import sys
 import smtplib
@@ -25,7 +25,15 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, EmailStr, Field
 import models  # This is already there
 from database import engine, get_db
-from utils import UPLOAD_FOLDER, public_file_url, save_file, resolve_category_name, validate_upload_file_size, format_item_code
+from utils import (
+    UPLOAD_FOLDER,
+    public_file_url,
+    save_file,
+    resolve_category_name,
+    validate_upload_file_size,
+    format_item_code,
+    format_user_display_name,
+)
 from sqlalchemy import and_, or_, func
 from sqlalchemy import text
 from clip_test import (
@@ -1887,6 +1895,258 @@ def compute_text_detail_matches(
         "matched_items": all_matches,
         "action": "show_match" if all_matches else "no_match",
         "warning": None,
+    }
+
+
+class ItemDetailUpdate(BaseModel):
+    item_name: str = Field(..., min_length=1, max_length=255)
+    category_id: int
+    brand: str | None = Field(default=None, max_length=100)
+    color: str | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=4000)
+    location: str = Field(..., min_length=1, max_length=500)
+    date: date
+    time_found: str | None = Field(default=None, max_length=10)
+
+
+def item_detail_owner_matches(item, current_user: models.User) -> bool:
+    if bool(getattr(current_user, "is_admin", False)):
+        return True
+
+    if getattr(item, "user_id", None) == current_user.id:
+        return True
+
+    if getattr(item, "report_owner_user_id", None) == current_user.id:
+        return True
+
+    current_name = format_user_display_name(current_user, "").strip().lower()
+    return bool(
+        current_name
+        and not getattr(item, "report_owner_user_id", None)
+        and str(getattr(item, "report_owner_name", "") or "").strip().lower() == current_name
+    )
+
+
+def build_saved_match_payload(item, score: float, source: str) -> dict:
+    return {
+        "id": item.id,
+        "score": round(float(score or 0), 4),
+        "item_name": item.item_name,
+        "category": item.category,
+        "location": item.location,
+        "image_path": public_file_url(item.image_path),
+        "brand": item.brand,
+        "color": item.color,
+        "description": item.description,
+        "source": source,
+    }
+
+
+def replace_possible_match(lost_item: models.Item, match_payload: dict) -> None:
+    existing_matches = []
+    if lost_item.possible_matches:
+        try:
+            parsed = json.loads(lost_item.possible_matches)
+            existing_matches = parsed if isinstance(parsed, list) else []
+        except (TypeError, ValueError):
+            existing_matches = []
+
+    match_id = match_payload.get("id")
+    match_source = match_payload.get("source")
+    remaining = [
+        match for match in existing_matches
+        if not (
+            isinstance(match, dict)
+            and match.get("id") == match_id
+            and match.get("source", "found") == match_source
+        )
+    ]
+    lost_item.possible_matches = json.dumps([match_payload, *remaining][:3])
+
+
+def remove_possible_match(lost_item: models.Item, *, match_id: int, source: str) -> None:
+    if not lost_item.possible_matches:
+        return
+    try:
+        parsed = json.loads(lost_item.possible_matches)
+        existing_matches = parsed if isinstance(parsed, list) else []
+    except (TypeError, ValueError):
+        existing_matches = []
+
+    remaining = [
+        match for match in existing_matches
+        if not (
+            isinstance(match, dict)
+            and match.get("id") == match_id
+            and match.get("source", "found") == source
+        )
+    ]
+    lost_item.possible_matches = json.dumps(remaining) if remaining else None
+
+
+def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
+    text_query_parts = [
+        f"A {item.color}" if item.color else "An item",
+        item.brand or "",
+        item.category or "",
+    ]
+    text_query = (
+        f"{' '.join(part for part in text_query_parts if part)} "
+        f"at {item.location or 'Unknown'}. {(item.description or '').strip()}"
+    ).strip()
+    query_text_vec = get_text_embedding(text_query)
+
+    image_vec = None
+    if getattr(item, "image_embedding", None):
+        try:
+            image_vec = np.array(json.loads(item.image_embedding)).flatten()
+        except (TypeError, ValueError):
+            image_vec = None
+
+    search_vec = ((image_vec * 0.6) + (query_text_vec * 0.4)) if image_vec is not None and image_vec.size else query_text_vec
+    search_norm = np.linalg.norm(search_vec)
+    if search_norm != 0:
+        search_vec = search_vec / search_norm
+
+    result = compute_text_detail_matches(
+        db,
+        category=item.category,
+        location=item.location or "Unknown",
+        description=item.description,
+        brand=item.brand,
+        color=item.color,
+        status="found" if record_type == "pending-found" else item.status,
+        search_vec=search_vec,
+        query_text_vec=query_text_vec,
+        exclude_item_id=item.id if record_type == "item" else None,
+    )
+
+    if record_type == "item" and item.status == "lost":
+        item.possible_matches = json.dumps(result["matched_items"]) if result["matched_items"] else None
+    elif record_type == "pending-found":
+        for lost_item in db.query(models.Item).filter(
+            models.Item.status.ilike("lost"),
+            models.Item.possible_matches.isnot(None),
+        ).all():
+            remove_possible_match(lost_item, match_id=item.id, source="pending_found")
+
+        strongest_match = result.get("matched_item")
+        item.matched_item_id = strongest_match.get("id") if strongest_match else None
+        for candidate in result["matched_items"]:
+            lost_item = db.query(models.Item).filter(
+                models.Item.id == candidate.get("id"),
+                models.Item.status.ilike("lost"),
+            ).first()
+            if lost_item:
+                replace_possible_match(
+                    lost_item,
+                    build_saved_match_payload(item, candidate.get("score", 0), "pending_found"),
+                )
+
+    return result
+
+
+@app.put("/api/items/{record_type}/{item_id}/details")
+async def update_item_details(
+    record_type: str,
+    item_id: int,
+    payload: ItemDetailUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    normalized_record_type = record_type.strip().lower()
+    if normalized_record_type not in {"item", "pending-found"}:
+        raise HTTPException(status_code=400, detail="Unsupported item record type")
+
+    model = models.PendingItem if normalized_record_type == "pending-found" else models.Item
+    item = db.query(model).filter(model.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if not item_detail_owner_matches(item, current_user):
+        raise HTTPException(status_code=403, detail="You can only edit your own item reports")
+    if bool(getattr(item, "archived", False)) or bool(getattr(item, "deleted", False)):
+        raise HTTPException(status_code=409, detail="Recover this item before editing its details")
+    is_pending_found = normalized_record_type == "pending-found"
+    is_pending_lost = (
+        normalized_record_type == "item"
+        and str(getattr(item, "status", "") or "").strip().lower() == "lost"
+        and not bool(getattr(item, "is_matched", False))
+    )
+    if not (is_pending_found or is_pending_lost):
+        raise HTTPException(
+            status_code=409,
+            detail="Only pending item reports can be edited",
+        )
+    if is_pending_lost:
+        active_claim = db.query(models.Claim.id).filter(
+            models.Claim.lost_item_id == item.id,
+            models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+        ).first()
+        if active_claim:
+            raise HTTPException(
+                status_code=409,
+                detail="Matched or claimed item reports can no longer be edited",
+            )
+
+    item_name = payload.item_name.strip()
+    location = payload.location.strip()
+    if not item_name or not location:
+        raise HTTPException(status_code=422, detail="Item name and location are required")
+    if payload.time_found and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", payload.time_found.strip()):
+        raise HTTPException(status_code=422, detail="Time must use the 24-hour HH:MM format")
+
+    try:
+        category_name = resolve_category_name(db, category_id=payload.category_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    item.item_name = item_name
+    item.category = category_name
+    if normalized_record_type == "item":
+        item.category_id = payload.category_id
+    item.brand = (payload.brand or "").strip() or None
+    item.color = (payload.color or "").strip() or None
+    item.description = (payload.description or "").strip() or None
+    item.location = location
+    item.date = payload.date
+    item.time_found = (payload.time_found or "").strip() or None
+    db.flush()
+
+    analysis_error = None
+    try:
+        analysis = await run_in_threadpool(
+            lambda: analyze_saved_item_details(db, item, record_type=normalized_record_type)
+        )
+    except Exception as exc:
+        print(f"Item detail re-analysis failed for {normalized_record_type} #{item_id}: {exc}")
+        analysis_error = "The details were saved, but match analysis is temporarily unavailable."
+        analysis = {
+            "highest_score": 0.0,
+            "generated_embedding": [],
+            "matched_item": None,
+            "matched_items": [],
+            "action": "no_match",
+        }
+
+    db.commit()
+    db.refresh(item)
+    return {
+        "message": "Item details saved and match analysis completed." if not analysis_error else analysis_error,
+        "item": {
+            "id": item.id,
+            "record_type": normalized_record_type,
+            "item_name": item.item_name,
+            "category_id": getattr(item, "category_id", payload.category_id),
+            "category": item.category,
+            "brand": item.brand,
+            "color": item.color,
+            "description": item.description,
+            "location": item.location,
+            "date": item.date.isoformat() if item.date else None,
+            "time_found": item.time_found,
+        },
+        "analysis": analysis,
+        "analysis_error": analysis_error,
     }
 
 
