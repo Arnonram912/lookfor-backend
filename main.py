@@ -1955,6 +1955,7 @@ class ItemDetailUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     location: str = Field(..., min_length=1, max_length=500)
     date: date
+    time_found: str | None = Field(default=None, max_length=10)
 
     @classmethod
     def as_form(
@@ -1966,6 +1967,7 @@ class ItemDetailUpdate(BaseModel):
         description: str | None = Form(None),
         location: str = Form(...),
         date_value: date = Form(..., alias="date"),
+        time_found: str | None = Form(None),
     ):
         return cls(
             item_name=item_name,
@@ -1975,6 +1977,7 @@ class ItemDetailUpdate(BaseModel):
             description=description,
             location=location,
             date=date_value,
+            time_found=time_found,
         )
 
 
@@ -2162,8 +2165,14 @@ async def update_item_details(
 
     item_name = payload.item_name.strip()
     location = payload.location.strip()
+    time_found = (payload.time_found or "").strip()
     if not item_name or not location:
         raise HTTPException(status_code=422, detail="Item name and location are required")
+    if time_found:
+        try:
+            datetime.strptime(time_found, "%H:%M")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Time must use the 24-hour HH:MM format") from exc
     try:
         category_name = resolve_category_name(db, category_id=payload.category_id)
     except ValueError as exc:
@@ -2225,6 +2234,7 @@ async def update_item_details(
     item.description = (payload.description or "").strip() or None
     item.location = location
     item.date = payload.date
+    item.time_found = time_found or None
     db.flush()
 
     analysis_error = None

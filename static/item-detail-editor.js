@@ -139,7 +139,7 @@
                             <div class="item-edit-field"><label for="itemEditBrand">Brand</label><input id="itemEditBrand" maxlength="100"></div>
                             <div class="item-edit-field"><label for="itemEditColor">Color</label><input id="itemEditColor" maxlength="50"></div>
                             <div class="item-edit-field full"><label for="itemEditLocation">Location *</label><input id="itemEditLocation" maxlength="500" required></div>
-                            <div class="item-edit-field"><label for="itemEditTime">Time (read-only)</label><input id="itemEditTime" type="time" disabled></div>
+                            <div class="item-edit-field"><label for="itemEditTime">Time</label><input id="itemEditTime" type="time"></div>
                             <div class="item-edit-field full"><label for="itemEditDescription">Description</label><textarea id="itemEditDescription" maxlength="4000" rows="4"></textarea></div>
                         </div>
                     </div>
@@ -322,6 +322,7 @@
         formData.append("color", document.getElementById("itemEditColor").value.trim());
         formData.append("location", document.getElementById("itemEditLocation").value.trim());
         formData.append("date", document.getElementById("itemEditDate").value);
+        formData.append("time_found", document.getElementById("itemEditTime").value);
         formData.append("description", document.getElementById("itemEditDescription").value.trim());
         const replacementImage = document.getElementById("itemEditImage").files?.[0];
         if (replacementImage) formData.append("image", replacementImage);
