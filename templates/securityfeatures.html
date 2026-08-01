@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Security Features | LookFor</title>
+    <link rel="stylesheet" href="/static/landing.css?v=6.4">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#f5f7fa;
+}
+
+.hero{
+    background:#0d6efd;
+    color:white;
+    text-align:center;
+    padding:80px 20px;
+}
+
+.container{
+    max-width:1100px;
+    margin:auto;
+    padding:60px 20px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+    gap:25px;
+}
+
+.card{
+    background:white;
+    padding:25px;
+    border-radius:15px;
+    box-shadow:0 4px 15px rgba(0,0,0,.08);
+    transition:.3s;
+}
+
+.card:hover{
+    transform:translateY(-5px);
+}
+
+.icon{
+    font-size:40px;
+    margin-bottom:15px;
+}
+
+h3{
+    color:#0d6efd;
+}
+</style>
+    <link rel="stylesheet" href="/static/feature-info-pages.css?v=1.0">
+</head>
+<body class="landing-subpage feature-info-page security-page">
+    <header class="navbar">
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav aria-label="Main navigation">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/explore" class="active">Features</a></li>
+                <li><a href="/about">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+    <section class="hero">
+    <h1>🔒 Web Security Features</h1>
+    <p>Learn how LookFor protects user information and keeps the platform secure.</p>
+</section>
+
+<div class="container">
+
+    <div class="grid">
+
+        <div class="card">
+            <div class="icon">🔐</div>
+            <h3>Secure Login</h3>
+            <p>
+                User accounts require authentication before accessing reports,
+                messages, and profile information.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="icon">👤</div>
+            <h3>Identity Verification</h3>
+            <p>
+                Retrieved items undergo verification procedures to ensure they
+                are returned to the rightful owner.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="icon">🛡️</div>
+            <h3>Protected User Data</h3>
+            <p>
+                Personal information submitted through the platform is handled
+                responsibly and only for lost-and-found operations.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="icon">💬</div>
+            <h3>Controlled Communication</h3>
+            <p>
+                Conversations between users and administrators help facilitate
+                secure item verification and claiming.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="icon">📢</div>
+            <h3>Real-Time Notifications</h3>
+            <p>
+                Users receive updates regarding report status, item matches,
+                and claim requests.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="icon">📁</div>
+            <h3>Activity Monitoring</h3>
+            <p>
+                Administrators can review system activities to maintain
+                transparency and platform integrity.
+            </p>
+        </div>
+
+    </div>
+
+</div>
+    {% include "_public_footer.html" %}
+    <script src="/static/public-subpage-nav.js?v=1.0"></script>
+</body>
+</html>

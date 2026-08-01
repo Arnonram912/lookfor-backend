@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Privacy Policy | LookFor</title>
+    <link rel="stylesheet" href="/static/landing.css?v=6.4">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="/static/about-info-pages.css?v=1.0">
+</head>
+<body class="landing-subpage about-info-page privacy-page">
+    <header class="navbar">
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav aria-label="Main navigation">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/explore">Features</a></li>
+                <li><a href="/about" class="active">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+
+    <main>
+        <section class="about-info-hero" aria-labelledby="privacy-title">
+            <div class="about-info-logo-wrapper">
+                <img src="/static/images/stilogo.png" alt="LookFor logo" class="about-info-logo">
+            </div>
+            <h1 id="privacy-title">Data Privacy Policy</h1>
+            <p>Your information matters to us.</p>
+        </section>
+
+        <div class="policy-container">
+            <article class="policy-card">
+                <h2><i class="fas fa-database" aria-hidden="true"></i>Information We Collect</h2>
+                <p>
+                    LookFor may collect student information, item descriptions,
+                    uploaded photos, and communication records necessary for
+                    lost-and-found operations.
+                </p>
+
+                <h2><i class="fas fa-bullseye" aria-hidden="true"></i>Purpose of Collection</h2>
+                <p>
+                    Information is collected solely to facilitate reporting,
+                    matching, verification, notifications, and item retrieval.
+                </p>
+
+                <h2><i class="fas fa-shield-alt" aria-hidden="true"></i>Data Security</h2>
+                <p>
+                    Appropriate security measures are implemented to protect
+                    stored information from unauthorized access.
+                </p>
+
+                <h2><i class="fas fa-user-lock" aria-hidden="true"></i>Data Access</h2>
+                <p>
+                    Access to records is limited to authorized users and school
+                    administrators responsible for managing the platform.
+                </p>
+
+                <h2><i class="fas fa-clock" aria-hidden="true"></i>Data Retention</h2>
+                <p>
+                    Information is retained only as long as needed to support
+                    system operations and school requirements.
+                </p>
+
+                <h2><i class="fas fa-user-check" aria-hidden="true"></i>Your Rights</h2>
+                <p>
+                    Users may request corrections or updates to information
+                    subject to institutional policies.
+                </p>
+            </article>
+        </div>
+    </main>
+
+    {% include "_public_footer.html" %}
+    <script src="/static/public-subpage-nav.js?v=1.0"></script>
+</body>
+</html>

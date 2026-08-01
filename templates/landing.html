@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-    
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LookFor - Lost and Found</title>
     <script>document.documentElement.classList.add('js');</script>
-    <link rel="stylesheet" href="/static/landing.css?v=5.8">
+    <link rel="stylesheet" href="/static/landing.css?v=6.4">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -17,7 +17,7 @@
         <nav>
             <ul>
                 <li><a href="/" class="active">Home</a></li>
-                <li><a href="/explore" >Features</a></li>
+                <li><a href="/explore">Features</a></li>
                 <li><a href="/about">About</a></li>
             </ul>
         </nav>
@@ -386,7 +386,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     </div>
 </section>
 
-<section class="faq-section" data-aos="fade-up">
+<section class="faq-section" id="faq" data-aos="fade-up">
     <div class="container">
         <h2 class="section-title" id="cms-faq-title">Frequently asked questions</h2>
         
@@ -408,6 +408,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>
     </div>
 </section>
+<section class="quick-links-section" aria-labelledby="quick-links-title">
+    <div class="container">
+        <h2 class="section-title" id="quick-links-title">Need Help?</h2>
+        <p class="quick-links-subtitle">
+            Find support, contact us, or get assistance with LookFor.
+        </p>
+
+        <div class="quick-links-grid">
+            <a href="/send-message" class="quick-link-card">
+                <h3><span class="quick-link-icon" aria-hidden="true">&#128233;</span>Send Us a Message</h3>
+                <p>Reach out to our team for questions, concerns, or feedback.</p>
+            </a>
+
+            <a href="/chat" class="quick-link-card">
+                <h3><span class="quick-link-icon" aria-hidden="true">&#128172;</span>Let's Chat</h3>
+                <p>Start a conversation with our support team.</p>
+            </a>
+
+            <a href="/help-support" class="quick-link-card">
+                <h3><span class="quick-link-icon" aria-hidden="true">&#129466;</span>Help &amp; Support</h3>
+                <p>Get assistance with reporting, claiming, or tracking items.</p>
+            </a>
+        </div>
+    </div>
+</section>
 
 <footer class="social-footer">
     <div class="footer-icons">
@@ -420,7 +445,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             <img src="/static/icons/Instagram.png">
         </a>
 
-      
+
 
     </div>
 </footer>

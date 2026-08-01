@@ -1,0 +1,187 @@
+.feature-info-page {
+    background:
+        radial-gradient(circle at 10% 22%, rgba(0, 91, 171, 0.12), transparent 22rem),
+        radial-gradient(circle at 92% 76%, rgba(0, 91, 171, 0.09), transparent 25rem),
+        #eaf5ff;
+    color: #24364b;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.feature-info-page .hero,
+.feature-info-page .container {
+    flex: none;
+}
+
+.feature-info-page .hero {
+    padding: clamp(64px, 8vw, 96px) 20px;
+    border-bottom: 1px solid rgba(0, 91, 171, 0.14);
+    background:
+        radial-gradient(circle at 50% 115%, rgba(0, 91, 171, 0.15), transparent 20rem),
+        linear-gradient(180deg, #ffffff 0%, #f5faff 100%);
+    color: #003366;
+    text-align: center;
+}
+
+.feature-info-page .hero h1 {
+    max-width: 850px;
+    margin: 0 auto 15px;
+    color: #005bab;
+    font-size: clamp(2.3rem, 6vw, 4rem);
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -.035em;
+}
+
+.feature-info-page .hero p {
+    max-width: 720px;
+    margin: 0 auto;
+    color: #52657a;
+    font-size: clamp(1rem, 1.6vw, 1.15rem);
+    line-height: 1.7;
+}
+
+.feature-info-page .container {
+    width: min(1120px, calc(100% - 40px));
+    max-width: 1120px;
+    margin: 60px auto;
+    padding: 0;
+}
+
+/* Security features */
+.security-page .grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+}
+
+.security-page .card {
+    position: relative;
+    overflow: hidden;
+    min-height: 260px;
+    padding: 31px 28px 28px;
+    border: 2px solid rgba(0, 91, 171, 0.18);
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: 0 14px 32px rgba(0, 51, 102, 0.09);
+    transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+
+.security-page .card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 6px;
+    background: #005bab;
+}
+
+.security-page .card:hover {
+    border-color: #005bab;
+    transform: translateY(-6px);
+    box-shadow: 0 20px 38px rgba(0, 51, 102, 0.14);
+}
+
+.security-page .icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 0 19px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    background: #e6f2ff;
+    color: #005bab;
+    font-size: 1.55rem;
+    box-shadow: inset 0 0 0 1px rgba(0, 91, 171, 0.1);
+}
+
+.security-page .card h3 {
+    margin: 0 0 12px;
+    color: #005bab;
+    font-size: 1.18rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+.security-page .card p {
+    margin: 0;
+    color: #52657a;
+    font-size: .95rem;
+    line-height: 1.7;
+}
+
+/* Frequently asked questions */
+.faq-page .container {
+    max-width: 920px;
+}
+
+.faq-page .faq-item {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 20px;
+    padding: 26px 30px 26px 34px;
+    border: 1px solid rgba(0, 91, 171, 0.18);
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 10px 25px rgba(0, 51, 102, 0.07);
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+.faq-page .faq-item::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 6px;
+    background: #005bab;
+}
+
+.faq-page .faq-item:hover {
+    border-color: rgba(0, 91, 171, 0.45);
+    transform: translateX(4px);
+    box-shadow: 0 14px 30px rgba(0, 51, 102, 0.11);
+}
+
+.faq-page .faq-item h3 {
+    margin: 0 0 9px;
+    color: #005bab;
+    font-size: 1.08rem;
+    font-weight: 800;
+    line-height: 1.4;
+}
+
+.faq-page .faq-item p {
+    margin: 0;
+    color: #52657a;
+    font-size: .96rem;
+    line-height: 1.7;
+}
+
+@media (max-width: 960px) {
+    .security-page .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .feature-info-page .container {
+        width: min(100% - 28px, 1120px);
+        margin: 34px auto;
+    }
+
+    .feature-info-page .hero {
+        padding: 58px 18px;
+    }
+
+    .security-page .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .security-page .card {
+        min-height: 0;
+        padding: 28px 24px 25px;
+    }
+
+    .faq-page .faq-item {
+        padding: 23px 22px 23px 28px;
+        border-radius: 16px;
+    }
+}

@@ -1,0 +1,215 @@
+.about-info-page {
+    background:
+        radial-gradient(circle at 10% 20%, rgba(0, 91, 171, 0.1), transparent 22rem),
+        radial-gradient(circle at 92% 78%, rgba(0, 91, 171, 0.08), transparent 24rem),
+        #f8fafc;
+    color: #334155;
+    font-family: 'Montserrat', sans-serif;
+    line-height: 1.7;
+}
+
+.about-info-page .about-info-hero,
+.about-info-page .policy-container,
+.about-info-page .office-container {
+    flex: none;
+}
+
+.about-info-hero {
+    padding: 60px 20px 50px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, #ffffff 0%, #f3f8fd 100%);
+    text-align: center;
+}
+
+.about-info-logo-wrapper {
+    width: 90px;
+    height: 90px;
+    margin: 0 auto 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #d9e5f1;
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: 0 8px 30px rgba(0, 91, 171, 0.08);
+}
+
+.about-info-logo {
+    width: 55px;
+    height: auto;
+}
+
+.about-info-hero h1 {
+    margin: 0 0 12px;
+    color: #005bab;
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -1px;
+}
+
+.about-info-hero p {
+    max-width: 700px;
+    margin: 0 auto;
+    color: #64748b;
+    font-size: 1.05rem;
+}
+
+.policy-container,
+.office-container {
+    width: min(900px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 70px 0;
+}
+
+.policy-card,
+.office-card {
+    position: relative;
+    overflow: hidden;
+    padding: 45px;
+    border: 1px solid #dbe5ef;
+    border-radius: 20px;
+    background: #ffffff;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+    transition: box-shadow .25s ease, border-color .25s ease;
+}
+
+.policy-card::before,
+.office-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 6px;
+    background: #005bab;
+}
+
+.policy-card:hover,
+.office-card:hover {
+    border-color: rgba(0, 91, 171, 0.3);
+    box-shadow: 0 17px 38px rgba(15, 23, 42, 0.09);
+}
+
+/* Data privacy */
+.policy-card h2 {
+    position: relative;
+    margin: 35px 0 12px;
+    padding-left: 16px;
+    color: #005bab;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.policy-card h2:first-child {
+    margin-top: 0;
+}
+
+.policy-card h2::before {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 0;
+    width: 4px;
+    height: 20px;
+    border-radius: 99px;
+    background: #005bab;
+}
+
+.policy-card h2 i {
+    width: 25px;
+    margin-right: 7px;
+    color: #005bab;
+    text-align: center;
+}
+
+.policy-card p {
+    margin: 0 0 10px;
+    color: #475569;
+    font-size: .98rem;
+}
+
+/* Visit the office */
+.visit-page .about-info-hero p {
+    margin-bottom: 0;
+}
+
+.office-card {
+    padding: 38px;
+}
+
+.office-info-box {
+    position: relative;
+    margin-bottom: 18px;
+    padding: 22px 24px 22px 78px;
+    border: 1px solid #dfe7ef;
+    border-radius: 15px;
+    background: #ffffff;
+    transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
+}
+
+.office-info-box:last-child {
+    margin-bottom: 0;
+}
+
+.office-info-box:hover {
+    border-color: #93c5e8;
+    background: #f9fcff;
+    transform: translateX(3px);
+}
+
+.office-info-icon {
+    position: absolute;
+    top: 21px;
+    left: 22px;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: #e6f2ff;
+    color: #005bab;
+    font-size: 1.15rem;
+}
+
+.office-info-box h3 {
+    margin: 0 0 6px;
+    color: #005bab;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+.office-info-box p {
+    margin: 0;
+    color: #64748b;
+    font-size: .98rem;
+}
+
+@media (max-width: 768px) {
+    .about-info-hero {
+        padding: 56px 18px 48px;
+    }
+
+    .policy-container,
+    .office-container {
+        width: min(100% - 28px, 900px);
+        padding: 42px 0;
+    }
+
+    .policy-card,
+    .office-card {
+        padding: 28px 23px;
+    }
+
+    .policy-card h2 {
+        font-size: 1.08rem;
+    }
+
+    .office-info-box {
+        padding: 72px 19px 20px;
+    }
+
+    .office-info-icon {
+        top: 18px;
+        left: 19px;
+    }
+}

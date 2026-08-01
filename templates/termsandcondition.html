@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms and Conditions | LookFor</title>
+    <link rel="stylesheet" href="/static/landing.css?v=6.2">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .terms-page {
+            background: #f8fafc;
+            color: #1f2937;
+            line-height: 1.7;
+        }
+
+        .terms-hero {
+            padding: 60px 20px 50px;
+            border-bottom: 1px solid #e5e7eb;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            text-align: center;
+        }
+
+        .terms-logo-wrapper {
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+            border-radius: 24px;
+            background: #ffffff;
+            box-shadow: 0 8px 30px rgba(0, 91, 171, 0.08);
+        }
+
+        .terms-logo {
+            width: 55px;
+            height: auto;
+        }
+
+        .terms-hero h1 {
+            margin: 0 0 12px;
+            color: #005bab;
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .terms-hero p {
+            max-width: 650px;
+            margin: 0 auto;
+            color: #64748b;
+            font-size: 1.05rem;
+        }
+
+        .terms-container {
+            width: min(900px, 100%);
+            margin: 0 auto;
+            padding: 70px 24px;
+        }
+
+        .terms-card {
+            padding: 45px;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            background: #ffffff;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+        }
+
+        .terms-card h2 {
+            position: relative;
+            margin: 35px 0 12px;
+            padding-left: 14px;
+            color: #005bab;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .terms-card h2:first-child {
+            margin-top: 0;
+        }
+
+        .terms-card h2::before {
+            content: "";
+            position: absolute;
+            top: 6px;
+            left: 0;
+            width: 4px;
+            height: 18px;
+            border-radius: 10px;
+            background: #005bab;
+        }
+
+        .terms-card p {
+            margin: 0;
+            color: #4b5563;
+            font-size: 0.98rem;
+        }
+
+        @media (max-width: 768px) {
+            .terms-hero {
+                padding: 54px 20px 45px;
+            }
+
+            .terms-container {
+                padding: 45px 16px;
+            }
+
+            .terms-card {
+                padding: 28px;
+            }
+        }
+    </style>
+</head>
+<body class="landing-subpage terms-page">
+    <header class="navbar">
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav aria-label="Main navigation">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/explore">Features</a></li>
+                <li><a href="/about" class="active">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+
+    <main>
+        <section class="terms-hero" aria-labelledby="terms-title">
+            <div class="terms-logo-wrapper">
+                <img src="/static/images/stilogo.png" alt="LookFor logo" class="terms-logo">
+            </div>
+            <h1 id="terms-title">Terms &amp; Conditions</h1>
+            <p>Rules and guidelines for using LookFor.</p>
+        </section>
+
+        <div class="terms-container">
+            <article class="terms-card">
+                <h2>1. Acceptance of Terms</h2>
+                <p>
+                    By using LookFor, users agree to comply with these terms and all
+                    applicable school policies.
+                </p>
+
+                <h2>2. User Responsibilities</h2>
+                <p>
+                    Users must provide truthful information when reporting lost or
+                    found items.
+                </p>
+
+                <h2>3. Item Verification</h2>
+                <p>
+                    Ownership verification may be required before items are released.
+                </p>
+
+                <h2>4. Prohibited Activities</h2>
+                <p>
+                    False reporting, impersonation, misuse of accounts, or attempts
+                    to claim items that do not belong to you are prohibited.
+                </p>
+
+                <h2>5. System Availability</h2>
+                <p>
+                    The school may update, maintain, or temporarily suspend services
+                    when necessary.
+                </p>
+
+                <h2>6. Amendments</h2>
+                <p>
+                    These terms may be updated periodically without prior notice.
+                </p>
+            </article>
+        </div>
+    </main>
+
+    {% include "_public_footer.html" %}
+    <script src="/static/public-subpage-nav.js?v=1.0"></script>
+</body>
+</html>

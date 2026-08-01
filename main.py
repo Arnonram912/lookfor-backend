@@ -1,4 +1,4 @@
-import os, shutil, json, time, numpy as np, io, re
+import os, shutil, json, time, numpy as np, io
 import asyncio
 import sys
 import smtplib
@@ -37,6 +37,7 @@ from utils import (
 from sqlalchemy import and_, or_, func
 from sqlalchemy import text
 from clip_test import (
+    combine_embeddings,
     get_similarity_score,
     find_matches_in_dataset,
     get_text_embedding,
@@ -165,6 +166,54 @@ PAGE_ALIASES = {
         "alias": "6384a023-7141-53be-867e-37b9fd08a7e6",
         "template": "aboutlookfor.html",
         "label": "About",
+    },
+    "/send-message": {
+        "alias": "3efdbf17-7646-5d8e-a57a-dd2b31c957a2",
+        "template": "send_message.html",
+        "label": "Send Us a Message",
+        "no_store": True,
+    },
+    "/chat": {
+        "alias": "f758fc1c-261f-5a58-b91e-2e4170950d4c",
+        "template": "chat.html",
+        "label": "Chat",
+        "no_store": True,
+    },
+    "/help-support": {
+        "alias": "3d4174fb-4bb7-537e-b413-5b933f767599",
+        "template": "help_support.html",
+        "label": "Help and Support",
+        "no_store": True,
+    },
+    "/security-features": {
+        "alias": "012c5e0e-6a65-5df6-85b6-2893d90dc12d",
+        "template": "securityfeatures.html",
+        "label": "Web Security Features",
+        "no_store": True,
+    },
+    "/faq": {
+        "alias": "6b09b362-08cd-57f6-8638-97cfcc9e84c7",
+        "template": "faq.html",
+        "label": "Frequently Asked Questions",
+        "no_store": True,
+    },
+    "/terms-and-conditions": {
+        "alias": "db671996-6749-583c-ab72-3df3b7c572ad",
+        "template": "termsandcondition.html",
+        "label": "Terms and Conditions",
+        "no_store": True,
+    },
+    "/data-privacy": {
+        "alias": "20a7ff0f-db90-5316-a97f-48c9469c3dca",
+        "template": "dataprivacy.html",
+        "label": "Data Privacy Policy",
+        "no_store": True,
+    },
+    "/visit-office": {
+        "alias": "8fe59a51-d88a-561e-a31e-b34a7f45551c",
+        "template": "visit.html",
+        "label": "Visit the Office",
+        "no_store": True,
     },
     "/admin/dashboard": {
         "alias": "e93ae889-11fa-5e89-9bda-0083b7f07538",
@@ -1906,7 +1955,27 @@ class ItemDetailUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     location: str = Field(..., min_length=1, max_length=500)
     date: date
-    time_found: str | None = Field(default=None, max_length=10)
+
+    @classmethod
+    def as_form(
+        cls,
+        item_name: str = Form(...),
+        category_id: int = Form(...),
+        brand: str | None = Form(None),
+        color: str | None = Form(None),
+        description: str | None = Form(None),
+        location: str = Form(...),
+        date_value: date = Form(..., alias="date"),
+    ):
+        return cls(
+            item_name=item_name,
+            category_id=category_id,
+            brand=brand,
+            color=color,
+            description=description,
+            location=location,
+            date=date_value,
+        )
 
 
 def item_detail_owner_matches(item, current_user: models.User) -> bool:
@@ -2050,7 +2119,10 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
 async def update_item_details(
     record_type: str,
     item_id: int,
-    payload: ItemDetailUpdate,
+    payload: ItemDetailUpdate = Depends(ItemDetailUpdate.as_form),
+    image: UploadFile = File(None),
+    extra_image_1: UploadFile = File(None),
+    extra_image_2: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -2092,13 +2164,57 @@ async def update_item_details(
     location = payload.location.strip()
     if not item_name or not location:
         raise HTTPException(status_code=422, detail="Item name and location are required")
-    if payload.time_found and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", payload.time_found.strip()):
-        raise HTTPException(status_code=422, detail="Time must use the 24-hour HH:MM format")
-
     try:
         category_name = resolve_category_name(db, category_id=payload.category_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    image_uploads = [
+        (image, "Main replacement image"),
+        (extra_image_1, "Optional image 2"),
+        (extra_image_2, "Optional image 3"),
+    ]
+    replacement_images = []
+
+    for upload, label in image_uploads:
+        if not upload or not upload.filename:
+            continue
+        try:
+            validate_upload_file_size(upload, label=label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        image_bytes = await upload.read()
+        await upload.seek(0)
+        try:
+            replacement_images.append(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"{label} is invalid") from exc
+
+    if replacement_images:
+        uploaded_embedding = await run_in_threadpool(
+            get_multi_image_embedding,
+            replacement_images,
+        )
+
+        # When only supporting photos are added, retain the current main photo's
+        # contribution to matching instead of replacing its embedding entirely.
+        replacement_embedding = uploaded_embedding
+        if not (image and image.filename) and item.image_embedding:
+            try:
+                existing_embedding = np.asarray(json.loads(item.image_embedding), dtype=np.float32).flatten()
+                replacement_embedding = combine_embeddings([existing_embedding, uploaded_embedding])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                replacement_embedding = uploaded_embedding
+
+        item.image_embedding = json.dumps(replacement_embedding.tolist())
+
+    if image and image.filename:
+        await image.seek(0)
+        replacement_path = await run_in_threadpool(
+            lambda: save_file(image, category_name)
+        )
+        item.image_path = replacement_path
 
     item.item_name = item_name
     item.category = category_name
@@ -2109,7 +2225,6 @@ async def update_item_details(
     item.description = (payload.description or "").strip() or None
     item.location = location
     item.date = payload.date
-    item.time_found = (payload.time_found or "").strip() or None
     db.flush()
 
     analysis_error = None
@@ -2142,6 +2257,7 @@ async def update_item_details(
             "color": item.color,
             "description": item.description,
             "location": item.location,
+            "image_path": public_file_url(item.image_path),
             "date": item.date.isoformat() if item.date else None,
             "time_found": item.time_found,
         },

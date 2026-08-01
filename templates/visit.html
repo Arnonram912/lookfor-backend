@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visit the Office | LookFor</title>
+    <link rel="stylesheet" href="/static/landing.css?v=6.4">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/about-info-pages.css?v=1.0">
+</head>
+<body class="landing-subpage about-info-page visit-page">
+    <header class="navbar">
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav aria-label="Main navigation">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/explore">Features</a></li>
+                <li><a href="/about" class="active">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+
+    <main>
+        <section class="about-info-hero" aria-labelledby="visit-title">
+            <div class="about-info-logo-wrapper">
+                <img src="/static/images/stilogo.png" alt="LookFor logo" class="about-info-logo">
+            </div>
+            <h1 id="visit-title">Visit the Office</h1>
+            <p>
+                Need help with a lost or found item? Visit the STI College Novaliches
+                Admin Office for assistance, verification, and item claiming.
+            </p>
+        </section>
+
+        <div class="office-container">
+            <section class="office-card" aria-label="Office information">
+                <div class="office-info-box">
+                    <span class="office-info-icon" aria-hidden="true">&#128205;</span>
+                    <h3>Location</h3>
+                    <p>STI College Novaliches Discipline Office</p>
+                </div>
+
+                <div class="office-info-box">
+                    <span class="office-info-icon" aria-hidden="true">&#128338;</span>
+                    <h3>Office Hours</h3>
+                    <p>Monday to Saturday<br>8:00 AM–5:00 PM</p>
+                </div>
+
+                <div class="office-info-box">
+                    <span class="office-info-icon" aria-hidden="true">&#128230;</span>
+                    <h3>Claiming Lost Items</h3>
+                    <p>
+                        Bring your School ID and be prepared to verify ownership
+                        of the item.
+                    </p>
+                </div>
+
+                <div class="office-info-box">
+                    <span class="office-info-icon" aria-hidden="true">&#128222;</span>
+                    <h3>Assistance</h3>
+                    <p>
+                        Contact the Admin Office for information regarding
+                        lost-and-found reports and item retrieval.
+                    </p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    {% include "_public_footer.html" %}
+    <script src="/static/public-subpage-nav.js?v=1.0"></script>
+</body>
+</html>

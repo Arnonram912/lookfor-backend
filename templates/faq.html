@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frequently Asked Questions | LookFor</title>
+    <link rel="stylesheet" href="/static/landing.css?v=6.4">
+    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#f5f7fa;
+}
+
+.hero{
+    background:#0d6efd;
+    color:white;
+    text-align:center;
+    padding:80px 20px;
+}
+
+.container{
+    max-width:900px;
+    margin:auto;
+    padding:60px 20px;
+}
+
+.faq-item{
+    background:white;
+    padding:25px;
+    margin-bottom:20px;
+    border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,.08);
+}
+
+.faq-item h3{
+    margin-top:0;
+    color:#0d6efd;
+}
+</style>
+    <link rel="stylesheet" href="/static/feature-info-pages.css?v=1.0">
+</head>
+<body class="landing-subpage feature-info-page faq-page">
+    <header class="navbar">
+        <div><span class="logow">Look<span>For</span></span></div>
+        <nav aria-label="Main navigation">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/explore" class="active">Features</a></li>
+                <li><a href="/about">About</a></li>
+            </ul>
+        </nav>
+        <a href="/login" class="btn-login">Login</a>
+    </header>
+
+    
+<section class="hero">
+    <h1>❓ Frequently Asked Questions</h1>
+    <p>Find answers to common questions about using LookFor.</p>
+</section>
+
+<div class="container">
+
+    <div class="faq-item">
+        <h3>How do I report a lost item?</h3>
+        <p>
+            Log in to your account and create a Lost Item Report.
+            Provide a description, location, date, and photo if available.
+        </p>
+    </div>
+
+    <div class="faq-item">
+        <h3>How do I report a found item?</h3>
+        <p>
+            Create a Found Item Report and surrender the item to the
+            designated Admin Office for safekeeping.
+        </p>
+    </div>
+
+    <div class="faq-item">
+        <h3>How does AI image-text matching work?</h3>
+        <p>
+            LookFor compares report descriptions and uploaded images
+            to identify possible matches between lost and found items.
+        </p>
+    </div>
+
+    <div class="faq-item">
+        <h3>How will I know if my item has been matched?</h3>
+        <p>
+            You will receive a notification through the system whenever
+            a potential match is detected.
+        </p>
+    </div>
+
+    <div class="faq-item">
+        <h3>Where do I claim my item?</h3>
+        <p>
+            Matched items can be claimed through the Admin Office after
+            ownership verification.
+        </p>
+    </div>
+
+    <div class="faq-item">
+        <h3>What proof is needed to claim an item?</h3>
+        <p>
+            You may be asked to present a School ID and describe unique
+            characteristics of the item.
+        </p>
+    </div>
+
+    <div class="faq-item">
+        <h3>How long are unclaimed items kept?</h3>
+        <p>
+            Unclaimed items are typically stored according to school policy.
+            Contact the Admin Office for the latest retention period.
+        </p>
+    </div>
+
+    <div class="faq-item">
+        <h3>Who can use LookFor?</h3>
+        <p>
+            LookFor is intended for students, faculty, staff, and authorized
+            members of the STI College Novaliches community.
+        </p>
+    </div>
+
+</div>
+
+    {% include "_public_footer.html" %}
+    <script src="/static/public-subpage-nav.js?v=1.0"></script>
+</body>
+</html>
