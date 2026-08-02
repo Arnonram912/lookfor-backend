@@ -821,6 +821,12 @@ async def edit_lost_item(
         persist_category_id=True,
     )
 
+    analysis, analysis_error = await reanalyze_student_item_edit(
+        db,
+        item,
+        record_type="item",
+    )
+
     db.commit()
     db.refresh(item)
 
@@ -829,6 +835,8 @@ async def edit_lost_item(
         "message": "Lost item updated successfully",
         "item_id": item.id,
         "item": serialize_student_item(item, current_user, is_claimed=False),
+        "analysis": analysis,
+        "analysis_error": analysis_error,
     }
 
 
@@ -929,6 +937,34 @@ async def apply_student_item_edit(
     item.time_found = cleaned_time or None
 
 
+async def reanalyze_student_item_edit(
+    db: Session,
+    item,
+    *,
+    record_type: str,
+) -> tuple[dict, str | None]:
+    """Run the same post-save match analysis used by the web item editor."""
+    db.flush()
+    try:
+        # Imported lazily because main.py registers this router while it is
+        # still initializing. At request time the shared analyzer is ready.
+        from main import analyze_saved_item_details
+
+        analysis = await run_in_threadpool(
+            lambda: analyze_saved_item_details(db, item, record_type=record_type)
+        )
+        return analysis, None
+    except Exception as exc:
+        print(f"Student app item re-analysis failed for {record_type} #{item.id}: {exc}")
+        return {
+            "highest_score": 0.0,
+            "generated_embedding": [],
+            "matched_item": None,
+            "matched_items": [],
+            "action": "no_match",
+        }, "The details were saved, but match analysis is temporarily unavailable."
+
+
 @router.put("/items/pending-found/{item_id}/edit")
 async def edit_pending_found_item(
     item_id: int,
@@ -979,6 +1015,12 @@ async def edit_pending_found_item(
         persist_category_id=False,
     )
 
+    analysis, analysis_error = await reanalyze_student_item_edit(
+        db,
+        item,
+        record_type="pending-found",
+    )
+
     db.commit()
     db.refresh(item)
 
@@ -987,6 +1029,8 @@ async def edit_pending_found_item(
         "message": "Pending found item updated successfully",
         "item_id": item.id,
         "item": serialize_student_pending_found(item, current_user),
+        "analysis": analysis,
+        "analysis_error": analysis_error,
     }
     
 @router.post("/items/lost/report")

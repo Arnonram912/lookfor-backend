@@ -1,11 +1,11 @@
 import unittest
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
-from student_routes import edit_lost_item, edit_pending_found_item
+from student_routes import edit_lost_item, edit_pending_found_item, reanalyze_student_item_edit
 
 
 class FakeQuery:
@@ -23,12 +23,16 @@ class FakeSession:
     def __init__(self, *query_results):
         self.query_results = list(query_results)
         self.committed = False
+        self.flushed = False
 
     def query(self, *args, **kwargs):
         return FakeQuery(self.query_results.pop(0))
 
     def commit(self):
         self.committed = True
+
+    def flush(self):
+        self.flushed = True
 
     def refresh(self, item):
         return None
@@ -89,10 +93,30 @@ def pending_found_item(*, archived=False):
 
 
 class StudentItemEditRouteTests(unittest.IsolatedAsyncioTestCase):
+    @patch("main.analyze_saved_item_details")
+    async def test_shared_match_analyzer_runs_after_edit(self, analyzer):
+        item = lost_item()
+        db = FakeSession()
+        analyzer.return_value = {
+            "highest_score": 0.81,
+            "matched_item": {"id": 21},
+            "matched_items": [{"id": 21}],
+            "action": "show_match",
+        }
+
+        analysis, error = await reanalyze_student_item_edit(db, item, record_type="item")
+
+        self.assertTrue(db.flushed)
+        self.assertIsNone(error)
+        self.assertEqual(analysis["highest_score"], 0.81)
+        analyzer.assert_called_once_with(db, item, record_type="item")
+
     @patch("student_routes.resolve_category_name", return_value="Accessories")
-    async def test_unmatched_lost_item_can_be_edited(self, _resolve_category):
+    @patch("student_routes.reanalyze_student_item_edit", new_callable=AsyncMock)
+    async def test_unmatched_lost_item_can_be_edited(self, reanalyze, _resolve_category):
         item = lost_item()
         db = FakeSession(item, None)
+        reanalyze.return_value = ({"matched_items": [{"id": 21}], "action": "show_match"}, None)
 
         result = await edit_lost_item(
             item_id=item.id,
@@ -119,6 +143,8 @@ class StudentItemEditRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item.category_id, 4)
         self.assertEqual(item.location, "Main Library")
         self.assertEqual(item.time_found, "09:45")
+        self.assertEqual(result["analysis"]["action"], "show_match")
+        reanalyze.assert_awaited_once_with(db, item, record_type="item")
 
     async def test_matched_lost_item_is_rejected(self):
         item = lost_item(matched=True)
@@ -147,9 +173,11 @@ class StudentItemEditRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(db.committed)
 
     @patch("student_routes.resolve_category_name", return_value="Electronics")
-    async def test_pending_found_item_can_be_edited(self, _resolve_category):
+    @patch("student_routes.reanalyze_student_item_edit", new_callable=AsyncMock)
+    async def test_pending_found_item_can_be_edited(self, reanalyze, _resolve_category):
         item = pending_found_item()
         db = FakeSession(item)
+        reanalyze.return_value = ({"matched_items": [], "action": "no_match"}, None)
 
         result = await edit_pending_found_item(
             item_id=item.id,
@@ -174,6 +202,8 @@ class StudentItemEditRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item.category, "Electronics")
         self.assertEqual(item.item_name, "Earbuds")
         self.assertEqual(item.time_found, "14:20")
+        self.assertEqual(result["analysis"]["action"], "no_match")
+        reanalyze.assert_awaited_once_with(db, item, record_type="pending-found")
 
     async def test_archived_pending_found_item_is_rejected(self):
         item = pending_found_item(archived=True)
