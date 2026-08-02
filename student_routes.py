@@ -756,7 +756,165 @@ def get_active_found_item_count(
     ).count()
     return {"count": count}
 
+@router.put("/items/lost/{item_id}/edit")
+async def edit_lost_item(
+    item_id: int,
+    item_name: str = Form(...),
+    category: str = Form(...),
+    category_id: int = Form(None),
+    brand: str = Form(None),
+    color: str = Form(None),
+    description: str = Form(None),
+    location: str = Form(...),
+    date: str = Form(None),
+    time_found: str = Form(None),
+    image: UploadFile = File(None),
+    extra_image_1: UploadFile = File(None),
+    extra_image_2: UploadFile = File(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user),
+):
+    item = db.query(models.Item).filter(
+        models.Item.id == item_id,
+        models.Item.status == "lost",
+        models.Item.user_id == current_user.id
+    ).first()
 
+    if not item:
+        raise HTTPException(
+            status_code=404,
+            detail="Lost item not found"
+        )
+
+    if not item.is_matched:
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending-match lost items can be edited"
+        )
+
+    existing_claim = db.query(models.Claim).filter(
+        models.Claim.lost_item_id == item.id,
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)
+    ).first()
+
+    if existing_claim:
+        raise HTTPException(
+            status_code=400,
+            detail="Claimed items can no longer be edited"
+        )
+
+    item.item_name = item_name.strip()
+    item.category = category
+
+    if category_id is not None:
+        item.category_id = category_id
+
+    item.brand = brand
+    item.color = color
+    item.description = description
+    item.location = location
+    item.time_found = (time_found or "").strip() or None
+
+    if date and date.strip():
+        try:
+            item.date = datetime.strptime(
+                date,
+                "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid date format. Use YYYY-MM-DD."
+            )
+
+    if image and image.filename:
+        validate_upload_file_size(
+            image,
+            label="Image"
+        )
+
+        item.image_path = save_file(
+            image,
+            category
+        )
+
+    db.commit()
+    db.refresh(item)
+
+    return {
+        "status": "success",
+        "message": "Lost item updated successfully",
+        "item_id": item.id,
+    }
+@router.put("/items/pending-found/{item_id}/edit")
+async def edit_pending_found_item(
+    item_id: int,
+    item_name: str = Form(...),
+    category: str = Form(...),
+    category_id: int = Form(None),
+    brand: str = Form(None),
+    color: str = Form(None),
+    description: str = Form(None),
+    location: str = Form(...),
+    date: str = Form(None),
+    time_found: str = Form(None),
+    image: UploadFile = File(None),
+    extra_image_1: UploadFile = File(None),
+    extra_image_2: UploadFile = File(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user),
+):
+    item = db.query(models.PendingItem).filter(
+        models.PendingItem.id == item_id,
+        models.PendingItem.user_id == current_user.id
+    ).first()
+
+    if not item:
+        raise HTTPException(
+            status_code=404,
+            detail="Pending found item not found"
+        )
+
+    item.item_name = item_name.strip()
+    item.category = category
+    item.brand = brand
+    item.color = color
+    item.description = description
+    item.location = location
+    item.time_found = (time_found or "").strip() or None
+
+    if date and date.strip():
+        try:
+            item.date = datetime.strptime(
+                date,
+                "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid date format. Use YYYY-MM-DD."
+            )
+
+    if image and image.filename:
+        validate_upload_file_size(
+            image,
+            label="Image"
+        )
+
+        item.image_path = save_file(
+            image,
+            category
+        )
+
+    db.commit()
+    db.refresh(item)
+
+    return {
+        "status": "success",
+        "message": "Pending found item updated successfully",
+        "item_id": item.id,
+    }
+    
 @router.post("/items/lost/report")
 async def submit_user_lost_report(
     item_name: str = Form(...),
@@ -932,6 +1090,7 @@ async def submit_user_lost_report(
         db.rollback()
         print(f"Database Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to submit report")
+        
 @router.get("/api/items/lost/me")
 def get_my_lost_reports(
     view: str = "active",
