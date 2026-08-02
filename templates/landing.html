@@ -59,7 +59,7 @@
         const response = await fetch('/api/content/landing');
         const data = await response.json();
 
-        function normalizeImagePath(path, fallback = '/static/images/stilogo.png') {
+        function normalizeImagePath(path, fallback = '/static/images/app_logo.png') {
             const rawPath = String(path || '').trim();
             if (!rawPath) return fallback;
             if (/^(https?:)?\/\//i.test(rawPath) || rawPath.startsWith('/')) return rawPath;
@@ -67,7 +67,7 @@
             return `/${rawPath}`;
         }
 
-        function setImagePath(img, path, fallback = '/static/images/stilogo.png') {
+        function setImagePath(img, path, fallback = '/static/images/app_logo.png') {
             if (!img) return;
             img.src = normalizeImagePath(path, fallback);
             img.onerror = () => {
@@ -119,7 +119,7 @@
             if (data.why_choose_us.image_path) {
                 const whyImg = document.getElementById('cms-why-img');
                 if (whyImg) {
-                    setImagePath(whyImg, data.why_choose_us.image_path, '/static/images/stilogo.png');
+                    setImagePath(whyImg, data.why_choose_us.image_path, '/static/images/app_logo.png');
                 }
             }
         }
@@ -195,7 +195,7 @@
                 if (titleEl) titleEl.innerText = card.title || fallbackTitles[index];
                 if (descEl) descEl.innerText = card.description || fallbackDescs[index];
                 if (imgEl && card.image_path) {
-                    setImagePath(imgEl, card.image_path, '/static/images/stilogo.png');
+                    setImagePath(imgEl, card.image_path, '/static/images/app_logo.png');
                 }
             });
         }
@@ -268,7 +268,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="content-wrapper">
             <div class="icon-side" data-aos="zoom-in" data-aos-delay="200">
                 <div class="lost-box-icon">
-                    <img src="/static/images/stilogo.png"
+                    <img src="/static/images/app_logo.png"
                         alt="Lost Items Icon" 
                         id="cms-why-img" 
                         onclick="triggerFileWindow()" 
@@ -352,7 +352,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         <div class="grid-container">
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-1-img" src="/static/images/stilogo.png" alt="AI Icon"></div>
+                <div class="icon-box"><img id="cms-feat-1-img" src="/static/images/app_logo.png" alt="AI Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-1-title">AI Image-Text Matching</h3>
                     <p id="cms-feat-1-desc">Get image-text matching to quickly match the lost and found item</p>
@@ -360,7 +360,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
 
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-2-img" src="/static/images/stilogo.png" alt="Report Icon"></div>
+                <div class="icon-box"><img id="cms-feat-2-img" src="/static/images/app_logo.png" alt="Report Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-2-title">Lost and Found Report</h3>
                     <p id="cms-feat-2-desc">Report lost and found item to easily reunite the item with its owner</p>
@@ -368,7 +368,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
 
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-3-img" src="/static/images/stilogo.png" alt="Chat Icon"></div>
+                <div class="icon-box"><img id="cms-feat-3-img" src="/static/images/app_logo.png" alt="Chat Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-3-title">Conversation Chatbox</h3>
                     <p id="cms-feat-3-desc">Connect with administrator to further discuss the surrendering and retrieving of lost and found item</p>
@@ -376,7 +376,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             </div>
 
             <div class="feature-item">
-                <div class="icon-box"><img id="cms-feat-4-img" src="/static/images/stilogo.png" alt="Notification Icon"></div>
+                <div class="icon-box"><img id="cms-feat-4-img" src="/static/images/app_logo.png" alt="Notification Icon"></div>
                 <div class="text-box">
                     <h3 id="cms-feat-4-title">Instant Notification</h3>
                     <p id="cms-feat-4-desc">Receive notifications and alerts real-time to monitor the changes of item status</p>

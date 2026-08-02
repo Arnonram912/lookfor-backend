@@ -4740,22 +4740,22 @@ def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": feature_1_data.title if feature_1_data else "AI Image-Text Matching",
             "description": feature_1_data.description if feature_1_data else "Get image-text matching to quickly match the lost and found item",
-            "image_path": public_file_url(feature_1_data.image_path, "/static/images/stilogo.png") if feature_1_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(feature_1_data.image_path, "/static/images/app_logo.png") if feature_1_data else "/static/images/app_logo.png",
         },
         {
             "title": feature_2_data.title if feature_2_data else "Lost and Found Report",
             "description": feature_2_data.description if feature_2_data else "Report lost and found item to easily reunite the item with its owner",
-            "image_path": public_file_url(feature_2_data.image_path, "/static/images/stilogo.png") if feature_2_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(feature_2_data.image_path, "/static/images/app_logo.png") if feature_2_data else "/static/images/app_logo.png",
         },
         {
             "title": feature_3_data.title if feature_3_data else "Conversation Chatbox",
             "description": feature_3_data.description if feature_3_data else "Connect with administrator to further discuss the surrendering and retrieving...",
-            "image_path": public_file_url(feature_3_data.image_path, "/static/images/stilogo.png") if feature_3_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(feature_3_data.image_path, "/static/images/app_logo.png") if feature_3_data else "/static/images/app_logo.png",
         },
         {
             "title": feature_4_data.title if feature_4_data else "Instant Notification",
             "description": feature_4_data.description if feature_4_data else "Receive notifications and alerts real-time to monitor the changes of item status",
-            "image_path": public_file_url(feature_4_data.image_path, "/static/images/stilogo.png") if feature_4_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(feature_4_data.image_path, "/static/images/app_logo.png") if feature_4_data else "/static/images/app_logo.png",
         },
     ]
     response["explore_hero"] = {
@@ -4770,17 +4770,17 @@ def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": explore_student_1_data.title if explore_student_1_data and explore_student_1_data.title else "Report Lost Items",
             "description": explore_student_1_data.description if explore_student_1_data and explore_student_1_data.description else "Submit lost item reports with clear details and photos so the community can help you faster.",
-            "image_path": public_file_url(explore_student_1_data.image_path, "/static/images/stilogo.png") if explore_student_1_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_student_1_data.image_path, "/static/images/app_logo.png") if explore_student_1_data else "/static/images/app_logo.png",
         },
         {
             "title": explore_student_2_data.title if explore_student_2_data and explore_student_2_data.title else "Track Match Progress",
             "description": explore_student_2_data.description if explore_student_2_data and explore_student_2_data.description else "Monitor possible matches and claim updates in one organized place.",
-            "image_path": public_file_url(explore_student_2_data.image_path, "/static/images/stilogo.png") if explore_student_2_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_student_2_data.image_path, "/static/images/app_logo.png") if explore_student_2_data else "/static/images/app_logo.png",
         },
         {
             "title": explore_student_3_data.title if explore_student_3_data and explore_student_3_data.title else "Chat With Admin",
             "description": explore_student_3_data.description if explore_student_3_data and explore_student_3_data.description else "Coordinate with the admin office when you need verification or claim assistance.",
-            "image_path": public_file_url(explore_student_3_data.image_path, "/static/images/stilogo.png") if explore_student_3_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_student_3_data.image_path, "/static/images/app_logo.png") if explore_student_3_data else "/static/images/app_logo.png",
         },
     ]
     response["explore_admin_section"] = {
@@ -4791,17 +4791,17 @@ def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": explore_admin_1_data.title if explore_admin_1_data and explore_admin_1_data.title else "Monitor Activities",
             "description": explore_admin_1_data.description if explore_admin_1_data and explore_admin_1_data.description else "Review user and system activity while enforcing school policies inside the platform.",
-            "image_path": public_file_url(explore_admin_1_data.image_path, "/static/images/stilogo.png") if explore_admin_1_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_admin_1_data.image_path, "/static/images/app_logo.png") if explore_admin_1_data else "/static/images/app_logo.png",
         },
         {
             "title": explore_admin_2_data.title if explore_admin_2_data and explore_admin_2_data.title else "Manage Reports",
             "description": explore_admin_2_data.description if explore_admin_2_data and explore_admin_2_data.description else "Handle lost and found submissions efficiently from a centralized dashboard.",
-            "image_path": public_file_url(explore_admin_2_data.image_path, "/static/images/stilogo.png") if explore_admin_2_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_admin_2_data.image_path, "/static/images/app_logo.png") if explore_admin_2_data else "/static/images/app_logo.png",
         },
         {
             "title": explore_admin_3_data.title if explore_admin_3_data and explore_admin_3_data.title else "Generate Summaries",
             "description": explore_admin_3_data.description if explore_admin_3_data and explore_admin_3_data.description else "Generate summaries and semester reports for better oversight and decision-making.",
-            "image_path": public_file_url(explore_admin_3_data.image_path, "/static/images/stilogo.png") if explore_admin_3_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(explore_admin_3_data.image_path, "/static/images/app_logo.png") if explore_admin_3_data else "/static/images/app_logo.png",
         },
     ]
     response["explore_cta"] = {
@@ -4820,17 +4820,17 @@ def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": about_benefit_1_data.title if about_benefit_1_data and about_benefit_1_data.title else "AI Matching",
             "description": about_benefit_1_data.description if about_benefit_1_data and about_benefit_1_data.description else "Our intelligent AI system analyzes photos and text descriptions to find potential matches for lost items, saving time and effort.",
-            "image_path": public_file_url(about_benefit_1_data.image_path, "/static/images/stilogo.png") if about_benefit_1_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_benefit_1_data.image_path, "/static/images/app_logo.png") if about_benefit_1_data else "/static/images/app_logo.png",
         },
         {
             "title": about_benefit_2_data.title if about_benefit_2_data and about_benefit_2_data.title else "Effortless Reporting",
             "description": about_benefit_2_data.description if about_benefit_2_data and about_benefit_2_data.description else "Easily report lost and found items through the system, accessible from anywhere and anytime.",
-            "image_path": public_file_url(about_benefit_2_data.image_path, "/static/images/stilogo.png") if about_benefit_2_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_benefit_2_data.image_path, "/static/images/app_logo.png") if about_benefit_2_data else "/static/images/app_logo.png",
         },
         {
             "title": about_benefit_3_data.title if about_benefit_3_data and about_benefit_3_data.title else "Secured & Centralized",
             "description": about_benefit_3_data.description if about_benefit_3_data and about_benefit_3_data.description else "All information is stored in a central database with management and authority handled by school staff.",
-            "image_path": public_file_url(about_benefit_3_data.image_path, "/static/images/stilogo.png") if about_benefit_3_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_benefit_3_data.image_path, "/static/images/app_logo.png") if about_benefit_3_data else "/static/images/app_logo.png",
         },
     ]
     response["about_clip"] = {
@@ -4841,17 +4841,17 @@ def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": about_clip_1_data.title if about_clip_1_data and about_clip_1_data.title else "Reporting",
             "description": about_clip_1_data.description if about_clip_1_data and about_clip_1_data.description else "Effortless and simple processing of lost and found cases.",
-            "image_path": public_file_url(about_clip_1_data.image_path, "/static/images/stilogo.png") if about_clip_1_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_clip_1_data.image_path, "/static/images/app_logo.png") if about_clip_1_data else "/static/images/app_logo.png",
         },
         {
             "title": about_clip_2_data.title if about_clip_2_data and about_clip_2_data.title else "AI",
             "description": about_clip_2_data.description if about_clip_2_data and about_clip_2_data.description else "AI-powered image-text matching for quick recovery of items.",
-            "image_path": public_file_url(about_clip_2_data.image_path, "/static/images/stilogo.png") if about_clip_2_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_clip_2_data.image_path, "/static/images/app_logo.png") if about_clip_2_data else "/static/images/app_logo.png",
         },
         {
             "title": about_clip_3_data.title if about_clip_3_data and about_clip_3_data.title else "Notifications",
             "description": about_clip_3_data.description if about_clip_3_data and about_clip_3_data.description else "Real-time notifications for updates regarding report status.",
-            "image_path": public_file_url(about_clip_3_data.image_path, "/static/images/stilogo.png") if about_clip_3_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_clip_3_data.image_path, "/static/images/app_logo.png") if about_clip_3_data else "/static/images/app_logo.png",
         },
     ]
     response["about_system"] = {
@@ -4862,17 +4862,17 @@ def get_landing_content(db: Session = Depends(get_db)):
         {
             "title": about_system_1_data.title if about_system_1_data and about_system_1_data.title else "AI Matching & Search",
             "description": about_system_1_data.description if about_system_1_data and about_system_1_data.description else "AI analyzes details and images to find potential matches quickly.",
-            "image_path": public_file_url(about_system_1_data.image_path, "/static/images/stilogo.png") if about_system_1_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_system_1_data.image_path, "/static/images/app_logo.png") if about_system_1_data else "/static/images/app_logo.png",
         },
         {
             "title": about_system_2_data.title if about_system_2_data and about_system_2_data.title else "Uploads",
             "description": about_system_2_data.description if about_system_2_data and about_system_2_data.description else "Report lost or found items through a simple online form with photo uploads and text descriptions.",
-            "image_path": public_file_url(about_system_2_data.image_path, "/static/images/stilogo.png") if about_system_2_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_system_2_data.image_path, "/static/images/app_logo.png") if about_system_2_data else "/static/images/app_logo.png",
         },
         {
             "title": about_system_3_data.title if about_system_3_data and about_system_3_data.title else "Alerts & Notifications",
             "description": about_system_3_data.description if about_system_3_data and about_system_3_data.description else "Receive instant alerts and notifications when report progress changes.",
-            "image_path": public_file_url(about_system_3_data.image_path, "/static/images/stilogo.png") if about_system_3_data else "/static/images/stilogo.png",
+            "image_path": public_file_url(about_system_3_data.image_path, "/static/images/app_logo.png") if about_system_3_data else "/static/images/app_logo.png",
         },
     ]
     response["about_system_graphic"] = {
@@ -4881,7 +4881,7 @@ def get_landing_content(db: Session = Depends(get_db)):
     response["about_cta"] = {
         "title": about_cta_data.title if about_cta_data and about_cta_data.title else "Ready to reunite<br>with your item?",
         "description": about_cta_data.description if about_cta_data and about_cta_data.description else "Join our school community and reunite with your lost items with LookFor.",
-        "image_path": public_file_url(about_cta_data.image_path, "/static/images/stilogo.png") if about_cta_data else "/static/images/stilogo.png",
+        "image_path": public_file_url(about_cta_data.image_path, "/static/images/app_logo.png") if about_cta_data else "/static/images/app_logo.png",
     }
     return response
 
