@@ -26,7 +26,7 @@ from utils import (
     item_display_id,
     item_display_code,
 )
-from clip_test import get_text_embedding, get_image_embedding, get_multi_image_embedding
+from clip_test import combine_embeddings, get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
 from account_email import queue_item_event_email
 
@@ -760,7 +760,7 @@ def get_active_found_item_count(
 async def edit_lost_item(
     item_id: int,
     item_name: str = Form(...),
-    category: str = Form(...),
+    category: str = Form(None),
     category_id: int = Form(None),
     brand: str = Form(None),
     color: str = Form(None),
@@ -786,57 +786,40 @@ async def edit_lost_item(
             detail="Lost item not found"
         )
 
-    if not item.is_matched:
+    if item.is_matched:
         raise HTTPException(
-            status_code=400,
-            detail="Only pending-match lost items can be edited"
+            status_code=409,
+            detail="Matched lost items can no longer be edited"
         )
 
     existing_claim = db.query(models.Claim).filter(
         models.Claim.lost_item_id == item.id,
-        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
     ).first()
 
     if existing_claim:
         raise HTTPException(
-            status_code=400,
-            detail="Claimed items can no longer be edited"
+            status_code=409,
+            detail="Matched or claimed items can no longer be edited"
         )
 
-    item.item_name = item_name.strip()
-    item.category = category
-
-    if category_id is not None:
-        item.category_id = category_id
-
-    item.brand = brand
-    item.color = color
-    item.description = description
-    item.location = location
-    item.time_found = (time_found or "").strip() or None
-
-    if date and date.strip():
-        try:
-            item.date = datetime.strptime(
-                date,
-                "%Y-%m-%d"
-            ).date()
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid date format. Use YYYY-MM-DD."
-            )
-
-    if image and image.filename:
-        validate_upload_file_size(
-            image,
-            label="Image"
-        )
-
-        item.image_path = save_file(
-            image,
-            category
-        )
+    await apply_student_item_edit(
+        item,
+        item_name=item_name,
+        category=category,
+        category_id=category_id,
+        brand=brand,
+        color=color,
+        description=description,
+        location=location,
+        date_value=date,
+        time_found=time_found,
+        image=image,
+        extra_image_1=extra_image_1,
+        extra_image_2=extra_image_2,
+        db=db,
+        persist_category_id=True,
+    )
 
     db.commit()
     db.refresh(item)
@@ -845,12 +828,112 @@ async def edit_lost_item(
         "status": "success",
         "message": "Lost item updated successfully",
         "item_id": item.id,
+        "item": serialize_student_item(item, current_user, is_claimed=False),
     }
+
+
+async def apply_student_item_edit(
+    item,
+    *,
+    item_name: str,
+    category: str | None,
+    category_id: int | None,
+    brand: str | None,
+    color: str | None,
+    description: str | None,
+    location: str,
+    date_value: str | None,
+    time_found: str | None,
+    image: UploadFile | None,
+    extra_image_1: UploadFile | None,
+    extra_image_2: UploadFile | None,
+    db: Session,
+    persist_category_id: bool,
+) -> None:
+    cleaned_name = (item_name or "").strip()
+    cleaned_location = (location or "").strip()
+    cleaned_time = (time_found or "").strip()
+    if not cleaned_name or not cleaned_location:
+        raise HTTPException(status_code=422, detail="Item name and location are required")
+    if len(cleaned_name) > 255:
+        raise HTTPException(status_code=422, detail="Item name must be 255 characters or fewer")
+    if cleaned_time:
+        try:
+            datetime.strptime(cleaned_time, "%H:%M")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Time must use the 24-hour HH:MM format") from exc
+
+    parsed_date = item.date
+    if date_value and date_value.strip():
+        try:
+            parsed_date = datetime.strptime(date_value.strip(), "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.") from exc
+
+    try:
+        resolved_category = resolve_category_name(
+            db,
+            category_id=category_id,
+            category_name=category,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    uploads = (
+        (image, "Main replacement image"),
+        (extra_image_1, "Optional image 2"),
+        (extra_image_2, "Optional image 3"),
+    )
+    decoded_images = []
+    for upload, label in uploads:
+        if not upload or not upload.filename:
+            continue
+        if upload.content_type not in {"image/jpeg", "image/png", "image/jpg", "image/webp"}:
+            raise HTTPException(status_code=400, detail=f"{label} has an invalid image type")
+        try:
+            validate_upload_file_size(upload, label=label)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        image_bytes = await upload.read()
+        await upload.seek(0)
+        try:
+            decoded_images.append(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"{label} is invalid") from exc
+
+    if decoded_images:
+        uploaded_embedding = await run_in_threadpool(get_multi_image_embedding, decoded_images)
+        replacement_embedding = uploaded_embedding
+        if not (image and image.filename) and item.image_embedding:
+            try:
+                existing_embedding = np.asarray(json.loads(item.image_embedding), dtype=np.float32).flatten()
+                replacement_embedding = combine_embeddings([existing_embedding, uploaded_embedding])
+            except (TypeError, ValueError, json.JSONDecodeError):
+                replacement_embedding = uploaded_embedding
+        item.image_embedding = json.dumps(replacement_embedding.tolist())
+
+    if image and image.filename:
+        await image.seek(0)
+        item.image_path = await run_in_threadpool(lambda: save_file(image, resolved_category))
+
+    item.item_name = cleaned_name
+    item.category = resolved_category
+    if persist_category_id and category_id is not None:
+        item.category_id = category_id
+    item.brand = (brand or "").strip() or None
+    item.color = (color or "").strip() or None
+    item.description = (description or "").strip() or None
+    item.location = cleaned_location
+    item.date = parsed_date
+    item.time_found = cleaned_time or None
+
+
 @router.put("/items/pending-found/{item_id}/edit")
 async def edit_pending_found_item(
     item_id: int,
     item_name: str = Form(...),
-    category: str = Form(...),
+    category: str = Form(None),
     category_id: int = Form(None),
     brand: str = Form(None),
     color: str = Form(None),
@@ -875,36 +958,26 @@ async def edit_pending_found_item(
             detail="Pending found item not found"
         )
 
-    item.item_name = item_name.strip()
-    item.category = category
-    item.brand = brand
-    item.color = color
-    item.description = description
-    item.location = location
-    item.time_found = (time_found or "").strip() or None
+    if item.archived or item.deleted:
+        raise HTTPException(status_code=409, detail="Recover this item before editing it")
 
-    if date and date.strip():
-        try:
-            item.date = datetime.strptime(
-                date,
-                "%Y-%m-%d"
-            ).date()
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid date format. Use YYYY-MM-DD."
-            )
-
-    if image and image.filename:
-        validate_upload_file_size(
-            image,
-            label="Image"
-        )
-
-        item.image_path = save_file(
-            image,
-            category
-        )
+    await apply_student_item_edit(
+        item,
+        item_name=item_name,
+        category=category,
+        category_id=category_id,
+        brand=brand,
+        color=color,
+        description=description,
+        location=location,
+        date_value=date,
+        time_found=time_found,
+        image=image,
+        extra_image_1=extra_image_1,
+        extra_image_2=extra_image_2,
+        db=db,
+        persist_category_id=False,
+    )
 
     db.commit()
     db.refresh(item)
@@ -913,6 +986,7 @@ async def edit_pending_found_item(
         "status": "success",
         "message": "Pending found item updated successfully",
         "item_id": item.id,
+        "item": serialize_student_pending_found(item, current_user),
     }
     
 @router.post("/items/lost/report")
