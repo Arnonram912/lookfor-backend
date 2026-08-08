@@ -259,6 +259,11 @@
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
+
+                        <div style="margin-top:16px; padding:14px; border:1px solid #d9e4f2; border-radius:12px; background:#f8fbff;">
+                            <strong style="color:#0e2742;">AI Match Evaluation Scores</strong>
+                            <div id="modalMatchScores" style="margin-top:10px; display:grid; gap:10px;"></div>
+                        </div>
                         
                         <div class="modal-actions">
                             <button type="button" class="btn-archive-big" id="approveBtn" style="display:none; background:#198754;">Approve Item</button>
@@ -535,6 +540,48 @@ function showAccessDeniedPopup(permName) {
         function handleItemImageError(img) {
             img.onerror = null;
             img.src = ITEM_IMAGE_FALLBACK;
+        }
+
+        function formatEvaluationScore(value) {
+            return `${(Number(value || 0) * 100).toFixed(1)}%`;
+        }
+
+        function parseFoundPossibleMatches(value) {
+            if (Array.isArray(value)) return value;
+            if (!value) return [];
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function renderFoundMatchScores(item) {
+            const container = document.getElementById('modalMatchScores');
+            if (!container) return;
+            const matches = parseFoundPossibleMatches(item?.possible_matches).slice(0, 5);
+            if (!matches.length) {
+                container.textContent = 'No evaluated candidates were saved for this item.';
+                return;
+            }
+            container.innerHTML = matches.map((match, index) => {
+                const hasComponents = match.image_similarity !== undefined && match.text_similarity !== undefined;
+                return `
+                    <div style="padding:10px 12px; border:1px solid #dce6f0; border-radius:10px; background:#fff;">
+                        <div style="display:flex; justify-content:space-between; gap:12px; font-weight:700; color:#114b7a;">
+                            <span>${index + 1}. ${escapeFoundListHtml(match.item_name || match.category || 'Candidate')}</span>
+                            <span>Final: ${formatEvaluationScore(match.score)}</span>
+                        </div>
+                        ${hasComponents ? `
+                            <div style="margin-top:6px; font-size:12px; color:#556678;">
+                                Image: ${formatEvaluationScore(match.image_similarity)} &middot;
+                                Text: ${formatEvaluationScore(match.text_similarity)}
+                            </div>
+                        ` : '<div style="margin-top:6px; font-size:12px; color:#7b8794;">Component scores were not recorded for this older result.</div>'}
+                    </div>
+                `;
+            }).join('');
         }
 
         async function loadLostItems() {
@@ -989,6 +1036,7 @@ function showAccessDeniedPopup(permName) {
 
     // Description
     document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
+    renderFoundMatchScores(item);
     
     const disposeBtn = document.getElementById("disposeBtn");
     const archiveBtn = document.getElementById("archiveBtn");
@@ -1704,14 +1752,16 @@ async function executeSubmit() {
 
         const aiResult = await compareRes.json();
         const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
+        const rankedCandidates = Array.isArray(aiResult?.ranked_candidates) ? aiResult.ranked_candidates : [];
         const selectedMatch = aiResult?.matched_item?.id ? aiResult.matched_item : null;
+        const topCandidate = rankedCandidates[0] || selectedMatch;
 
         await showFoundReportAlert(
             selectedMatch ? 'success' : 'info',
             selectedMatch ? 'Possible match found' : 'Analysis complete',
-            selectedMatch
-                ? `This found item may match Lost Item #${selectedMatch.id}. The lost-item owner will be notified.`
-                : 'No strong lost-item match was found. This found item is ready for saving.'
+            topCandidate
+                ? `Top candidate #${topCandidate.id}: Final ${formatEvaluationScore(topCandidate.score)}, Image ${formatEvaluationScore(topCandidate.image_similarity)}, Text ${formatEvaluationScore(topCandidate.text_similarity)}.`
+                : 'No lost-item candidates were available. This found item is ready for saving.'
         );
 
         // STEP 2: Final Save to Database
@@ -1729,7 +1779,7 @@ async function executeSubmit() {
         saveData.append("category", catName);
         saveData.append("department", deptName);
         saveData.append("image_embedding", JSON.stringify(aiResult.generated_embedding));
-        saveData.append("possible_matches", JSON.stringify(matchedItems));
+        saveData.append("possible_matches", JSON.stringify(rankedCandidates));
         if (selectedMatch?.id) {
             saveData.append("matched_item_id", selectedMatch.id);
             saveData.append("ai_score", selectedMatch.score || aiResult.highest_score || 0);

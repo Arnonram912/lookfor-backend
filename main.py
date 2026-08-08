@@ -73,6 +73,11 @@ from security import (
 )
 from account_email import queue_item_event_email
 from lookfor_permissions import normalize_permissions
+from matching_metrics import (
+    MATCH_THRESHOLD,
+    POSSIBLE_MATCH_THRESHOLD,
+    calculate_match_score,
+)
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -1779,41 +1784,6 @@ def build_item_dataset_text(item):
     return ". ".join(part for part in parts if part)
 
 
-def get_reference_bonus(candidate_item, query_vec, references):
-    candidate_brand = normalize_match_value(getattr(candidate_item, "brand", None))
-    candidate_color = normalize_match_value(getattr(candidate_item, "color", None))
-
-    filtered_references = []
-    for reference in references:
-        reference_brand = normalize_match_value(getattr(reference, "brand", None))
-        reference_color = normalize_match_value(getattr(reference, "color", None))
-
-        brand_matches = not candidate_brand or not reference_brand or candidate_brand == reference_brand
-        color_matches = not candidate_color or not reference_color or candidate_color == reference_color
-
-        if brand_matches and color_matches:
-            filtered_references.append(reference)
-
-    if not filtered_references:
-        filtered_references = references
-
-    similarity_scores = []
-    for reference in filtered_references:
-        if not reference.image_embedding:
-            continue
-        try:
-            reference_vec = np.array(json.loads(reference.image_embedding)).flatten()
-            similarity_scores.append(float(np.dot(query_vec, reference_vec)))
-        except Exception:
-            continue
-
-    if not similarity_scores:
-        return 0.0
-
-    top_scores = sorted(similarity_scores, reverse=True)[:3]
-    return max(0.0, sum(top_scores) / len(top_scores)) * 0.08
-
-
 def compute_text_detail_matches(
     db: Session,
     *,
@@ -1823,7 +1793,7 @@ def compute_text_detail_matches(
     brand: str | None,
     color: str | None,
     status: str,
-    search_vec: np.ndarray,
+    search_vec: np.ndarray | None,
     query_text_vec: np.ndarray,
     exclude_item_id: int | None = None,
 ):
@@ -1832,9 +1802,10 @@ def compute_text_detail_matches(
     if normalized_status not in {"lost", "found"}:
         return {
             "highest_score": 0.0,
-            "generated_embedding": search_vec.tolist(),
+            "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else [],
             "matched_item": None,
             "matched_items": [],
+            "ranked_candidates": [],
             "action": "no_match"
         }
 
@@ -1843,27 +1814,32 @@ def compute_text_detail_matches(
     if not normalized_category:
         return {
             "highest_score": 0.0,
-            "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else list(search_vec),
+            "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else [],
             "matched_item": None,
             "matched_items": [],
+            "ranked_candidates": [],
             "action": "no_match"
         }
 
-    strict_match_threshold = 0.55
-    possible_match_threshold = 0.45   # adjust if needed
+    strict_match_threshold = MATCH_THRESHOLD
+    possible_match_threshold = POSSIBLE_MATCH_THRESHOLD
 
     def item_category_name(item: models.Item) -> str:
         return item.category_relationship.name if getattr(item, "category_relationship", None) else item.category
 
-    def score_items(items: list[models.Item], reference_items: list[models.ReferenceItem]) -> list[dict]:
-        matches = []
+    def score_items(items: list[models.Item]) -> list[dict]:
+        candidates = []
         for item in items:
             try:
                 if not item.image_embedding:
                     continue
 
                 stored_vec = np.array(json.loads(item.image_embedding)).flatten()
-                image_score = float(np.dot(search_vec, stored_vec))
+                image_score = (
+                    float(np.dot(search_vec, stored_vec))
+                    if isinstance(search_vec, np.ndarray) and search_vec.size
+                    else 0.0
+                )
 
                 item_dataset_text = build_item_dataset_text(item)
                 text_score = 0.0
@@ -1871,48 +1847,29 @@ def compute_text_detail_matches(
                     dataset_text_vec = get_text_embedding(item_dataset_text)
                     text_score = float(np.dot(query_text_vec, dataset_text_vec))
 
-                score = (image_score * 0.6) + (text_score * 0.4)
+                score = calculate_match_score(
+                    image_score,
+                    text_score,
+                )
 
-                normalized_brand = normalize_match_value(brand)
-                item_brand = normalize_match_value(item.brand)
-                if normalized_brand and item_brand and normalized_brand == item_brand:
-                    score += 0.08
-                elif normalized_brand and item_brand and normalized_brand != item_brand:
-                    score -= 0.12
-
-                normalized_color = normalize_match_value(color)
-                item_color = normalize_match_value(item.color)
-                if normalized_color and item_color and normalized_color == item_color:
-                    score += 0.05
-                elif normalized_color and item_color and normalized_color != item_color:
-                    score -= 0.20
-
-                normalized_location = normalize_match_value(location)
-                item_location = normalize_match_value(item.location)
-                if normalized_location and item_location and (
-                    normalized_location in item_location or item_location in normalized_location
-                ):
-                    score += 0.03
-
-                score += get_reference_bonus(item, search_vec, reference_items)
-
-                if score >= possible_match_threshold:
-                    matches.append({
-                        "id": item.id,
-                        "score": round(score, 4),
-                        "item_name": item.item_name,
-                        "category": item_category_name(item),
-                        "location": item.location,
-                        "image_path": public_file_url(item.image_path),
-                        "brand": item.brand,
-                        "color": item.color,
-                        "description": item.description,
-                    })
+                candidates.append({
+                    "id": item.id,
+                    "score": round(score, 4),
+                    "image_similarity": round(image_score, 4),
+                    "text_similarity": round(text_score, 4),
+                    "item_name": item.item_name,
+                    "category": item_category_name(item),
+                    "location": item.location,
+                    "image_path": public_file_url(item.image_path),
+                    "brand": item.brand,
+                    "color": item.color,
+                    "description": item.description,
+                })
 
             except Exception as e:
                 print(f"Error: {e}")
                 continue
-        return matches
+        return candidates
 
     candidate_items = db.query(models.Item).outerjoin(models.Category).filter(
         models.Item.status.ilike(target_status),
@@ -1923,25 +1880,23 @@ def compute_text_detail_matches(
     if exclude_item_id is not None:
         candidate_items = [item for item in candidate_items if item.id != exclude_item_id]
 
-    reference_items = db.query(models.ReferenceItem).filter(
-        models.ReferenceItem.status.ilike(target_status),
-        models.ReferenceItem.image_embedding.isnot(None)
-    ).all()
+    ranked_candidates = score_items(candidate_items)
+    ranked_candidates.sort(key=lambda x: x["score"], reverse=True)
+    ranked_candidates = ranked_candidates[:5]
+    all_matches = [
+        candidate for candidate in ranked_candidates
+        if candidate["score"] >= possible_match_threshold
+    ]
 
-    all_matches = score_items(candidate_items, reference_items)
-
-    # Sort highest to lowest
-    all_matches.sort(key=lambda x: x["score"], reverse=True)
-    all_matches = all_matches[:3]
-
-    best_match = all_matches[0] if all_matches else None
+    best_match = ranked_candidates[0] if ranked_candidates else None
     highest_score = best_match["score"] if best_match else 0.0
 
     return {
         "highest_score": round(highest_score, 4),
-        "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else list(search_vec),
+        "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else [],
         "matched_item": best_match if best_match and highest_score >= strict_match_threshold else None,
         "matched_items": all_matches,
+        "ranked_candidates": ranked_candidates,
         "action": "show_match" if all_matches else "no_match",
         "warning": None,
     }
@@ -2033,7 +1988,7 @@ def replace_possible_match(lost_item: models.Item, match_payload: dict) -> None:
             and match.get("source", "found") == match_source
         )
     ]
-    lost_item.possible_matches = json.dumps([match_payload, *remaining][:3])
+    lost_item.possible_matches = json.dumps([match_payload, *remaining][:5])
 
 
 def remove_possible_match(lost_item: models.Item, *, match_id: int, source: str) -> None:
@@ -2075,10 +2030,7 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
         except (TypeError, ValueError):
             image_vec = None
 
-    search_vec = ((image_vec * 0.6) + (query_text_vec * 0.4)) if image_vec is not None and image_vec.size else query_text_vec
-    search_norm = np.linalg.norm(search_vec)
-    if search_norm != 0:
-        search_vec = search_vec / search_norm
+    search_vec = image_vec if image_vec is not None and image_vec.size else None
 
     result = compute_text_detail_matches(
         db,
@@ -2321,14 +2273,11 @@ async def compare_text_details(
             raise HTTPException(status_code=400, detail=f"Invalid uploaded image: {upload.filename}") from exc
 
     query_text_vec = await run_in_threadpool(get_text_embedding, text_query)
-    if query_images:
-        image_vec = await run_in_threadpool(get_multi_image_embedding, query_images)
-        search_vec = (image_vec * 0.6) + (query_text_vec * 0.4)
-    else:
-        search_vec = query_text_vec
-    search_norm = np.linalg.norm(search_vec)
-    if search_norm != 0:
-        search_vec = search_vec / search_norm
+    search_vec = (
+        await run_in_threadpool(get_multi_image_embedding, query_images)
+        if query_images
+        else None
+    )
 
     return await run_in_threadpool(
         lambda: compute_text_detail_matches(
@@ -2386,13 +2335,13 @@ def get_saved_item_possible_matches(
             saved_matches = []
 
         if saved_matches:
-            saved_matches = saved_matches[:3]
+            saved_matches = saved_matches[:5]
             best_match = saved_matches[0]
             highest_score = float(best_match.get("score", 0) or 0)
             return {
                 "highest_score": round(highest_score, 4),
                 "generated_embedding": [],
-                "matched_item": best_match if highest_score >= 0.55 else None,
+                "matched_item": best_match if highest_score >= MATCH_THRESHOLD else None,
                 "matched_items": saved_matches,
                 "action": "show_match"
             }
@@ -2414,14 +2363,7 @@ def get_saved_item_possible_matches(
         except Exception:
             image_vec = None
 
-    if image_vec is not None and image_vec.size:
-        search_vec = (image_vec * 0.6) + (query_text_vec * 0.4)
-    else:
-        search_vec = query_text_vec
-
-    search_norm = np.linalg.norm(search_vec)
-    if search_norm != 0:
-        search_vec = search_vec / search_norm
+    search_vec = image_vec if image_vec is not None and image_vec.size else None
 
     return compute_text_detail_matches(
         db,
@@ -2609,7 +2551,7 @@ def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> 
             and match.get("source", "found") == match_source
         )
     ]
-    updated_matches = [match_payload, *deduped_matches][:3]
+    updated_matches = [match_payload, *deduped_matches][:5]
     lost_item.possible_matches = json.dumps(updated_matches)
     return len(updated_matches)
 
@@ -2715,7 +2657,7 @@ async def save_found_item(
             new_pending.matched_item_id = matched_lost_item.id
             possible_match_count = prepend_lost_possible_match(
                 matched_lost_item,
-                serialize_pending_found_match(new_pending, 0.55)
+                serialize_pending_found_match(new_pending, MATCH_THRESHOLD)
             )
 
             if matched_lost_item.user_id:
@@ -2809,7 +2751,7 @@ async def lost_report_upload(
 
     best_match_id = None
     final_score = 0.0
-    THRESHOLD = 0.55
+    THRESHOLD = MATCH_THRESHOLD
     matched_found_item = None
 
     for item in found_items:
@@ -2819,28 +2761,10 @@ async def lost_report_upload(
             # Multimodal Math
             img_sim = float(np.dot(image_vec, stored_vec))
             text_sim = float(np.dot(text_vec, stored_vec))
-            current_score = (img_sim * 0.5) + (text_sim * 0.5)
-
-            normalized_brand = normalize_match_value(brand)
-            item_brand = normalize_match_value(item.brand)
-            if normalized_brand and item_brand and normalized_brand == item_brand:
-                current_score += 0.08
-            elif normalized_brand and item_brand and normalized_brand != item_brand:
-                current_score -= 0.12
-
-            normalized_color = normalize_match_value(color)
-            item_color = normalize_match_value(item.color)
-            if normalized_color and item_color and normalized_color == item_color:
-                current_score += 0.05
-            elif normalized_color and item_color and normalized_color != item_color:
-                current_score -= 0.20
-
-            normalized_location = normalize_match_value(location)
-            item_location = normalize_match_value(item.location)
-            if normalized_location and item_location and (
-                normalized_location in item_location or item_location in normalized_location
-            ):
-                current_score += 0.03
+            current_score = calculate_match_score(
+                img_sim,
+                text_sim,
+            )
 
             if current_score > final_score:
                 best_match_id = item.id

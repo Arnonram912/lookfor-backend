@@ -148,6 +148,39 @@ App Service configuration:
 - Email-based MFA and password reset only work if the `.env` Gmail credentials are valid.
 - Uploaded files, local database contents, and local `.env` secrets are not included in the repo.
 
+## Matching evaluation
+
+All matching flows use the same formula: 60% CLIP image cosine similarity and
+40% CLIP text cosine similarity. Brand, color, location, and description are
+already represented in the text embedding, so they are not added again as
+separate rule-based adjustments. A score of 0.55 or higher is a match; 0.45 or
+higher is a possible-match candidate.
+
+Evaluate a labeled CSV dataset with:
+
+```powershell
+python evaluate_matching.py matching_dataset.csv
+```
+
+The CSV requires `query_id`, `actual_match`, `image_similarity`, and
+`text_similarity`. Give every candidate evaluated for the same search the same
+`query_id`; this grouping is required for ranking metrics. The command prints
+confusion-matrix counts, accuracy, precision, recall, F1-score, Recall@5, and
+mean reciprocal rank (MRR). Recall@5 and MRR exclude and separately count
+queries that have no manually labeled relevant candidate.
+The optional `brand_comparison`, `color_comparison`, and
+`location_comparison` columns are human-readable audit details. Enter `same`,
+`different`, or `not_provided`. These labels do not add bonuses or penalties
+because the underlying details are already represented by text similarity.
+Copy `matching_dataset.example.csv` as a starting template, then replace its
+demonstration rows with manually verified match and non-match pairs.
+
+Use another ranking cutoff when needed, for example:
+
+```powershell
+python evaluate_matching.py matching_dataset.csv --k 10
+```
+
 ## Vercel Deployment
 
 This repo includes an experimental Vercel entrypoint:

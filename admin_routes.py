@@ -38,6 +38,7 @@ from utils import (
 from sqlalchemy import and_, or_, func, text
 from concurrent.futures import ThreadPoolExecutor
 from account_email import queue_account_access_email, queue_item_event_email
+from matching_metrics import MATCH_THRESHOLD, calculate_match_score
 from lookfor_constants import (
     ACADEMIC_CLASSIFICATIONS,
     IDENTIFIER_RE,
@@ -344,12 +345,14 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
         return None
 
     cleaned_matches = []
-    for match in parsed_matches[:3]:
+    for match in parsed_matches[:5]:
         if not isinstance(match, dict):
             continue
         cleaned_matches.append({
             "id": match.get("id"),
             "score": match.get("score"),
+            "image_similarity": match.get("image_similarity"),
+            "text_similarity": match.get("text_similarity"),
             "item_name": match.get("item_name"),
             "category": match.get("category"),
             "location": match.get("location"),
@@ -503,7 +506,7 @@ def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> 
             )
         )
     ]
-    lost_item.possible_matches = json.dumps([match_payload, *deduped_matches][:3])
+    lost_item.possible_matches = json.dumps([match_payload, *deduped_matches][:5])
 
 
 def create_student_notification(
@@ -1087,30 +1090,10 @@ def compute_item_match_score(lost_item: models.Item, found_item: models.Item) ->
         except Exception:
             text_score = 0.0
 
-    score = (image_score * 0.7) + (text_score * 0.3)
-
-    lost_brand = normalize_match_value(lost_item.brand)
-    found_brand = normalize_match_value(found_item.brand)
-    if lost_brand and found_brand and lost_brand == found_brand:
-        score += 0.08
-    elif lost_brand and found_brand and lost_brand != found_brand:
-        score -= 0.12
-
-    lost_color = normalize_match_value(lost_item.color)
-    found_color = normalize_match_value(found_item.color)
-    if lost_color and found_color and lost_color == found_color:
-        score += 0.05
-    elif lost_color and found_color and lost_color != found_color:
-        score -= 0.20
-
-    lost_location = normalize_match_value(lost_item.location)
-    found_location = normalize_match_value(found_item.location)
-    if lost_location and found_location and (
-        lost_location in found_location or found_location in lost_location
-    ):
-        score += 0.03
-
-    return round(score, 4)
+    return calculate_match_score(
+        image_score,
+        text_score,
+    )
 
 
 print("Admin routes loaded")
@@ -4421,7 +4404,9 @@ async def approve_item(
         matched_lost_item.is_matched = True
         prepend_lost_possible_match(
             matched_lost_item,
-            serialize_found_item_match(new_item, 0.55, previous_pending_id=pending.id)
+            serialize_found_item_match(
+                new_item, MATCH_THRESHOLD, previous_pending_id=pending.id
+            )
         )
         claim = ensure_pending_claim_for_pair(
             db,
@@ -4762,7 +4747,7 @@ async def finalize_lost_upload(
             parsed_date = None
 
     # 4. Determine Automatic Match Status
-    is_auto_match = ai_score >= 0.55 and matched_item_id is not None
+    is_auto_match = ai_score >= MATCH_THRESHOLD and matched_item_id is not None
 
     # 5. Create the Database Record 
     saved_possible_matches = normalize_saved_possible_matches(possible_matches)
@@ -4911,7 +4896,7 @@ async def finalize_found_upload(
             parsed_date = None
 
     # 4. Determine Automatic Match Status
-    is_auto_match = ai_score >= 0.55 and matched_item_id is not None
+    is_auto_match = ai_score >= MATCH_THRESHOLD and matched_item_id is not None
 
     # 5. Create the Database Record 
     new_item = models.Item(
