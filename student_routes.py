@@ -29,6 +29,7 @@ from utils import (
 from clip_test import combine_embeddings, get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
 from account_email import queue_item_event_email
+from matching_metrics import MATCH_THRESHOLD
 
 
 router = APIRouter(prefix="/student", tags=["Student"])
@@ -129,12 +130,14 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
         return None
 
     cleaned_matches = []
-    for match in parsed_matches[:3]:
+    for match in parsed_matches[:5]:
         if not isinstance(match, dict):
             continue
         cleaned_matches.append({
             "id": match.get("id"),
             "score": match.get("score"),
+            "image_similarity": match.get("image_similarity"),
+            "text_similarity": match.get("text_similarity"),
             "item_name": match.get("item_name"),
             "category": match.get("category"),
             "location": match.get("location"),
@@ -199,7 +202,7 @@ def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> 
             and match.get("source", "found") == match_source
         )
     ]
-    updated_matches = [match_payload, *deduped_matches][:3]
+    updated_matches = [match_payload, *deduped_matches][:5]
     lost_item.possible_matches = json.dumps(updated_matches)
     return len(updated_matches)
 
@@ -438,7 +441,7 @@ async def report_found_item(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid date format. Please use YYYY-MM-DD.") from exc
 
-    is_auto_match = ai_score >= 0.55 and matched_item_id is not None
+    is_auto_match = ai_score >= MATCH_THRESHOLD and matched_item_id is not None
     computed_embedding = image_embedding or ""
     if query_images:
         computed_embedding = json.dumps(

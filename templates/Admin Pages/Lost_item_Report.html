@@ -245,17 +245,31 @@
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
                         <div class="possible-matches-panel" id="possibleMatchesPanel">
-                            <p><strong>Possible Matches:</strong></p>
-                            <div id="modalPossibleMatches" class="description-text">Loading possible matches...</div>
+                            <p><strong>Possible Matches:</strong> <span id="possibleMatchCountText">Checking...</span></p>
+                            <button type="button" class="btn-found lost-submit-btn" id="viewPossibleMatchesBtn" style="margin:0;" onclick="openDetailPossibleMatches()" disabled>
+                                View Possible Matches
+                            </button>
                         </div>
                         
                         <div class="modal-actions">
-                            <button type="button" class="btn-found lost-submit-btn" id="applySelectedMatchBtn" style="display:none;" onclick="applySelectedPossibleMatch()">Use Selected Match</button>
                             <button type="button" class="btn-archive-big" id="archiveBtn">Delete</button>
                             <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="detailPossibleMatchesModal" class="modal-overlay" style="z-index: 30020;">
+            <div class="modal-content" style="max-width:760px; width:min(92vw, 760px); padding:28px;">
+                <span class="close-btn" onclick="closeModal('detailPossibleMatchesModal')">&times;</span>
+                <h2 style="margin-bottom:8px;">Possible <span style="color:#114b7a;">Matches</span></h2>
+                <p style="color:#5b6574; margin-bottom:18px;">Review the scored found-item candidates for this lost report.</p>
+                <div id="modalPossibleMatches" style="display:grid; gap:12px; max-height:440px; overflow-y:auto; padding-right:4px;">Loading possible matches...</div>
+                <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" class="btn-upload-img" onclick="closeModal('detailPossibleMatchesModal')" style="margin:0;">Close</button>
+                    <button type="button" class="btn-found lost-submit-btn" id="applySelectedMatchBtn" style="display:none; margin:0;" onclick="applySelectedPossibleMatch()">Use Selected Match</button>
                 </div>
             </div>
         </div>
@@ -388,7 +402,7 @@
                     </div>
                 </div>
             </div>
-            <div id="matchResultsModal" class="modal-overlay" style="z-index: 1002;">
+            <div id="matchResultsModal" class="modal-overlay" style="z-index: 30020;">
                 <div class="modal-content" style="max-width: 760px; width: min(92vw, 760px); padding: 28px;">
                     <span class="close-btn" onclick="closeMatchResultsModal()">&times;</span>
                     <h2 id="matchResultsTitle" style="margin-bottom: 8px;">Analysis complete</h2>
@@ -887,13 +901,27 @@ function showAccessDeniedPopup(permName) {
     }
 
         let currentDetailLostItemId = null;
+        let detailPossibleMatchCount = 0;
+
+        function openDetailPossibleMatches() {
+            if (!detailPossibleMatchCount) return;
+            openModal('detailPossibleMatchesModal');
+        }
 
         async function loadPossibleMatchesForDetail(itemId, categoryFallback = '', isMatched = false, isArchived = false) {
     const container = document.getElementById("modalPossibleMatches");
     const applyBtn = document.getElementById("applySelectedMatchBtn");
+    const viewBtn = document.getElementById("viewPossibleMatchesBtn");
+    const countText = document.getElementById("possibleMatchCountText");
     if (!container) return;
 
     container.textContent = "Loading possible matches...";
+    detailPossibleMatchCount = 0;
+    if (countText) countText.textContent = "Checking...";
+    if (viewBtn) {
+        viewBtn.disabled = true;
+        viewBtn.textContent = "Checking Possible Matches...";
+    }
     if (applyBtn) {
         applyBtn.style.display = "none";
         applyBtn.disabled = true;
@@ -914,10 +942,18 @@ function showAccessDeniedPopup(permName) {
 
         if (!matchedItems.length) {
             container.textContent = "No possible matches found for this item yet.";
+            if (countText) countText.textContent = "None found";
+            if (viewBtn) viewBtn.textContent = "No Possible Matches";
             return;
         }
 
         currentDetailLostItemId = itemId;
+        detailPossibleMatchCount = matchedItems.length;
+        if (countText) countText.textContent = `${matchedItems.length} found`;
+        if (viewBtn) {
+            viewBtn.disabled = false;
+            viewBtn.textContent = `View Possible Matches (${matchedItems.length})`;
+        }
         container.innerHTML = matchedItems.map((match, index) => `
             <label style="display:block; border:1px solid #d9e4f2; border-radius:12px; padding:12px 14px; margin-bottom:10px; background:${index === 0 ? '#f7fbff' : '#fff'}; cursor:pointer;">
                 <div style="display:flex; gap:12px; align-items:flex-start;">
@@ -927,8 +963,9 @@ function showAccessDeniedPopup(permName) {
                         <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.category || categoryFallback || 'Item')}</div>
                         <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                         <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
+                        ${formatMatchScoreBreakdown(match)}
                     </div>
-                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${formatMatchScore(match.score)}</div>
+                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Final: ${formatMatchScore(match.score)}</div>
                 </div>
             </label>
         `).join('');
@@ -940,6 +977,8 @@ function showAccessDeniedPopup(permName) {
         }
     } catch (error) {
         container.textContent = error.message || "Failed to load possible matches.";
+        if (countText) countText.textContent = "Unavailable";
+        if (viewBtn) viewBtn.textContent = "Possible Matches Unavailable";
     }
 }
 
@@ -989,6 +1028,7 @@ function showAccessDeniedPopup(permName) {
         }
 
         await showLostUploadAlert('success', 'Match saved', result.message || 'The selected match was saved for admin review.');
+        closeModal('detailPossibleMatchesModal');
         closeModal('itemDetailModal');
         await loadLostItems();
     } catch (error) {
@@ -1151,6 +1191,18 @@ function showAccessDeniedPopup(permName) {
         return `${(numericScore * 100).toFixed(1)}%`;
     }
 
+    function formatMatchScoreBreakdown(match) {
+        if (!match || match.image_similarity === undefined || match.text_similarity === undefined) {
+            return '';
+        }
+        return `
+            <div style="margin-top:6px; font-size:12px; line-height:1.55; color:#556678;">
+                Image: ${formatMatchScore(match.image_similarity)} &middot;
+                Text: ${formatMatchScore(match.text_similarity)}
+            </div>
+        `;
+    }
+
     function getMatchImageUrl(match) {
         return getItemImageUrl(match?.image_path);
     }
@@ -1193,7 +1245,8 @@ function showAccessDeniedPopup(permName) {
                         <div style="font-size: 20px; font-weight: 700; color: #0e2742;">${escapeModalHtml(topMatch.category || 'Matched Item')}</div>
                         <div style="margin-top: 8px; color: #41556b;">ID: ${escapeModalHtml(String(topMatch.id || 'N/A'))}</div>
                         <div style="margin-top: 4px; color: #41556b;">Location: ${escapeModalHtml(topMatch.location || 'Unknown')}</div>
-                        <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Score: ${formatMatchScore(topMatch.score)}</div>
+                        <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Final score: ${formatMatchScore(topMatch.score)}</div>
+                        ${formatMatchScoreBreakdown(topMatch)}
                     </div>
                 </div>
             `;
@@ -1211,10 +1264,11 @@ function showAccessDeniedPopup(permName) {
                         <div style="flex:1;">
                             <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.category || 'Item')}</div>
                             <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
-                            <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
+                        <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
+                        ${formatMatchScoreBreakdown(match)}
                         </div>
                     </div>
-                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">${formatMatchScore(match.score)}</div>
+                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Final: ${formatMatchScore(match.score)}</div>
                 </div>
             </label>
         `).join('');
@@ -1808,6 +1862,32 @@ async function executeSubmit() {
             return;
         }
 
+        // Close the review dialog before showing AI results. Keeping both
+        // overlays open made the match confirmation appear hidden behind it.
+        closeModal('confirmModal');
+        if (matchedItems.length > 0) {
+            selectedMatch = await showMatchResultsModal({
+                title: hasConfirmedMatch ? 'Match Found' : 'Possible Matches Found',
+                summary: hasConfirmedMatch
+                    ? 'A strong match was found. Review the score and candidate before the report is saved.'
+                    : 'Review the possible matches found before the report is saved.',
+                topMatch: hasConfirmedMatch
+                    ? {
+                        ...aiResult.matched_item,
+                        category: aiResult.matched_item.category || catName,
+                    }
+                    : null,
+                matches: matchedItems,
+            }) || selectedMatch;
+            if (!hasConfirmedMatch) selectedMatch = null;
+        } else {
+            await showLostUploadAlert(
+                'info',
+                'Analysis complete',
+                `No possible matches found. Highest evaluated score: ${formatMatchScore(aiResult?.highest_score)}.`
+            );
+        }
+
         const saveData = new FormData();
         if (imageFile) saveData.append("file", imageFile);
         saveData.append("item_name", document.getElementById('itemName').value);
@@ -1847,6 +1927,9 @@ async function executeSubmit() {
         }
     } catch (err) {
         await showLostUploadAlert('error', 'Submission failed', err.message || 'Failed to save the lost report.');
+        if (document.getElementById('confirmModal')?.style.display === 'none') {
+            openModal('confirmModal');
+        }
     } finally {
         confirmBtn.disabled = false;
         confirmBtn.innerText = "Confirm & Report";
