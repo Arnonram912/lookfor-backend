@@ -547,6 +547,7 @@ async def update_student_profile(
     course: str = Form(None),
     section: str = Form(None),
     profile_img: UploadFile = File(None),
+    remove_profile_img: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_active_student_user) 
 ):
@@ -556,13 +557,16 @@ async def update_student_profile(
         return {"error": "User not found"}
 
     # Handle Image Upload
-    if profile_img and profile_img.filename:
+    if remove_profile_img:
+        user.profile_pic = None
+    elif profile_img and profile_img.filename:
         try:
             validate_upload_file_size(profile_img, label="Profile image")
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         user.profile_pic = save_file(profile_img, "profile-pics")
 
+  
     # Only update fields that were submitted. Image-only saves should not erase
     # existing profile information.
     if full_name is not None:
