@@ -246,6 +246,9 @@
                         <p id="modalDescription" class="description-text"></p>
                         <div class="possible-matches-panel" id="possibleMatchesPanel">
                             <p><strong>Possible Matches:</strong> <span id="possibleMatchCountText">Checking...</span></p>
+                            <button type="button" class="btn-upload-img" id="analyzeMatchesBtn" style="margin:0 8px 0 0;" onclick="analyzeLostItemMatches()">
+                                Analyze Match
+                            </button>
                             <button type="button" class="btn-found lost-submit-btn" id="viewPossibleMatchesBtn" style="margin:0;" onclick="openDetailPossibleMatches()" disabled>
                                 View Possible Matches
                             </button>
@@ -938,29 +941,48 @@ function showAccessDeniedPopup(permName) {
         }
 
         const result = await response.json();
+        renderDetailPossibleMatches(result, categoryFallback, isMatched, isArchived);
+    } catch (error) {
+        container.textContent = error.message || "Failed to load possible matches.";
+        if (countText) countText.textContent = "Unavailable";
+        if (viewBtn) viewBtn.textContent = "Possible Matches Unavailable";
+    }
+}
+
+function renderDetailPossibleMatches(result, categoryFallback = '', isMatched = false, isArchived = false) {
+        const container = document.getElementById("modalPossibleMatches");
+        const applyBtn = document.getElementById("applySelectedMatchBtn");
+        const viewBtn = document.getElementById("viewPossibleMatchesBtn");
+        const countText = document.getElementById("possibleMatchCountText");
         const matchedItems = Array.isArray(result?.matched_items) ? result.matched_items : [];
 
         if (!matchedItems.length) {
+            detailPossibleMatchCount = 0;
             container.textContent = "No possible matches found for this item yet.";
             if (countText) countText.textContent = "None found";
             if (viewBtn) viewBtn.textContent = "No Possible Matches";
+            if (applyBtn) {
+                applyBtn.style.display = "none";
+                applyBtn.disabled = true;
+            }
             return;
         }
 
-        currentDetailLostItemId = itemId;
         detailPossibleMatchCount = matchedItems.length;
         if (countText) countText.textContent = `${matchedItems.length} found`;
         if (viewBtn) {
             viewBtn.disabled = false;
             viewBtn.textContent = `View Possible Matches (${matchedItems.length})`;
         }
+        const firstApprovedIndex = matchedItems.findIndex(match => match.source !== 'pending_found');
         container.innerHTML = matchedItems.map((match, index) => `
             <label style="display:block; border:1px solid #d9e4f2; border-radius:12px; padding:12px 14px; margin-bottom:10px; background:${index === 0 ? '#f7fbff' : '#fff'}; cursor:pointer;">
                 <div style="display:flex; gap:12px; align-items:flex-start;">
-                    <input type="radio" name="detailPossibleMatch" value="${match.id}" ${index === 0 ? 'checked' : ''} style="margin-top:4px;">
+                    <input type="radio" name="detailPossibleMatch" value="${match.id}" data-source="${match.source || 'found'}" ${index === firstApprovedIndex ? 'checked' : ''} ${match.source === 'pending_found' ? 'disabled' : ''} style="margin-top:4px;">
                     ${renderMatchThumbnail(match, match.category || 'Possible match image')}
                     <div style="flex:1;">
-                        <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.category || categoryFallback || 'Item')}</div>
+                        <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.item_name || match.category || categoryFallback || 'Item')}</div>
+                        ${match.source === 'pending_found' ? '<div style="margin-top:5px; color:#a96600; font-weight:700; font-size:12px;">AWAITING APPROVAL</div>' : ''}
                         <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                         <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
                         ${formatMatchScoreBreakdown(match)}
@@ -970,15 +992,36 @@ function showAccessDeniedPopup(permName) {
             </label>
         `).join('');
 
-        if (applyBtn && !isArchived) {
+        if (applyBtn && !isArchived && firstApprovedIndex >= 0) {
             applyBtn.style.display = "inline-flex";
             applyBtn.disabled = false;
             applyBtn.textContent = isMatched ? "Add Selected Match Review" : "Use Selected Match";
         }
+}
+
+async function analyzeLostItemMatches() {
+    if (!currentDetailLostItemId) return;
+    const button = document.getElementById('analyzeMatchesBtn');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Analyzing...';
+    }
+    try {
+        const response = await fetch(`/api/items/${currentDetailLostItemId}/analyze-matches`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || 'Match analysis failed.');
+        renderDetailPossibleMatches(result);
+        openModal('detailPossibleMatchesModal');
     } catch (error) {
-        container.textContent = error.message || "Failed to load possible matches.";
-        if (countText) countText.textContent = "Unavailable";
-        if (viewBtn) viewBtn.textContent = "Possible Matches Unavailable";
+        await showLostUploadAlert('error', 'Analysis failed', error.message || 'Failed to analyze matches.');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = 'Analyze Match';
+        }
     }
 }
 
@@ -1093,6 +1136,7 @@ function showAccessDeniedPopup(permName) {
         possibleMatchesPanel.style.display = lostLifecycleView !== "active" ? "none" : "";
     }
     if (lostLifecycleView === "active") {
+        currentDetailLostItemId = item.id;
         loadPossibleMatchesForDetail(item.id, item.category, Boolean(item.is_matched), false);
     }
     const archiveBtn = document.getElementById("archiveBtn");

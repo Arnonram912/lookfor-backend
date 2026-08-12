@@ -1766,20 +1766,21 @@ def normalize_match_value(value):
 
 def build_item_dataset_text(item):
     name_part = (getattr(item, "item_name", None) or "").strip()
-    if not name_part and item.description:
-        if item.description.startswith("[") and "]" in item.description:
-            name_part = item.description[1:item.description.index("]")]
+    description = getattr(item, "description", None)
+    if not name_part and description:
+        if description.startswith("[") and "]" in description:
+            name_part = description[1:description.index("]")]
         else:
-            name_part = item.description.split(".")[0][:80]
+            name_part = description.split(".")[0][:80]
 
     parts = [
-        f"category {item.category}" if item.category else "",
+        f"category {item.category}" if getattr(item, "category", None) else "",
         f"name {name_part}" if name_part else "",
-        f"brand {item.brand}" if item.brand else "",
-        f"color {item.color}" if item.color else "",
-        f"location {item.location}" if item.location else "",
-        f"department {item.department}" if item.department else "",
-        f"description {item.description}" if item.description else "",
+        f"brand {item.brand}" if getattr(item, "brand", None) else "",
+        f"color {item.color}" if getattr(item, "color", None) else "",
+        f"location {item.location}" if getattr(item, "location", None) else "",
+        f"department {item.department}" if getattr(item, "department", None) else "",
+        f"description {description}" if description else "",
     ]
     return ". ".join(part for part in parts if part)
 
@@ -1827,7 +1828,7 @@ def compute_text_detail_matches(
     def item_category_name(item: models.Item) -> str:
         return item.category_relationship.name if getattr(item, "category_relationship", None) else item.category
 
-    def score_items(items: list[models.Item]) -> list[dict]:
+    def score_items(items, source: str = "found") -> list[dict]:
         candidates = []
         for item in items:
             try:
@@ -1854,6 +1855,7 @@ def compute_text_detail_matches(
 
                 candidates.append({
                     "id": item.id,
+                    "source": source,
                     "score": round(score, 4),
                     "image_similarity": round(image_score, 4),
                     "text_similarity": round(text_score, 4),
@@ -1880,7 +1882,19 @@ def compute_text_detail_matches(
     if exclude_item_id is not None:
         candidate_items = [item for item in candidate_items if item.id != exclude_item_id]
 
-    ranked_candidates = score_items(candidate_items)
+    ranked_candidates = score_items(candidate_items, "found")
+
+    # A lost report may be analyzed before the corresponding found report has
+    # completed admin approval. Include active pending found reports so a
+    # manual re-analysis can surface the real candidate instead of keeping a
+    # stale, lower-quality approved candidate.
+    if normalized_status == "lost":
+        pending_items = db.query(models.PendingItem).filter(
+            models.PendingItem.archived == False,
+            models.PendingItem.deleted == False,
+        ).all()
+        ranked_candidates.extend(score_items(pending_items, "pending_found"))
+
     ranked_candidates.sort(key=lambda x: x["score"], reverse=True)
     ranked_candidates = ranked_candidates[:5]
     all_matches = [
@@ -2377,6 +2391,26 @@ def get_saved_item_possible_matches(
         query_text_vec=query_text_vec,
         exclude_item_id=item.id,
     )
+
+
+@app.post("/api/items/{item_id}/analyze-matches")
+def analyze_lost_item_matches(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Recalculate and persist possible matches for an existing lost report."""
+    item = db.query(models.Item).filter(models.Item.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if str(item.status or "").strip().lower() != "lost":
+        raise HTTPException(status_code=400, detail="Only lost reports can be analyzed")
+    if not user_can_access_item(current_user, item):
+        raise HTTPException(status_code=403, detail="You do not have access to this item")
+
+    result = analyze_saved_item_details(db, item, record_type="item")
+    db.commit()
+    return result
 
 
 @app.get("/api/users/list")
