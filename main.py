@@ -2308,6 +2308,22 @@ async def compare_text_details(
     )
 
 
+def user_can_access_item(current_user: models.User, item: models.Item) -> bool:
+    """Allow administrators and the recorded owner to access an item."""
+    current_user_name = format_user_display_name(current_user).strip().lower()
+    legacy_name_matches = (
+        not getattr(item, "report_owner_user_id", None)
+        and current_user_name
+        and str(getattr(item, "report_owner_name", "") or "").strip().lower() == current_user_name
+    )
+    user_owns_report = (
+        item.user_id == current_user.id
+        or getattr(item, "report_owner_user_id", None) == current_user.id
+        or legacy_name_matches
+    )
+    return bool(current_user.is_admin or user_owns_report)
+
+
 @app.get("/api/items/{item_id}/possible-matches")
 def get_saved_item_possible_matches(
     item_id: int,
@@ -2327,18 +2343,7 @@ def get_saved_item_possible_matches(
             "action": "no_match"
         }
 
-    current_user_name = format_user_display_name(current_user).strip().lower()
-    legacy_name_matches = (
-        not getattr(item, "report_owner_user_id", None)
-        and current_user_name
-        and str(getattr(item, "report_owner_name", "") or "").strip().lower() == current_user_name
-    )
-    user_owns_report = (
-        item.user_id == current_user.id
-        or getattr(item, "report_owner_user_id", None) == current_user.id
-        or legacy_name_matches
-    )
-    if not current_user.is_admin and not user_owns_report:
+    if not user_can_access_item(current_user, item):
         raise HTTPException(status_code=403, detail="You do not have access to this item")
 
     if item.possible_matches:
