@@ -4367,6 +4367,17 @@ async def approve_item(
     if not pending:
         raise HTTPException(status_code=404, detail="Item not found")
 
+    # The matching item may have been reported after this found report entered
+    # the approval queue. Refresh its lost-item comparison before moving it to
+    # inventory so approval can replace a stale candidate automatically.
+    if not pending.matched_item_id:
+        try:
+            from main import analyze_saved_item_details
+
+            analyze_saved_item_details(db, pending, record_type="pending-found")
+        except Exception as exc:
+            print(f"Pending item #{item_id} approval match analysis failed: {exc}")
+
     # 2. Move to main Items table
     # We carry over the 'matched_item_id' logic here
     new_item = models.Item(
