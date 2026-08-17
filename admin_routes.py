@@ -256,7 +256,7 @@ class BulkItemDeleteTarget(BaseModel):
 
 class BulkItemDeleteRequest(BaseModel):
     scope: str
-    items: list[BulkItemDeleteTarget] = Field(..., min_length=1, max_length=500)
+    items: list[BulkItemDeleteTarget]
 
 
 class UserBatchActionResult(BaseModel):
@@ -5182,6 +5182,10 @@ def bulk_move_items_to_deleted(
     scope = str(payload.scope or "").strip().lower()
     if scope not in {"lost", "found"}:
         raise HTTPException(status_code=400, detail="Bulk item scope must be lost or found")
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="Select at least one item")
+    if len(payload.items) > 500:
+        raise HTTPException(status_code=400, detail="A maximum of 500 items can be deleted at once")
 
     require_admin_permission(current_admin, f"{scope}_items.delete")
     unique_targets = {

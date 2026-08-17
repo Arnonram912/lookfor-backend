@@ -49,6 +49,16 @@ def admin(permission):
 
 
 class AdminItemBulkDeleteTests(unittest.TestCase):
+    def test_empty_bulk_delete_is_rejected_by_endpoint_validation(self):
+        with self.assertRaises(HTTPException) as raised:
+            bulk_move_items_to_deleted(
+                BulkItemDeleteRequest(scope="found", items=[]),
+                db=FakeSession(),
+                current_admin=admin("found_items.delete"),
+            )
+
+        self.assertEqual(raised.exception.status_code, 400)
+
     def test_found_bulk_delete_updates_regular_and_pending_items_once(self):
         found_item = SimpleNamespace(id=1, status="found", archived=False, deleted=False)
         pending_item = SimpleNamespace(id=2, archived=False, deleted=False)
