@@ -249,6 +249,16 @@ class StudentActivationRequest(BaseModel):
     user_ids: list[int]
 
 
+class BulkItemDeleteTarget(BaseModel):
+    id: int = Field(..., gt=0)
+    is_pending: bool = False
+
+
+class BulkItemDeleteRequest(BaseModel):
+    scope: str
+    items: list[BulkItemDeleteTarget] = Field(..., min_length=1, max_length=500)
+
+
 class UserBatchActionResult(BaseModel):
     message: str
     count: int
@@ -372,9 +382,10 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
 def serialize_found_item_match(
     found_item: models.Item,
     score: float | None = None,
-    previous_pending_id: int | None = None
+    previous_pending_id: int | None = None,
+    evaluation: dict | None = None,
 ) -> dict:
-    return {
+    payload = {
         "id": found_item.id,
         "score": round(float(score or 0), 4),
         "item_name": found_item.item_name,
@@ -387,6 +398,88 @@ def serialize_found_item_match(
         "source": "found",
         "previous_pending_id": previous_pending_id,
     }
+    for key in (
+        "image_similarity",
+        "text_similarity",
+        "detail_similarity",
+        "category_similarity",
+        "item_type_similarity",
+        "location_similarity",
+        "brand_similarity",
+        "color_similarity",
+        "description_similarity",
+        "event_time_similarity",
+        "cross_category",
+        "item_type_conflict",
+        "brand_conflict",
+        "color_conflict",
+        "warning",
+    ):
+        if evaluation is not None and key in evaluation:
+            payload[key] = evaluation.get(key)
+    return payload
+
+
+def get_cached_found_match_evaluations(
+    db: Session,
+    *,
+    found_item_id: int,
+    source: str,
+) -> list[dict]:
+    """Reverse lost-report caches into an admin-facing found-item evaluation."""
+    evaluations = []
+    lost_items = db.query(models.Item).filter(
+        models.Item.status.ilike("lost"),
+        models.Item.possible_matches.isnot(None),
+    ).all()
+    for lost_item in lost_items:
+        try:
+            cached_matches = json.loads(lost_item.possible_matches or "[]")
+        except (TypeError, ValueError):
+            continue
+        for cached_match in cached_matches if isinstance(cached_matches, list) else []:
+            if not isinstance(cached_match, dict):
+                continue
+            cached_source = cached_match.get("source", "found")
+            if cached_match.get("id") != found_item_id or cached_source != source:
+                continue
+            evaluation = {
+                "id": lost_item.id,
+                "item_code": item_display_code(lost_item),
+                "item_name": lost_item.item_name,
+                "category": lost_item.category,
+                "location": lost_item.location,
+                "image_path": public_file_url(lost_item.image_path),
+                "brand": lost_item.brand,
+                "color": lost_item.color,
+                "description": lost_item.description,
+                "score": clamp_similarity_score(cached_match.get("score")),
+                "source": "lost",
+            }
+            for key in (
+                "image_similarity",
+                "text_similarity",
+                "detail_similarity",
+                "category_similarity",
+                "item_type_similarity",
+                "location_similarity",
+                "brand_similarity",
+                "color_similarity",
+                "description_similarity",
+                "event_time_similarity",
+                "cross_category",
+                "item_type_conflict",
+                "brand_conflict",
+                "color_conflict",
+                "warning",
+            ):
+                if key in cached_match:
+                    evaluation[key] = cached_match.get(key)
+            evaluations.append(evaluation)
+            break
+
+    evaluations.sort(key=lambda match: float(match.get("score", 0) or 0), reverse=True)
+    return evaluations[:5]
 
 
 def item_has_approved_claim(db: Session, item: models.Item) -> bool:
@@ -490,6 +583,20 @@ def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> 
     match_id = match_payload.get("id")
     match_source = match_payload.get("source")
     previous_pending_id = match_payload.get("previous_pending_id")
+    existing_match = next((
+        match for match in existing_matches
+        if isinstance(match, dict)
+        and (
+            (match.get("id") == match_id and match.get("source", "found") == match_source)
+            or (
+                previous_pending_id
+                and match.get("id") == previous_pending_id
+                and match.get("source") == "pending_found"
+            )
+        )
+    ), None)
+    if existing_match:
+        match_payload = {**existing_match, **match_payload}
     deduped_matches = [
         match for match in existing_matches
         if not (
@@ -2378,6 +2485,48 @@ async def confirm_match(
 
     db.commit()
     return {"message": "Items successfully matched!"}
+
+
+@router.get("/items/found/{item_id}/match-evaluation")
+def get_found_item_match_evaluation(
+    item_id: int,
+    record_type: str = Query("found"),
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("found_items.view")),
+):
+    normalized_type = str(record_type or "found").strip().lower()
+    if normalized_type == "pending_found":
+        found_item = db.query(models.PendingItem).filter(
+            models.PendingItem.id == item_id,
+        ).first()
+        source = "pending_found"
+    elif normalized_type == "found":
+        found_item = db.query(models.Item).filter(
+            models.Item.id == item_id,
+            models.Item.status.ilike("found"),
+        ).first()
+        source = "found"
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported found-item record type")
+
+    if not found_item:
+        raise HTTPException(status_code=404, detail="Found item not found")
+
+    evaluations = get_cached_found_match_evaluations(
+        db,
+        found_item_id=item_id,
+        source=source,
+    )
+    best_match = evaluations[0] if evaluations else None
+    highest_score = float(best_match.get("score", 0) or 0) if best_match else 0.0
+    return {
+        "highest_score": round(highest_score, 4),
+        "matched_item": best_match if highest_score >= MATCH_THRESHOLD else None,
+        "matched_items": evaluations,
+        "action": "show_match" if evaluations else "no_match",
+        "cached": True,
+        "record_type": source,
+    }
 
 
 @router.get("/items/found")
@@ -4416,6 +4565,7 @@ async def approve_item(
                         new_item,
                         float(cached_match.get("score", 0) or 0),
                         previous_pending_id=pending.id,
+                        evaluation=cached_match,
                     )
                 )
                 changed = True
@@ -5022,6 +5172,70 @@ async def finalize_found_upload(
         db.rollback()
         print(f"Database Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/items/bulk-delete")
+def bulk_move_items_to_deleted(
+    payload: BulkItemDeleteRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(get_current_admin),
+):
+    scope = str(payload.scope or "").strip().lower()
+    if scope not in {"lost", "found"}:
+        raise HTTPException(status_code=400, detail="Bulk item scope must be lost or found")
+
+    require_admin_permission(current_admin, f"{scope}_items.delete")
+    unique_targets = {
+        (target.id, bool(target.is_pending)): target
+        for target in payload.items
+    }
+    pending_ids = [
+        item_id for (item_id, is_pending) in unique_targets
+        if is_pending
+    ]
+    item_ids = [
+        item_id for (item_id, is_pending) in unique_targets
+        if not is_pending
+    ]
+
+    if scope == "lost" and pending_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Pending found reports cannot be included in a lost-item action",
+        )
+
+    updated_count = 0
+    if item_ids:
+        items = db.query(models.Item).filter(
+            models.Item.id.in_(item_ids),
+            models.Item.status.ilike(scope),
+        ).all()
+        for item in items:
+            item.archived = True
+            item.deleted = True
+            updated_count += 1
+
+    if pending_ids:
+        pending_items = db.query(models.PendingItem).filter(
+            models.PendingItem.id.in_(pending_ids),
+        ).all()
+        for pending_item in pending_items:
+            pending_item.archived = True
+            pending_item.deleted = True
+            updated_count += 1
+
+    if updated_count == 0:
+        raise HTTPException(status_code=404, detail="No selected items were found")
+
+    db.commit()
+    requested_count = len(unique_targets)
+    return {
+        "status": "success",
+        "message": f"{updated_count} item(s) moved to Deleted Items",
+        "updated_count": updated_count,
+        "requested_count": requested_count,
+        "missing_count": requested_count - updated_count,
+    }
+
 
 @router.put("/items/{item_id}/archive")
 async def archive_item(

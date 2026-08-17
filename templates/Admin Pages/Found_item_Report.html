@@ -16,7 +16,7 @@
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="/static/admin-item-bulk-actions.js?v=2"></script>
+    <script src="/static/admin-item-bulk-actions.js?v=3"></script>
 
     <script src="/static/ai-upload-loading.js" defer></script>
 </head>
@@ -194,7 +194,7 @@
                 </div>
 
                 <div class="admin-bulk-toolbar" id="foundBulkToolbar">
-                    <label><input type="checkbox" id="foundBulkSelectAll" onchange="toggleAdminBulkVisible('found', this.checked)"> Select visible</label>
+                    <label><input type="checkbox" id="foundBulkSelectAll" onchange="toggleAdminBulkVisible('found', this.checked)"> Select all on page</label>
                     <span class="admin-bulk-count" id="foundBulkCount">0 selected</span>
                     <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('found', 'archive')">Archive</button>
                     <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('found', 'delete')">Delete</button>
@@ -262,7 +262,7 @@
                         <p id="modalDescription" class="description-text"></p>
 
                         <div style="margin-top:16px; padding:14px; border:1px solid #d9e4f2; border-radius:12px; background:#f8fbff;">
-                            <strong style="color:#0e2742;">AI Match Evaluation Scores</strong>
+                            <strong style="color:#0e2742;">AI Match Evaluation (Admin Only)</strong>
                             <div id="modalMatchScores" style="margin-top:10px; display:grid; gap:10px;"></div>
                         </div>
                         
@@ -559,31 +559,69 @@ function showAccessDeniedPopup(permName) {
             }
         }
 
-        function renderFoundMatchScores(item) {
+        function renderFoundMatchScores(matches) {
             const container = document.getElementById('modalMatchScores');
             if (!container) return;
-            const matches = parseFoundPossibleMatches(item?.possible_matches).slice(0, 5);
+            matches = parseFoundPossibleMatches(matches).slice(0, 5);
             if (!matches.length) {
-                container.textContent = 'No evaluated candidates were saved for this item.';
+                container.textContent = 'No lost-report candidates reached the 45% review threshold.';
                 return;
             }
             container.innerHTML = matches.map((match, index) => {
-                const hasComponents = match.image_similarity !== undefined && match.text_similarity !== undefined;
+                const hasComponents = match.image_similarity !== undefined
+                    && match.image_similarity !== null
+                    && match.text_similarity !== undefined
+                    && match.text_similarity !== null;
+                const finalScore = Math.max(0, Math.min(1, Number(match.score || 0)));
+                const decisionLabel = finalScore >= 0.75 ? 'Automatic threshold reached' : 'Possible match';
                 return `
                     <div style="padding:10px 12px; border:1px solid #dce6f0; border-radius:10px; background:#fff;">
                         <div style="display:flex; justify-content:space-between; gap:12px; font-weight:700; color:#114b7a;">
-                            <span>${index + 1}. ${escapeFoundListHtml(match.item_name || match.category || 'Candidate')}</span>
+                            <span>${index + 1}. ${escapeFoundListHtml(match.item_code || `LOST-${match.id}`)} — ${escapeFoundListHtml(match.item_name || match.category || 'Lost item')}</span>
                             <span>Final: ${formatEvaluationScore(match.score)}</span>
+                        </div>
+                        <div style="margin-top:5px; font-size:12px; color:${finalScore >= 0.75 ? '#147a45' : '#8a5a00'}; font-weight:700;">
+                            ${decisionLabel}
                         </div>
                         ${hasComponents ? `
                             <div style="margin-top:6px; font-size:12px; color:#556678;">
                                 Image: ${formatEvaluationScore(match.image_similarity)} &middot;
                                 Text: ${formatEvaluationScore(match.text_similarity)}
+                                ${match.detail_similarity !== undefined && match.detail_similarity !== null
+                                    ? ` &middot; Details: ${formatEvaluationScore(match.detail_similarity)}`
+                                    : ''}
                             </div>
                         ` : '<div style="margin-top:6px; font-size:12px; color:#7b8794;">Component scores were not recorded for this older result.</div>'}
+                        <div style="margin-top:6px; font-size:12px; color:#556678;">
+                            ${escapeFoundListHtml(match.location || 'Location not specified')}
+                        </div>
+                        ${match.warning ? `<div style="margin-top:6px; font-size:12px; color:#a63b23;">${escapeFoundListHtml(match.warning)}</div>` : ''}
                     </div>
                 `;
             }).join('');
+        }
+
+        async function loadFoundMatchEvaluation(item) {
+            const container = document.getElementById('modalMatchScores');
+            if (!container || !item?.id) return;
+            const recordType = item.is_pending ? 'pending_found' : 'found';
+            const requestKey = `${recordType}:${item.id}`;
+            container.dataset.requestKey = requestKey;
+            container.textContent = 'Loading saved match evaluation…';
+
+            try {
+                const response = await fetch(
+                    `/admin/items/found/${item.id}/match-evaluation?record_type=${encodeURIComponent(recordType)}`,
+                    { headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` } }
+                );
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result.detail || 'Unable to load match evaluation.');
+                if (container.dataset.requestKey !== requestKey) return;
+                renderFoundMatchScores(result.matched_items || []);
+            } catch (error) {
+                if (container.dataset.requestKey !== requestKey) return;
+                container.textContent = error.message || 'Unable to load match evaluation.';
+            }
         }
 
         async function loadLostItems() {
@@ -1038,7 +1076,7 @@ function showAccessDeniedPopup(permName) {
 
     // Description
     document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
-    renderFoundMatchScores(item);
+    loadFoundMatchEvaluation(item);
     
     const disposeBtn = document.getElementById("disposeBtn");
     const archiveBtn = document.getElementById("archiveBtn");

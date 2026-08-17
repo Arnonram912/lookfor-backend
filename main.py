@@ -2027,8 +2027,13 @@ def item_detail_owner_matches(item, current_user: models.User) -> bool:
     )
 
 
-def build_saved_match_payload(item, score: float, source: str) -> dict:
-    return {
+def build_saved_match_payload(
+    item,
+    score: float,
+    source: str,
+    evaluation: dict | None = None,
+) -> dict:
+    payload = {
         "id": item.id,
         "score": round(clamp_similarity_score(score), 4),
         "item_name": item.item_name,
@@ -2040,6 +2045,26 @@ def build_saved_match_payload(item, score: float, source: str) -> dict:
         "description": item.description,
         "source": source,
     }
+    for key in (
+        "image_similarity",
+        "text_similarity",
+        "detail_similarity",
+        "category_similarity",
+        "item_type_similarity",
+        "location_similarity",
+        "brand_similarity",
+        "color_similarity",
+        "description_similarity",
+        "event_time_similarity",
+        "cross_category",
+        "item_type_conflict",
+        "brand_conflict",
+        "color_conflict",
+        "warning",
+    ):
+        if evaluation is not None and key in evaluation:
+            payload[key] = evaluation.get(key)
+    return payload
 
 
 def replace_possible_match(lost_item: models.Item, match_payload: dict) -> None:
@@ -2144,7 +2169,12 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
             if lost_item:
                 replace_possible_match(
                     lost_item,
-                    build_saved_match_payload(item, candidate.get("score", 0), match_source),
+                    build_saved_match_payload(
+                        item,
+                        candidate.get("score", 0),
+                        match_source,
+                        evaluation=candidate,
+                    ),
                 )
 
     return result
@@ -2597,6 +2627,14 @@ def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> 
 
     match_id = match_payload.get("id")
     match_source = match_payload.get("source", "found")
+    existing_match = next((
+        match for match in existing_matches
+        if isinstance(match, dict)
+        and match.get("id") == match_id
+        and match.get("source", "found") == match_source
+    ), None)
+    if existing_match:
+        match_payload = {**existing_match, **match_payload}
     deduped_matches = [
         match for match in existing_matches
         if not (

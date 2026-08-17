@@ -194,6 +194,14 @@ def prepend_lost_possible_match(lost_item: models.Item, match_payload: dict) -> 
 
     match_source = match_payload.get("source")
     match_id = match_payload.get("id")
+    existing_match = next((
+        match for match in existing_matches
+        if isinstance(match, dict)
+        and match.get("id") == match_id
+        and match.get("source", "found") == match_source
+    ), None)
+    if existing_match:
+        match_payload = {**existing_match, **match_payload}
     deduped_matches = [
         match for match in existing_matches
         if not (

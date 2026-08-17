@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="/static/admin-item-bulk-actions.js?v=2"></script>
+    <script src="/static/admin-item-bulk-actions.js?v=3"></script>
     <script src="/static/ai-upload-loading.js" defer></script>
 </head>
 <body> 
@@ -179,7 +179,7 @@
                 </div>
 
                 <div class="admin-bulk-toolbar" id="lostBulkToolbar">
-                    <label><input type="checkbox" id="lostBulkSelectAll" onchange="toggleAdminBulkVisible('lost', this.checked)"> Select visible</label>
+                    <label><input type="checkbox" id="lostBulkSelectAll" onchange="toggleAdminBulkVisible('lost', this.checked)"> Select all on page</label>
                     <span class="admin-bulk-count" id="lostBulkCount">0 selected</span>
                     <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'archive')">Archive</button>
                     <button type="button" class="upload-btn" onclick="runAdminBulkItemAction('lost', 'delete')">Delete</button>

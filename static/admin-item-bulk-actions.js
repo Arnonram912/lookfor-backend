@@ -2,7 +2,7 @@
     const scopes = new Map();
 
     window.registerAdminItemBulkScope = function (name, config) {
-        scopes.set(name, { config, selected: new Map(), visible: [], active: false });
+        scopes.set(name, { config, selected: new Map(), visible: [], active: false, running: false });
         updateToolbar(name);
     };
 
@@ -61,6 +61,7 @@
 
     window.runAdminBulkItemAction = async function (name, action) {
         const scope = scopes.get(name);
+        if (scope?.running) return;
         const items = scope ? Array.from(scope.selected.values()) : [];
         if (!items.length) return Swal.fire({ icon: 'info', title: 'No items selected', text: 'Select at least one item first.' });
         const view = scope.config.getView();
@@ -76,28 +77,78 @@
         let note = '';
         if (action === 'dispose' && view === 'archive') note = window.prompt('Optional disposal note:') || '';
         const token = sessionStorage.getItem('admin_token');
+
+        if (action === 'delete') {
+            scope.running = true;
+            try {
+                const response = await fetch('/admin/items/bulk-delete', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        scope: name,
+                        items: items.map(item => ({
+                            id: Number(item.id),
+                            is_pending: Boolean(item.is_pending)
+                        }))
+                    })
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(result.detail || 'Bulk delete failed');
+                scope.selected.clear();
+                await scope.config.reload();
+                const updated = Number(result.updated_count || 0);
+                const missing = Number(result.missing_count || 0);
+                await Swal.fire({
+                    icon: missing ? 'warning' : 'success',
+                    title: `${updated} item(s) moved`,
+                    text: missing
+                        ? `${missing} selected item(s) were no longer available.`
+                        : 'Selected items were moved to Deleted Items.'
+                });
+            } catch (error) {
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Bulk delete failed',
+                    text: error.message || 'The selected items could not be deleted.'
+                });
+            } finally {
+                scope.running = false;
+                updateToolbar(name);
+            }
+            return;
+        }
+
+        scope.running = true;
         let completed = 0;
         const failures = [];
-        for (const item of items) {
-            try {
-                const request = buildRequest(item, action, view, note);
-                const response = await fetch(request.url, { method: request.method, headers: { 'Authorization': `Bearer ${token}`, ...(request.body ? { 'Content-Type': 'application/json' } : {}) }, body: request.body });
-                if (!response.ok) {
-                    const error = await response.json().catch(() => ({}));
-                    throw new Error(error.detail || 'Action failed');
+        try {
+            for (const item of items) {
+                try {
+                    const request = buildRequest(item, action, view, note);
+                    const response = await fetch(request.url, { method: request.method, headers: { 'Authorization': `Bearer ${token}`, ...(request.body ? { 'Content-Type': 'application/json' } : {}) }, body: request.body });
+                    if (!response.ok) {
+                        const error = await response.json().catch(() => ({}));
+                        throw new Error(error.detail || 'Action failed');
+                    }
+                    completed += 1;
+                    scope.selected.delete(itemKey(item));
+                } catch (error) {
+                    failures.push(`#${item.id}: ${error.message}`);
                 }
-                completed += 1;
-                scope.selected.delete(itemKey(item));
-            } catch (error) {
-                failures.push(`#${item.id}: ${error.message}`);
             }
+            await scope.config.reload();
+            await Swal.fire({
+                icon: failures.length ? (completed ? 'warning' : 'error') : 'success',
+                title: failures.length ? `${completed} completed, ${failures.length} failed` : `${completed} item(s) updated`,
+                text: failures.slice(0, 4).join(' | ') || 'Bulk action completed successfully.'
+            });
+        } finally {
+            scope.running = false;
+            updateToolbar(name);
         }
-        await scope.config.reload();
-        Swal.fire({
-            icon: failures.length ? (completed ? 'warning' : 'error') : 'success',
-            title: failures.length ? `${completed} completed, ${failures.length} failed` : `${completed} item(s) updated`,
-            text: failures.slice(0, 4).join(' | ') || 'Bulk action completed successfully.'
-        });
     };
 
     function buildRequest(item, action, view, note) {
