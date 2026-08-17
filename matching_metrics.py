@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from collections import defaultdict
+from datetime import date, datetime
+from difflib import SequenceMatcher
 from typing import Any
 
 
@@ -11,7 +13,216 @@ IMAGE_WEIGHT = 0.60
 TEXT_WEIGHT = 0.40
 
 POSSIBLE_MATCH_THRESHOLD = 0.45
-MATCH_THRESHOLD = 0.55
+MATCH_THRESHOLD = 0.75
+
+CLIP_SCORE_WEIGHT = 0.80
+DETAIL_SCORE_WEIGHT = 0.20
+
+
+def clamp_similarity_score(value: Any) -> float:
+    """Keep internal similarity values within the display-safe 0..1 range."""
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        numeric_value = 0.0
+    return max(0.0, min(1.0, numeric_value))
+
+
+def _normalized_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().casefold().split())
+
+
+def _text_field_similarity(left: Any, right: Any) -> float | None:
+    """Return a conservative lexical similarity, or None when either field is absent."""
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    if not normalized_left or not normalized_right:
+        return None
+    if normalized_left == normalized_right:
+        return 1.0
+    if normalized_left in normalized_right or normalized_right in normalized_left:
+        return 0.9
+
+    left_tokens = set(normalized_left.split())
+    right_tokens = set(normalized_right.split())
+    token_union = left_tokens | right_tokens
+    token_score = len(left_tokens & right_tokens) / len(token_union) if token_union else 0.0
+    sequence_score = SequenceMatcher(None, normalized_left, normalized_right).ratio()
+    return round(max(token_score, sequence_score), 4)
+
+
+def _coerce_date(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value or "").strip()[:10])
+    except ValueError:
+        return None
+
+
+def _time_minutes(value: Any) -> int | None:
+    raw = str(value or "").strip()
+    for pattern in ("%H:%M", "%H:%M:%S", "%I:%M %p"):
+        try:
+            parsed = datetime.strptime(raw, pattern)
+            return parsed.hour * 60 + parsed.minute
+        except ValueError:
+            continue
+    return None
+
+
+def _event_time_similarity(
+    left_date_value: Any,
+    left_time_value: Any,
+    right_date_value: Any,
+    right_time_value: Any,
+) -> float | None:
+    """Compare date and time as one event timestamp when both are available."""
+    left_date = _coerce_date(left_date_value)
+    right_date = _coerce_date(right_date_value)
+    if left_date is None or right_date is None:
+        return None
+
+    left_minutes = _time_minutes(left_time_value)
+    right_minutes = _time_minutes(right_time_value)
+    if left_minutes is not None and right_minutes is not None:
+        left_event = datetime.combine(left_date, datetime.min.time())
+        right_event = datetime.combine(right_date, datetime.min.time())
+        difference_minutes = abs(
+            int((left_event - right_event).total_seconds() / 60)
+            + left_minutes
+            - right_minutes
+        )
+        if difference_minutes <= 30:
+            return 1.0
+        if difference_minutes <= 60:
+            return 0.9
+        if difference_minutes <= 180:
+            return 0.75
+        if difference_minutes <= 720:
+            return 0.4
+        if difference_minutes <= 1440:
+            return 0.25
+        if difference_minutes <= 4320:
+            return 0.1
+        return 0.0
+
+    days = abs((left_date - right_date).days)
+    if days == 0:
+        return 1.0
+    if days == 1:
+        return 0.75
+    if days <= 3:
+        return 0.4
+    if days <= 7:
+        return 0.15
+    return 0.0
+
+
+_COLOR_FAMILIES = {
+    "black": "dark-neutral",
+    "charcoal": "dark-neutral",
+    "dark gray": "dark-neutral",
+    "dark grey": "dark-neutral",
+    "gray": "neutral",
+    "grey": "neutral",
+    "silver": "neutral",
+    "white": "light-neutral",
+    "cream": "light-neutral",
+    "beige": "light-neutral",
+    "navy": "dark-blue",
+    "dark blue": "dark-blue",
+    "blue": "blue",
+}
+
+_ITEM_TYPE_ALIASES = {
+    "eyewear": ("eyeglasses", "eye glasses", "glasses", "spectacles"),
+    "charger": ("charger", "charging cable", "power adapter", "power adaptor"),
+    "sim-card": ("sim card", "simcard", "subscriber identity module"),
+    "alcohol": ("alcohol", "rubbing alcohol", "isopropyl"),
+}
+
+
+def _canonical_item_type(value: Any) -> str | None:
+    normalized = _normalized_text(value)
+    for canonical, aliases in _ITEM_TYPE_ALIASES.items():
+        if any(alias in normalized for alias in aliases):
+            return canonical
+    return None
+
+
+def _item_type_similarity(left: Any, right: Any) -> float | None:
+    lexical_score = _text_field_similarity(left, right)
+    if lexical_score is None:
+        return None
+    left_type = _canonical_item_type(left)
+    right_type = _canonical_item_type(right)
+    if left_type and right_type:
+        return 1.0 if left_type == right_type else 0.0
+    return lexical_score
+
+
+def _color_similarity(left: Any, right: Any) -> float | None:
+    lexical_score = _text_field_similarity(left, right)
+    if lexical_score is None or lexical_score == 1.0:
+        return lexical_score
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    left_family = _COLOR_FAMILIES.get(normalized_left)
+    right_family = _COLOR_FAMILIES.get(normalized_right)
+    if left_family and left_family == right_family:
+        return 0.85
+    if {left_family, right_family} == {"dark-neutral", "dark-blue"}:
+        return 0.55
+    return lexical_score
+
+
+def calculate_detail_similarity(query: Mapping[str, Any], candidate: Mapping[str, Any]) -> tuple[float | None, dict[str, float | None]]:
+    """Compare item details explicitly so close place/date/time reports rank higher.
+
+    Missing fields are ignored instead of being treated as mismatches. Description
+    has a smaller structured weight because semantic description matching is already
+    represented by the CLIP text score.
+    """
+    components = {
+        "category_similarity": _text_field_similarity(query.get("category"), candidate.get("category")),
+        "item_type_similarity": _item_type_similarity(query.get("item_name"), candidate.get("item_name")),
+        "location_similarity": _text_field_similarity(query.get("location"), candidate.get("location")),
+        "brand_similarity": _text_field_similarity(query.get("brand"), candidate.get("brand")),
+        "color_similarity": _color_similarity(query.get("color"), candidate.get("color")),
+        "description_similarity": _text_field_similarity(query.get("description"), candidate.get("description")),
+        "event_time_similarity": _event_time_similarity(
+            query.get("date"),
+            query.get("time_found"),
+            candidate.get("date"),
+            candidate.get("time_found"),
+        ),
+    }
+    weights = {
+        "category_similarity": 0.20,
+        "item_type_similarity": 0.20,
+        "location_similarity": 0.15,
+        "brand_similarity": 0.12,
+        "color_similarity": 0.08,
+        "description_similarity": 0.10,
+        "event_time_similarity": 0.15,
+    }
+    available_weight = sum(weights[name] for name, value in components.items() if value is not None)
+    if not available_weight:
+        return None, components
+    score = sum(weights[name] * float(value) for name, value in components.items() if value is not None)
+    return round(score / available_weight, 4), components
+
+
+def calculate_detailed_match_score(image_similarity: float, text_similarity: float, detail_similarity: float | None) -> float:
+    """Blend CLIP with explicit details while retaining legacy behavior if none exist."""
+    clip_score = calculate_match_score(image_similarity, text_similarity)
+    if detail_similarity is None:
+        return clip_score
+    score = (clip_score * CLIP_SCORE_WEIGHT) + (float(detail_similarity) * DETAIL_SCORE_WEIGHT)
+    return round(clamp_similarity_score(score), 4)
 
 
 def calculate_match_score(
@@ -22,7 +233,7 @@ def calculate_match_score(
     score = (float(image_similarity) * IMAGE_WEIGHT) + (
         float(text_similarity) * TEXT_WEIGHT
     )
-    return round(max(0.0, min(1.0, score)), 4)
+    return round(clamp_similarity_score(score), 4)
 
 
 def is_match(score: float, threshold: float = MATCH_THRESHOLD) -> bool:

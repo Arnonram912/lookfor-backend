@@ -76,7 +76,10 @@ from lookfor_permissions import normalize_permissions
 from matching_metrics import (
     MATCH_THRESHOLD,
     POSSIBLE_MATCH_THRESHOLD,
+    calculate_detail_similarity,
+    calculate_detailed_match_score,
     calculate_match_score,
+    clamp_similarity_score,
 )
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
@@ -1796,6 +1799,9 @@ def compute_text_detail_matches(
     status: str,
     search_vec: np.ndarray | None,
     query_text_vec: np.ndarray,
+    item_name: str | None = None,
+    date_value: date | str | None = None,
+    time_found: str | None = None,
     exclude_item_id: int | None = None,
 ):
     normalized_status = " ".join(str(status or "").strip().lower().split())
@@ -1836,7 +1842,7 @@ def compute_text_detail_matches(
                     continue
 
                 stored_vec = np.array(json.loads(item.image_embedding)).flatten()
-                image_score = (
+                image_score = clamp_similarity_score(
                     float(np.dot(search_vec, stored_vec))
                     if isinstance(search_vec, np.ndarray) and search_vec.size
                     else 0.0
@@ -1846,12 +1852,56 @@ def compute_text_detail_matches(
                 text_score = 0.0
                 if item_dataset_text:
                     dataset_text_vec = get_text_embedding(item_dataset_text)
-                    text_score = float(np.dot(query_text_vec, dataset_text_vec))
+                    text_score = clamp_similarity_score(np.dot(query_text_vec, dataset_text_vec))
 
-                score = calculate_match_score(
+                detail_score, detail_components = calculate_detail_similarity(
+                    {
+                        "category": category,
+                        "item_name": item_name,
+                        "location": location,
+                        "brand": brand,
+                        "color": color,
+                        "description": description,
+                        "date": date_value,
+                        "time_found": time_found,
+                    },
+                    {
+                        "category": item_category_name(item),
+                        "item_name": getattr(item, "item_name", None),
+                        "location": getattr(item, "location", None),
+                        "brand": getattr(item, "brand", None),
+                        "color": getattr(item, "color", None),
+                        "description": getattr(item, "description", None),
+                        "date": getattr(item, "date", None),
+                        "time_found": getattr(item, "time_found", None),
+                    },
+                )
+                score = calculate_detailed_match_score(
                     image_score,
                     text_score,
+                    detail_score,
                 )
+                category_similarity = detail_components["category_similarity"]
+                item_type_similarity = detail_components["item_type_similarity"]
+                brand_similarity = detail_components["brand_similarity"]
+                color_similarity = detail_components["color_similarity"]
+                cross_category = category_similarity is not None and category_similarity < 0.35
+                item_type_conflict = item_type_similarity is not None and item_type_similarity < 0.35
+                brand_conflict = brand_similarity is not None and brand_similarity < 0.35
+                color_conflict = color_similarity is not None and color_similarity < 0.35
+
+                # Explicit brand/color conflicts lower confidence. Clearly
+                # unrelated categories remain visible in the top-ten audit but
+                # cannot become possible or automatic matches.
+                if brand_conflict:
+                    score *= 0.92
+                if color_conflict:
+                    score *= 0.95
+                warning = None
+                if cross_category or item_type_conflict:
+                    score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
+                    warning = "Category or item type differs too much for automatic matching."
+                score = round(score, 4)
 
                 candidates.append({
                     "id": item.id,
@@ -1859,6 +1909,13 @@ def compute_text_detail_matches(
                     "score": round(score, 4),
                     "image_similarity": round(image_score, 4),
                     "text_similarity": round(text_score, 4),
+                    "detail_similarity": detail_score,
+                    **detail_components,
+                    "cross_category": cross_category,
+                    "item_type_conflict": item_type_conflict,
+                    "brand_conflict": brand_conflict,
+                    "color_conflict": color_conflict,
+                    "warning": warning,
                     "item_name": item.item_name,
                     "category": item_category_name(item),
                     "location": item.location,
@@ -1896,9 +1953,11 @@ def compute_text_detail_matches(
         ranked_candidates.extend(score_items(pending_items, "pending_found"))
 
     ranked_candidates.sort(key=lambda x: x["score"], reverse=True)
-    ranked_candidates = ranked_candidates[:5]
+    # Retain ten for Recall@10 audits, expose five for review, and use the
+    # first candidate as the single automatic-match decision.
+    ranked_candidates = ranked_candidates[:10]
     all_matches = [
-        candidate for candidate in ranked_candidates
+        candidate for candidate in ranked_candidates[:5]
         if candidate["score"] >= possible_match_threshold
     ]
 
@@ -1971,7 +2030,7 @@ def item_detail_owner_matches(item, current_user: models.User) -> bool:
 def build_saved_match_payload(item, score: float, source: str) -> dict:
     return {
         "id": item.id,
-        "score": round(float(score or 0), 4),
+        "score": round(clamp_similarity_score(score), 4),
         "item_name": item.item_name,
         "category": item.category,
         "location": item.location,
@@ -2002,7 +2061,9 @@ def replace_possible_match(lost_item: models.Item, match_payload: dict) -> None:
             and match.get("source", "found") == match_source
         )
     ]
-    lost_item.possible_matches = json.dumps([match_payload, *remaining][:5])
+    updated = [match_payload, *remaining]
+    updated.sort(key=lambda match: float(match.get("score", 0) or 0), reverse=True)
+    lost_item.possible_matches = json.dumps(updated[:5])
 
 
 def remove_possible_match(lost_item: models.Item, *, match_id: int, source: str) -> None:
@@ -2056,20 +2117,25 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
         status="found" if record_type == "pending-found" else item.status,
         search_vec=search_vec,
         query_text_vec=query_text_vec,
+        item_name=getattr(item, "item_name", None),
+        date_value=getattr(item, "date", None),
+        time_found=getattr(item, "time_found", None),
         exclude_item_id=item.id if record_type == "item" else None,
     )
 
     if record_type == "item" and item.status == "lost":
         item.possible_matches = json.dumps(result["matched_items"]) if result["matched_items"] else None
-    elif record_type == "pending-found":
+    elif record_type in {"pending-found", "found"}:
+        match_source = "pending_found" if record_type == "pending-found" else "found"
         for lost_item in db.query(models.Item).filter(
             models.Item.status.ilike("lost"),
             models.Item.possible_matches.isnot(None),
         ).all():
-            remove_possible_match(lost_item, match_id=item.id, source="pending_found")
+            remove_possible_match(lost_item, match_id=item.id, source=match_source)
 
         strongest_match = result.get("matched_item")
-        item.matched_item_id = strongest_match.get("id") if strongest_match else None
+        if hasattr(item, "matched_item_id"):
+            item.matched_item_id = strongest_match.get("id") if strongest_match else None
         for candidate in result["matched_items"]:
             lost_item = db.query(models.Item).filter(
                 models.Item.id == candidate.get("id"),
@@ -2078,7 +2144,7 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
             if lost_item:
                 replace_possible_match(
                     lost_item,
-                    build_saved_match_payload(item, candidate.get("score", 0), "pending_found"),
+                    build_saved_match_payload(item, candidate.get("score", 0), match_source),
                 )
 
     return result
@@ -2203,26 +2269,30 @@ async def update_item_details(
     item.time_found = time_found or None
     db.flush()
 
+    # Edits do not trigger an expensive global comparison. The cache is created
+    # on initial upload and updated when a new found report is uploaded.
+    cached_matches = []
+    if normalized_record_type == "item" and getattr(item, "possible_matches", None):
+        try:
+            parsed_matches = json.loads(item.possible_matches)
+            cached_matches = parsed_matches if isinstance(parsed_matches, list) else []
+        except (TypeError, ValueError):
+            cached_matches = []
+    best_cached = cached_matches[0] if cached_matches else None
+    analysis = {
+        "highest_score": float(best_cached.get("score", 0) or 0) if best_cached else 0.0,
+        "generated_embedding": [],
+        "matched_item": best_cached if best_cached and float(best_cached.get("score", 0) or 0) >= MATCH_THRESHOLD else None,
+        "matched_items": cached_matches[:5],
+        "action": "show_match" if cached_matches else "no_match",
+        "cached": True,
+    }
     analysis_error = None
-    try:
-        analysis = await run_in_threadpool(
-            lambda: analyze_saved_item_details(db, item, record_type=normalized_record_type)
-        )
-    except Exception as exc:
-        print(f"Item detail re-analysis failed for {normalized_record_type} #{item_id}: {exc}")
-        analysis_error = "The details were saved, but match analysis is temporarily unavailable."
-        analysis = {
-            "highest_score": 0.0,
-            "generated_embedding": [],
-            "matched_item": None,
-            "matched_items": [],
-            "action": "no_match",
-        }
 
     db.commit()
     db.refresh(item)
     return {
-        "message": "Item details saved and match analysis completed." if not analysis_error else analysis_error,
+        "message": "Item details saved. Possible matches will refresh when a new found item is uploaded.",
         "item": {
             "id": item.id,
             "record_type": normalized_record_type,
@@ -2248,64 +2318,31 @@ async def update_item_details(
 @app.post("/api/compare-text-details")
 async def compare_text_details(
     category: str = Form(...),
+    item_name: str | None = Form(None),
     location: str = Form(...),
     description: str = Form(None),
     brand: str = Form(None),
     color: str = Form(None),
+    date_value: date | None = Form(None, alias="date"),
+    time_found: str | None = Form(None),
     status: str = Form(...),
     image: UploadFile = File(None),
     extra_image_1: UploadFile = File(None),
     extra_image_2: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
-    for upload, label in (
-        (image, "Main image"),
-        (extra_image_1, "Optional image 2"),
-        (extra_image_2, "Optional image 3"),
-    ):
-        try:
-            validate_upload_file_size(upload, label=label)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    parts = [f"A {color}" if color else "An item", f"{brand}" if brand else "", f"{category}"]
-    description_prompt = " ".join(filter(None, parts))
-    description_text = (description or "").strip()
-    text_query = f"{description_prompt} at {location}. {description_text}".strip()
-
-    query_images = []
-    for upload in (image, extra_image_1, extra_image_2):
-        if not upload or not upload.filename:
-            continue
-        image_bytes = await upload.read()
-        await upload.seek(0)
-        if not image_bytes:
-            continue
-        try:
-            query_images.append(Image.open(io.BytesIO(image_bytes)).convert("RGB"))
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid uploaded image: {upload.filename}") from exc
-
-    query_text_vec = await run_in_threadpool(get_text_embedding, text_query)
-    search_vec = (
-        await run_in_threadpool(get_multi_image_embedding, query_images)
-        if query_images
-        else None
-    )
-
-    return await run_in_threadpool(
-        lambda: compute_text_detail_matches(
-            db,
-            category=category,
-            location=location,
-            description=description,
-            brand=brand,
-            color=color,
-            status=status,
-            search_vec=search_vec,
-            query_text_vec=query_text_vec,
-        )
-    )
+    # Upload forms still call this legacy preview endpoint. Return immediately;
+    # the authoritative calculation runs once the report has been persisted.
+    return {
+        "highest_score": 0.0,
+        "generated_embedding": [],
+        "matched_item": None,
+        "matched_items": [],
+        "ranked_candidates": [],
+        "action": "deferred",
+        "analysis_deferred": True,
+        "message": "Possible matches will be calculated after upload.",
+    }
 
 
 def user_can_access_item(current_user: models.User, item: models.Item) -> bool:
@@ -2346,7 +2383,7 @@ def get_saved_item_possible_matches(
     if not user_can_access_item(current_user, item):
         raise HTTPException(status_code=403, detail="You do not have access to this item")
 
-    if item.possible_matches:
+    if getattr(item, "possible_matches", None):
         try:
             saved_matches = json.loads(item.possible_matches)
             saved_matches = saved_matches if isinstance(saved_matches, list) else []
@@ -2365,37 +2402,17 @@ def get_saved_item_possible_matches(
                 "action": "show_match"
             }
 
-    text_query_parts = [
-        f"A {item.color}" if item.color else "An item",
-        f"{item.brand}" if item.brand else "",
-        f"{item.category}" if item.category else "",
-    ]
-    description_prompt = " ".join(filter(None, text_query_parts))
-    description_text = (item.description or "").strip()
-    text_query = f"{description_prompt} at {item.location or 'Unknown'}. {description_text}".strip()
-    query_text_vec = get_text_embedding(text_query)
-
-    image_vec = None
-    if item.image_embedding:
-        try:
-            image_vec = np.array(json.loads(item.image_embedding)).flatten()
-        except Exception:
-            image_vec = None
-
-    search_vec = image_vec if image_vec is not None and image_vec.size else None
-
-    return compute_text_detail_matches(
-        db,
-        category=item.category,
-        location=item.location or "Unknown",
-        description=item.description,
-        brand=item.brand,
-        color=item.color,
-        status=item.status,
-        search_vec=search_vec,
-        query_text_vec=query_text_vec,
-        exclude_item_id=item.id,
-    )
+    # Match analysis is event-driven. If no cache exists, return an empty result
+    # instead of rerunning CLIP whenever the possible-match screen is opened.
+    return {
+        "highest_score": 0.0,
+        "generated_embedding": [],
+        "matched_item": None,
+        "matched_items": [],
+        "ranked_candidates": [],
+        "action": "no_match",
+        "cached": True,
+    }
 
 
 @app.post("/api/items/{item_id}/analyze-matches")
@@ -2404,7 +2421,7 @@ def analyze_lost_item_matches(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Recalculate and persist possible matches for an existing lost report."""
+    """Return persisted matches without rerunning CLIP outside upload events."""
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -2413,9 +2430,7 @@ def analyze_lost_item_matches(
     if not user_can_access_item(current_user, item):
         raise HTTPException(status_code=403, detail="You do not have access to this item")
 
-    result = analyze_saved_item_details(db, item, record_type="item")
-    db.commit()
-    return result
+    return get_saved_item_possible_matches(item_id, db=db, current_user=current_user)
 
 
 @app.get("/api/users/list")
@@ -2654,11 +2669,19 @@ async def save_found_item(
         time_found=time_found,
         image_path=save_path,
         image_embedding=normalized_image_embedding,
-        matched_item_id=matched_item_id,
+        matched_item_id=None,
         user_id=current_user.id
     )
     
     db.add(new_pending)
+    db.flush()
+    match_result = await run_in_threadpool(
+        lambda: analyze_saved_item_details(db, new_pending, record_type="pending-found")
+    )
+    strongest_match = match_result.get("matched_item")
+    matched_item_id = strongest_match.get("id") if strongest_match else None
+    match_score = float(match_result.get("highest_score", 0.0) or 0.0)
+    new_pending.matched_item_id = matched_item_id
 
     db.commit()
     db.refresh(new_pending)
@@ -2696,7 +2719,7 @@ async def save_found_item(
             new_pending.matched_item_id = matched_lost_item.id
             possible_match_count = prepend_lost_possible_match(
                 matched_lost_item,
-                serialize_pending_found_match(new_pending, MATCH_THRESHOLD)
+                serialize_pending_found_match(new_pending, match_score)
             )
 
             if matched_lost_item.user_id:
@@ -2738,6 +2761,7 @@ async def lost_report_upload(
     description: str = Form(None),
     location: str = Form(...),
     date: str = Form(...),
+    time_found: str | None = Form(None),
     # Added these from your updated model
     brand: str = Form(None),
     color: str = Form(None),
@@ -2775,48 +2799,41 @@ async def lost_report_upload(
     # 3. Generate Text Embedding
     # Added brand and color to the AI's "understanding" of the item
     description_text = (description or "").strip()
-    text_query = f"a {color or ''} {brand or ''} {category} described as {description_text}".strip()
+    text_query = (
+        f"a {color or ''} {brand or ''} {resolved_category} at {location} "
+        f"described as {description_text}"
+    ).strip()
     text_vec = await run_in_threadpool(get_text_embedding, text_query)
 
-    def normalize_match_value(value):
-        return " ".join(str(value or "").strip().lower().split())
-
-    # 4. AI COMPARISON LOGIC
-    found_items = db.query(models.Item).filter(
-        models.Item.status.ilike("found"),
-        models.Item.archived == False,
-        models.Item.image_embedding.isnot(None)
-    ).all()
-
-    best_match_id = None
-    final_score = 0.0
-    THRESHOLD = MATCH_THRESHOLD
+    # 4. Run the shared field-aware 10 -> 5 -> 1 matching flow.
+    date_obj = datetime.strptime(date, "%Y-%m-%d").date()
+    match_result = await run_in_threadpool(
+        lambda: compute_text_detail_matches(
+            db,
+            category=resolved_category,
+            location=location,
+            description=description,
+            brand=brand,
+            color=color,
+            status="lost",
+            search_vec=image_vec,
+            query_text_vec=text_vec,
+            item_name=effective_item_name,
+            date_value=date_obj,
+            time_found=time_found,
+        )
+    )
+    matched_payload = match_result.get("matched_item")
+    best_match_id = matched_payload.get("id") if matched_payload else None
+    final_score = float(match_result.get("highest_score", 0.0) or 0.0)
     matched_found_item = None
-
-    for item in found_items:
-        try:
-            stored_vec = np.array(json.loads(item.image_embedding)).flatten()
-            
-            # Multimodal Math
-            img_sim = float(np.dot(image_vec, stored_vec))
-            text_sim = float(np.dot(text_vec, stored_vec))
-            current_score = calculate_match_score(
-                img_sim,
-                text_sim,
-            )
-
-            if current_score > final_score:
-                best_match_id = item.id
-                final_score = current_score
-                matched_found_item = item
-        except Exception as e:
-            continue
-
-    ai_match_found = final_score >= THRESHOLD and matched_found_item is not None
+    if matched_payload and matched_payload.get("source", "found") == "found":
+        matched_found_item = db.query(models.Item).filter(
+            models.Item.id == best_match_id
+        ).first()
+    ai_match_found = matched_found_item is not None
 
     # 5. SAVE THE NEW LOST ITEM (Using all updated columns)
-    date_obj = datetime.strptime(date, "%Y-%m-%d").date()
-    
     new_lost_report = models.Item(
         status="lost",
         item_name=effective_item_name,
@@ -2826,12 +2843,16 @@ async def lost_report_upload(
         description=description,
         location=location,
         date=date_obj,
+        time_found=(time_found or "").strip() or None,
         image_path=db_image_path,
         image_embedding=json.dumps(image_vec.tolist()),
         user_id=current_user.id, # NEW
         is_matched=False,
         archived=False
     )
+
+    if match_result.get("matched_items"):
+        new_lost_report.possible_matches = json.dumps(match_result["matched_items"])
 
     db.add(new_lost_report)
     db.flush() 

@@ -150,11 +150,27 @@ App Service configuration:
 
 ## Matching evaluation
 
-All matching flows use the same formula: 60% CLIP image cosine similarity and
-40% CLIP text cosine similarity. Brand, color, location, and description are
-already represented in the text embedding, so they are not added again as
-separate rule-based adjustments. A score of 0.55 or higher is a match; 0.45 or
-higher is a possible-match candidate.
+The detailed matching flow first calculates the CLIP score from 60% image
+cosine similarity and 40% text cosine similarity. It then uses 80% of that CLIP
+score plus 20% explicit detail similarity. The detail comparison favors the
+same or a close category, item type/name, location, brand, color, description, and event
+date/time; missing fields are ignored rather than counted as mismatches. Date
+and time are evaluated as one timestamp when both are present. Clearly unrelated
+categories or item types are capped below the possible-match threshold, while explicit brand
+and color conflicts reduce confidence. Related color shades such as black and
+charcoal remain close rather than becoming hard rejections. A score of 0.75 or higher is an automatic match.
+Scores from 0.45 through 0.7499 remain unmatched but are shown as possible-match
+candidates. All similarity values are clamped to the 0–1 range, so displayed
+percentages cannot exceed 100%. Matching retains the closest ten
+candidates for Recall@10 auditing, exposes five possible matches for review, and
+uses the first candidate for the automatic match decision.
+
+Matching is event-driven rather than recalculated when a possible-match page is
+opened. A lost upload gets one initial calculation and stores up to five possible
+matches. Each new found upload is compared with active lost reports and updates
+only the affected stored lists. Reads and item edits return the cache immediately;
+approving a pending found report converts its cached identifier without rerunning
+CLIP.
 
 Evaluate a labeled CSV dataset with:
 
@@ -165,8 +181,8 @@ python evaluate_matching.py matching_dataset.csv
 The CSV requires `query_id`, `actual_match`, `image_similarity`, and
 `text_similarity`. Give every candidate evaluated for the same search the same
 `query_id`; this grouping is required for ranking metrics. The command prints
-confusion-matrix counts, accuracy, precision, recall, F1-score, Recall@5, and
-mean reciprocal rank (MRR). Recall@5 and MRR exclude and separately count
+confusion-matrix counts, accuracy, precision, recall, F1-score, Recall@1,
+Recall@5, Recall@10, and mean reciprocal rank (MRR). Ranking metrics exclude and separately count
 queries that have no manually labeled relevant candidate.
 The optional `brand_comparison`, `color_comparison`, and
 `location_comparison` columns are human-readable audit details. Enter `same`,
@@ -175,7 +191,7 @@ because the underlying details are already represented by text similarity.
 Copy `matching_dataset.example.csv` as a starting template, then replace its
 demonstration rows with manually verified match and non-match pairs.
 
-Use another ranking cutoff when needed, for example:
+Add another ranking cutoff when needed, for example:
 
 ```powershell
 python evaluate_matching.py matching_dataset.csv --k 10

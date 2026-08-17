@@ -5,6 +5,7 @@
     <title>Student Portal | LookFor STI</title>
     <link rel="stylesheet" href="/static/style.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="/static/ai-upload-loading.js" defer></script>
 </head>
 <body class="dashboard-body">
     <nav class="navbar admin-nav">
@@ -469,15 +470,9 @@ async function submitFoundReport(event) {
         // 1. Check for matches using Text Details
        const token = localStorage.getItem("token");
 
-        const response = await fetch('/api/compare-text-details', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-        
-        const result = await response.json();
+        const result = {
+            action: 'deferred', matched_items: [], matched_item: null, highest_score: 0
+        };
         console.log("Result:", result);
 
         // 2. Handle the result

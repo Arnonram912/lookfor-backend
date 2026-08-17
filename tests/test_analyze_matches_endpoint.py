@@ -37,6 +37,7 @@ def lost_item(owner_id=7):
         user_id=owner_id,
         report_owner_user_id=None,
         report_owner_name=None,
+        possible_matches='[{"id": 20, "score": 0.81}]',
     )
 
 
@@ -53,16 +54,14 @@ def user(user_id=7, is_admin=False):
 
 class AnalyzeMatchesEndpointTests(unittest.TestCase):
     @patch("main.analyze_saved_item_details")
-    def test_owner_can_reanalyze_and_result_is_committed(self, analyzer):
-        expected = {"matched_items": [{"id": 20}], "action": "show_match"}
-        analyzer.return_value = expected
+    def test_owner_reads_cached_matches_without_reanalysis(self, analyzer):
         db = FakeSession(lost_item())
 
         result = analyze_lost_item_matches(7162, db=db, current_user=user())
 
-        self.assertEqual(result, expected)
-        self.assertTrue(db.committed)
-        analyzer.assert_called_once_with(db, db.item, record_type="item")
+        self.assertEqual(result["matched_items"][0]["id"], 20)
+        self.assertFalse(db.committed)
+        analyzer.assert_not_called()
 
     def test_unrelated_student_cannot_reanalyze(self):
         db = FakeSession(lost_item(owner_id=7))

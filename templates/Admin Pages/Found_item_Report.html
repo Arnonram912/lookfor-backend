@@ -18,7 +18,8 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/static/admin-item-bulk-actions.js?v=2"></script>
 
-</head> 
+    <script src="/static/ai-upload-loading.js" defer></script>
+</head>
 
 <body> 
 
@@ -543,7 +544,8 @@ function showAccessDeniedPopup(permName) {
         }
 
         function formatEvaluationScore(value) {
-            return `${(Number(value || 0) * 100).toFixed(1)}%`;
+            const score = Math.max(0, Math.min(1, Number(value || 0)));
+            return `${(score * 100).toFixed(1)}%`;
         }
 
         function parseFoundPossibleMatches(value) {
@@ -1743,10 +1745,10 @@ async function executeSubmit() {
         compareData.append("brand", document.getElementById('itemBrand').value || "");
         compareData.append("color", document.getElementById('itemColor').value || "");
         compareData.append("status", "found");
-        const compareRes = await fetch('/api/compare-text-details', {
-            method: 'POST',
-            body: compareData
-        });
+        const compareRes = { ok: true, json: async () => ({
+            action: 'deferred', matched_items: [], ranked_candidates: [], matched_item: null,
+            highest_score: 0
+        }) };
 
         if (!compareRes.ok) throw new Error("AI Analysis failed.");
 
@@ -1761,7 +1763,7 @@ async function executeSubmit() {
             selectedMatch ? 'Possible match found' : 'Analysis complete',
             topCandidate
                 ? `Top candidate #${topCandidate.id}: Final ${formatEvaluationScore(topCandidate.score)}, Image ${formatEvaluationScore(topCandidate.image_similarity)}, Text ${formatEvaluationScore(topCandidate.text_similarity)}.`
-                : 'No lost-item candidates were available. This found item is ready for saving.'
+                : 'This found item is ready to save. Possible matches will be calculated after upload.'
         );
 
         // STEP 2: Final Save to Database

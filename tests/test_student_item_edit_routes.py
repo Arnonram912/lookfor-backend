@@ -59,6 +59,7 @@ def lost_item(*, matched=False):
         image_embedding=None,
         date=date(2026, 8, 1),
         time_found=None,
+        possible_matches='[{"id": 21, "score": 0.81}]',
         is_matched=matched,
         is_surrendered=False,
         archived=False,
@@ -94,22 +95,17 @@ def pending_found_item(*, archived=False):
 
 class StudentItemEditRouteTests(unittest.IsolatedAsyncioTestCase):
     @patch("main.analyze_saved_item_details")
-    async def test_shared_match_analyzer_runs_after_edit(self, analyzer):
+    async def test_edit_returns_cached_matches_without_rerunning_analyzer(self, analyzer):
         item = lost_item()
         db = FakeSession()
-        analyzer.return_value = {
-            "highest_score": 0.81,
-            "matched_item": {"id": 21},
-            "matched_items": [{"id": 21}],
-            "action": "show_match",
-        }
 
         analysis, error = await reanalyze_student_item_edit(db, item, record_type="item")
 
         self.assertTrue(db.flushed)
         self.assertIsNone(error)
         self.assertEqual(analysis["highest_score"], 0.81)
-        analyzer.assert_called_once_with(db, item, record_type="item")
+        self.assertTrue(analysis["cached"])
+        analyzer.assert_not_called()
 
     @patch("student_routes.resolve_category_name", return_value="Accessories")
     @patch("student_routes.reanalyze_student_item_edit", new_callable=AsyncMock)

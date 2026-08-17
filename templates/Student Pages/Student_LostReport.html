@@ -10,7 +10,8 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-</head> 
+    <script src="/static/ai-upload-loading.js" defer></script>
+</head>
 <body> 
 
    <nav class="sidebar"> 
@@ -394,7 +395,7 @@ function escapeModalHtml(value) {
 }
 
 function formatMatchScore(score) {
-    const numericScore = Number(score || 0);
+    const numericScore = Math.max(0, Math.min(1, Number(score || 0)));
     return `${(numericScore * 100).toFixed(1)}%`;
 }
 
@@ -849,7 +850,7 @@ async function executeSubmit() {
 
     try {
         // --- STEP 1: AI Analysis ---
-        const compareData = new FormData();w
+        const compareData = new FormData();
         compareData.append("image", imageFile); 
         compareData.append("category", catName);
         compareData.append("location", locVal || "Unknown"); 
@@ -857,17 +858,16 @@ async function executeSubmit() {
         compareData.append("status", "lost");
         compareData.append("brand", document.getElementById('itemBrand').value || "");
         compareData.append("color", document.getElementById('itemColor').value || "");
-        const compareRes = await fetch('/api/compare-text-details', { 
-            method: 'POST', 
-            body: compareData 
-        });
+        const compareRes = { ok: true, json: async () => ({
+            action: 'deferred', matched_items: [], matched_item: null, highest_score: 0
+        }) };
         
         if (!compareRes.ok) throw new Error("AI Comparison failed.");
         const aiResult = await compareRes.json();
         const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
         const hasConfirmedMatch = aiResult?.action === "show_match" &&
             aiResult?.matched_item?.id &&
-            (aiResult.highest_score || 0) >= 0.55;
+            (aiResult.highest_score || 0) >= 0.75;
         let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : null;
 
         if (matchedItems.length > 0) {
@@ -907,8 +907,8 @@ async function executeSubmit() {
         } else {
             await showLostUploadAlert(
                 'info',
-                'Analysis complete',
-                `No possible matches found yet. Score: ${formatMatchScore(aiResult?.highest_score)}.`
+                'Ready to upload',
+                'Possible matches will be calculated after the report is saved.'
             );
         }
         
@@ -1043,17 +1043,16 @@ async function executeSubmit() {
         compareData.append("status", "lost");
         compareData.append("brand", document.getElementById('itemBrand').value || "");
         compareData.append("color", document.getElementById('itemColor').value || "");
-        const compareRes = await fetch('/api/compare-text-details', {
-            method: 'POST',
-            body: compareData
-        });
+        const compareRes = { ok: true, json: async () => ({
+            action: 'deferred', matched_items: [], matched_item: null, highest_score: 0
+        }) };
 
         if (!compareRes.ok) throw new Error("AI Comparison failed.");
         const aiResult = await compareRes.json();
         const matchedItems = Array.isArray(aiResult?.matched_items) ? aiResult.matched_items : [];
         const hasConfirmedMatch = aiResult?.action === "show_match" &&
             aiResult?.matched_item?.id &&
-            (aiResult.highest_score || 0) >= 0.55;
+            (aiResult.highest_score || 0) >= 0.75;
         let selectedMatch = hasConfirmedMatch ? aiResult.matched_item : null;
 
         if (matchedItems.length > 0) {
@@ -1093,8 +1092,8 @@ async function executeSubmit() {
         } else {
             await showLostUploadAlert(
                 'info',
-                'Analysis complete',
-                `No possible matches found yet. Score: ${formatMatchScore(aiResult?.highest_score)}.`
+                'Ready to upload',
+                'Possible matches will be calculated after the report is saved.'
             );
         }
 

@@ -10,6 +10,7 @@
     
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="/static/ai-upload-loading.js" defer></script>
 </head>
 <body>
 
@@ -678,10 +679,10 @@ window.onclick = function(event) {
                 compareData.append("status", "found");
                 compareData.append("brand", document.getElementById('itemBrand').value || "");
                 compareData.append("color", document.getElementById('itemColor').value || "");
-                const compareRes = await fetch('/api/compare-text-details', {
-                    method: 'POST',
-                    body: compareData
-                });
+                const compareRes = { ok: true, json: async () => ({
+                    action: 'deferred', matched_items: [], matched_item: null, highest_score: 0,
+                    generated_embedding: []
+                }) };
 
                 if (!compareRes.ok) throw new Error("AI comparison failed.");
                 const aiResult = await compareRes.json();

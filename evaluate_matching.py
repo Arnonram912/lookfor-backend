@@ -83,13 +83,16 @@ def main() -> None:
     parser.add_argument(
         "--k",
         type=int,
-        default=5,
-        help="Candidate cutoff for Recall@K (default: 5)",
+        default=None,
+        help="Optional extra Recall@K cutoff in addition to 1, 5, and 10",
     )
     args = parser.parse_args()
     records = load_scored_dataset(args.dataset)
     metrics = evaluate_match_dataset(records, threshold=args.threshold)
-    metrics.update(evaluate_ranking_metrics(records, k=args.k))
+    for cutoff in (1, 5, 10):
+        metrics.update(evaluate_ranking_metrics(records, k=cutoff))
+    if args.k is not None and args.k not in {1, 5, 10}:
+        metrics.update(evaluate_ranking_metrics(records, k=args.k))
     print(json.dumps(metrics, indent=2))
 
 

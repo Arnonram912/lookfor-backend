@@ -16,6 +16,7 @@ from security import get_current_admin, pwd_context, sanitize_email_name_part
 from datetime import datetime, timedelta, date
 import os
 from fastapi import Request, Response, Form, UploadFile, File
+from fastapi.concurrency import run_in_threadpool
 from fastapi.templating import Jinja2Templates
 from clip_test import find_matches_in_dataset, describe_item, get_clip_components, get_text_embedding, get_multi_image_embedding
 from PIL import Image
@@ -38,7 +39,7 @@ from utils import (
 from sqlalchemy import and_, or_, func, text
 from concurrent.futures import ThreadPoolExecutor
 from account_email import queue_account_access_email, queue_item_event_email
-from matching_metrics import MATCH_THRESHOLD, calculate_match_score
+from matching_metrics import MATCH_THRESHOLD, calculate_match_score, clamp_similarity_score
 from lookfor_constants import (
     ACADEMIC_CLASSIFICATIONS,
     IDENTIFIER_RE,
@@ -350,9 +351,9 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             continue
         cleaned_matches.append({
             "id": match.get("id"),
-            "score": match.get("score"),
-            "image_similarity": match.get("image_similarity"),
-            "text_similarity": match.get("text_similarity"),
+            "score": clamp_similarity_score(match.get("score")),
+            "image_similarity": clamp_similarity_score(match.get("image_similarity")),
+            "text_similarity": clamp_similarity_score(match.get("text_similarity")),
             "item_name": match.get("item_name"),
             "category": match.get("category"),
             "location": match.get("location"),
@@ -4367,17 +4368,6 @@ async def approve_item(
     if not pending:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    # The matching item may have been reported after this found report entered
-    # the approval queue. Refresh its lost-item comparison before moving it to
-    # inventory so approval can replace a stale candidate automatically.
-    if not pending.matched_item_id:
-        try:
-            from main import analyze_saved_item_details
-
-            analyze_saved_item_details(db, pending, record_type="pending-found")
-        except Exception as exc:
-            print(f"Pending item #{item_id} approval match analysis failed: {exc}")
-
     # 2. Move to main Items table
     # We carry over the 'matched_item_id' logic here
     new_item = models.Item(
@@ -4401,6 +4391,43 @@ async def approve_item(
 
     db.add(new_item)
     db.flush()
+
+    # Preserve cached possible matches while replacing the temporary pending
+    # identifier with the approved found-item identifier. No CLIP rerun occurs.
+    cached_lost_items = db.query(models.Item).filter(
+        models.Item.status.ilike("lost"),
+        models.Item.possible_matches.isnot(None),
+    ).all()
+    for cached_lost in cached_lost_items:
+        try:
+            cached_matches = json.loads(cached_lost.possible_matches or "[]")
+        except (TypeError, ValueError):
+            continue
+        changed = False
+        converted_matches = []
+        for cached_match in cached_matches if isinstance(cached_matches, list) else []:
+            if (
+                isinstance(cached_match, dict)
+                and cached_match.get("id") == pending.id
+                and cached_match.get("source") == "pending_found"
+            ):
+                converted_matches.append(
+                    serialize_found_item_match(
+                        new_item,
+                        float(cached_match.get("score", 0) or 0),
+                        previous_pending_id=pending.id,
+                    )
+                )
+                changed = True
+            else:
+                converted_matches.append(cached_match)
+        if changed:
+            converted_matches.sort(
+                key=lambda match: float(match.get("score", 0) or 0)
+                if isinstance(match, dict) else 0,
+                reverse=True,
+            )
+            cached_lost.possible_matches = json.dumps(converted_matches[:5])
 
     matched_lost_item = None
     if pending.matched_item_id:
@@ -4757,9 +4784,6 @@ async def finalize_lost_upload(
         except ValueError:
             parsed_date = None
 
-    # 4. Determine Automatic Match Status
-    is_auto_match = ai_score >= MATCH_THRESHOLD and matched_item_id is not None
-
     # 5. Create the Database Record 
     saved_possible_matches = normalize_saved_possible_matches(possible_matches)
     report_owner_user = None
@@ -4800,7 +4824,7 @@ async def finalize_lost_upload(
         possible_matches=saved_possible_matches,
         date=parsed_date,
         time_found=time_found,
-        is_matched=is_auto_match, 
+        is_matched=False,
         archived=False,
         is_surrendered=True,      
         created_at=datetime.utcnow()
@@ -4809,6 +4833,20 @@ async def finalize_lost_upload(
     try:
         db.add(new_item)
         db.flush()
+
+        from main import analyze_saved_item_details
+
+        match_result = await run_in_threadpool(
+            lambda: analyze_saved_item_details(db, new_item, record_type="item")
+        )
+        strongest_match = match_result.get("matched_item")
+        matched_item_id = strongest_match.get("id") if strongest_match else None
+        ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
+        is_auto_match = bool(
+            strongest_match
+            and strongest_match.get("source", "found") == "found"
+            and ai_score >= MATCH_THRESHOLD
+        )
         
         # 6. Handle the "Other Side" of the match
         if is_auto_match:
@@ -4906,9 +4944,6 @@ async def finalize_found_upload(
         except ValueError:
             parsed_date = None
 
-    # 4. Determine Automatic Match Status
-    is_auto_match = ai_score >= MATCH_THRESHOLD and matched_item_id is not None
-
     # 5. Create the Database Record 
     new_item = models.Item(
         status="found",
@@ -4925,7 +4960,7 @@ async def finalize_found_upload(
         image_embedding=normalized_image_embedding, 
         date=parsed_date,
         time_found=time_found,
-        is_matched=is_auto_match, 
+        is_matched=False,
         archived=False,
         is_surrendered=False,      
         created_at=datetime.utcnow()
@@ -4934,6 +4969,16 @@ async def finalize_found_upload(
     try:
         db.add(new_item)
         db.flush()
+
+        from main import analyze_saved_item_details
+
+        match_result = await run_in_threadpool(
+            lambda: analyze_saved_item_details(db, new_item, record_type="found")
+        )
+        strongest_match = match_result.get("matched_item")
+        matched_item_id = strongest_match.get("id") if strongest_match else None
+        ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
+        is_auto_match = matched_item_id is not None and ai_score >= MATCH_THRESHOLD
         
         # 6. Handle the "Other Side" of the match
         if is_auto_match:

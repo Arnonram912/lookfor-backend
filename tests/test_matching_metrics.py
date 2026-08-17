@@ -2,7 +2,10 @@ import unittest
 
 from matching_metrics import (
     MATCH_THRESHOLD,
+    calculate_detail_similarity,
+    calculate_detailed_match_score,
     calculate_match_score,
+    clamp_similarity_score,
     evaluate_match_dataset,
     evaluate_ranking_metrics,
     is_match,
@@ -13,7 +16,7 @@ class MatchScoreTests(unittest.TestCase):
     def test_canonical_formula_uses_image_and_text_similarity(self):
         score = calculate_match_score(0.8, 0.6)
         self.assertEqual(score, 0.72)
-        self.assertTrue(is_match(score))
+        self.assertFalse(is_match(score))
 
     def test_low_image_and_text_similarity_stays_below_threshold(self):
         score = calculate_match_score(0.4, 0.3)
@@ -21,14 +24,43 @@ class MatchScoreTests(unittest.TestCase):
         self.assertFalse(is_match(score))
 
     def test_default_threshold_is_standardized(self):
+        self.assertEqual(MATCH_THRESHOLD, 0.75)
         self.assertTrue(is_match(MATCH_THRESHOLD))
         self.assertFalse(is_match(MATCH_THRESHOLD - 0.0001))
+        self.assertFalse(is_match(0.74))
 
     def test_final_score_is_bounded_for_percentage_display(self):
         self.assertEqual(
             calculate_match_score(1.0, 1.0),
             1.0,
         )
+        self.assertEqual(calculate_match_score(2.0, 2.0), 1.0)
+        self.assertEqual(calculate_detailed_match_score(2.0, 2.0, 2.0), 1.0)
+        self.assertEqual(clamp_similarity_score(1.74), 1.0)
+
+    def test_details_compare_category_brand_color_and_combined_event_time(self):
+        score, components = calculate_detail_similarity(
+            {
+                "category": "Wallet",
+                "brand": "Acme",
+                "color": "Black",
+                "date": "2026-08-13",
+                "time_found": "10:00",
+            },
+            {
+                "category": "Wallet",
+                "brand": "Acme",
+                "color": "Charcoal",
+                "date": "2026-08-13",
+                "time_found": "10:20",
+            },
+        )
+
+        self.assertEqual(components["category_similarity"], 1.0)
+        self.assertEqual(components["brand_similarity"], 1.0)
+        self.assertEqual(components["color_similarity"], 0.85)
+        self.assertEqual(components["event_time_similarity"], 1.0)
+        self.assertGreater(score, 0.95)
 
 
 class MatchEvaluationTests(unittest.TestCase):
@@ -37,7 +69,7 @@ class MatchEvaluationTests(unittest.TestCase):
             [
                 {"actual_match": True, "score": 0.90},
                 {"actual_match": True, "score": 0.20},
-                {"actual_match": False, "score": 0.70},
+                {"actual_match": False, "score": 0.80},
                 {"actual_match": False, "score": 0.10},
             ]
         )

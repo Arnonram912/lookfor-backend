@@ -29,7 +29,7 @@ from utils import (
 from clip_test import combine_embeddings, get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
 from account_email import queue_item_event_email
-from matching_metrics import MATCH_THRESHOLD
+from matching_metrics import MATCH_THRESHOLD, clamp_similarity_score
 
 
 router = APIRouter(prefix="/student", tags=["Student"])
@@ -135,9 +135,9 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             continue
         cleaned_matches.append({
             "id": match.get("id"),
-            "score": match.get("score"),
-            "image_similarity": match.get("image_similarity"),
-            "text_similarity": match.get("text_similarity"),
+            "score": clamp_similarity_score(match.get("score")),
+            "image_similarity": clamp_similarity_score(match.get("image_similarity")),
+            "text_similarity": clamp_similarity_score(match.get("text_similarity")),
             "item_name": match.get("item_name"),
             "category": match.get("category"),
             "location": match.get("location"),
@@ -441,7 +441,6 @@ async def report_found_item(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="Invalid date format. Please use YYYY-MM-DD.") from exc
 
-    is_auto_match = ai_score >= MATCH_THRESHOLD and matched_item_id is not None
     computed_embedding = image_embedding or ""
     if query_images:
         computed_embedding = json.dumps(
@@ -462,7 +461,7 @@ async def report_found_item(
         time_found=resolved_time_found,
         image_path=db_path,
         image_embedding=computed_embedding,
-        matched_item_id=matched_item_id,
+        matched_item_id=None,
         user_id=current_user.id,
         created_at=datetime.utcnow(),
         archived=False
@@ -470,6 +469,18 @@ async def report_found_item(
 
     db.add(pending_item)
     db.flush()
+
+    # A newly uploaded found report is the event that refreshes affected lost
+    # report caches. Do not trust or require a pre-upload browser comparison.
+    from main import analyze_saved_item_details
+
+    match_result = await run_in_threadpool(
+        lambda: analyze_saved_item_details(db, pending_item, record_type="pending-found")
+    )
+    strongest_match = match_result.get("matched_item")
+    matched_item_id = strongest_match.get("id") if strongest_match else None
+    ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
+    is_auto_match = matched_item_id is not None and ai_score >= MATCH_THRESHOLD
 
     matched_lost_item = None
     matched_lost_owner = None
@@ -946,26 +957,25 @@ async def reanalyze_student_item_edit(
     *,
     record_type: str,
 ) -> tuple[dict, str | None]:
-    """Run the same post-save match analysis used by the web item editor."""
+    """Return cached matches; edits wait for the next found-upload refresh."""
     db.flush()
-    try:
-        # Imported lazily because main.py registers this router while it is
-        # still initializing. At request time the shared analyzer is ready.
-        from main import analyze_saved_item_details
-
-        analysis = await run_in_threadpool(
-            lambda: analyze_saved_item_details(db, item, record_type=record_type)
-        )
-        return analysis, None
-    except Exception as exc:
-        print(f"Student app item re-analysis failed for {record_type} #{item.id}: {exc}")
-        return {
-            "highest_score": 0.0,
-            "generated_embedding": [],
-            "matched_item": None,
-            "matched_items": [],
-            "action": "no_match",
-        }, "The details were saved, but match analysis is temporarily unavailable."
+    cached_matches = []
+    if record_type == "item" and getattr(item, "possible_matches", None):
+        try:
+            parsed_matches = json.loads(item.possible_matches)
+            cached_matches = parsed_matches if isinstance(parsed_matches, list) else []
+        except (TypeError, ValueError):
+            cached_matches = []
+    best_match = cached_matches[0] if cached_matches else None
+    highest_score = float(best_match.get("score", 0) or 0) if best_match else 0.0
+    return {
+        "highest_score": highest_score,
+        "generated_embedding": [],
+        "matched_item": best_match if highest_score >= MATCH_THRESHOLD else None,
+        "matched_items": cached_matches[:5],
+        "action": "show_match" if cached_matches else "no_match",
+        "cached": True,
+    }, None
 
 
 @router.put("/items/pending-found/{item_id}/edit")
@@ -1147,6 +1157,14 @@ async def submit_user_lost_report(
     try:
         db.add(new_report)
         db.flush() # Generate new_report.id for relationships
+
+        # Calculate and persist possible matches once, after the lost report
+        # exists. Later reads use this cache; new found uploads refresh it.
+        from main import analyze_saved_item_details
+
+        await run_in_threadpool(
+            lambda: analyze_saved_item_details(db, new_report, record_type="item")
+        )
 
         # 4. Handle possible match and notification logic
         if matched_item_id:
