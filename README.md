@@ -156,9 +156,14 @@ score plus 20% explicit detail similarity. The detail comparison favors the
 same or a close category, item type/name, location, brand, color, description, and event
 date/time; missing fields are ignored rather than counted as mismatches. Date
 and time are evaluated as one timestamp when both are present. Clearly unrelated
-categories or item types are capped below the possible-match threshold, while explicit brand
-and color conflicts reduce confidence. Related color shades such as black and
-charcoal remain close rather than becoming hard rejections. A score of 0.75 or higher is an automatic match.
+item types are capped below the possible-match threshold. A category conflict is also
+excluded unless the specific item names strongly agree; then it remains visible for admin
+review but cannot become automatic. An explicit brand
+or color conflict requires admin review and cannot become an automatic match; if both brand
+and color conflict, the candidate is capped below the possible-match threshold. Related color
+shades such as black and charcoal remain close rather than becoming hard rejections. Location
+remains a ranking signal rather than a hard conflict because found items may be moved. A score
+of 0.75 or higher is an automatic match.
 Scores from 0.45 through 0.7499 remain unmatched but are shown as possible-match
 candidates. All similarity values are clamped to the 0–1 range, so displayed
 percentages cannot exceed 100%. Matching retains the closest ten

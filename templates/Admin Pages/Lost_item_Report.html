@@ -1014,7 +1014,25 @@ async function analyzeLostItemMatches() {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.detail || 'Match analysis failed.');
-        renderDetailPossibleMatches(result);
+        renderDetailPossibleMatches(result, '', Boolean(result.auto_linked), false);
+        if (result.auto_linked) {
+            lostItemsCache = lostItemsCache.map(item =>
+                item.id === currentDetailLostItemId
+                    ? { ...item, is_matched: true }
+                    : item
+            );
+            renderLostItems();
+            const statusEl = document.getElementById("modalStatus");
+            if (statusEl) {
+                statusEl.innerText = "MATCHED";
+                statusEl.style.color = "#28a745";
+            }
+            await showLostUploadAlert(
+                'success',
+                'Automatic match linked',
+                'The score reached 75%, both items were marked as matched, and a pending claim was created.'
+            );
+        }
         openModal('detailPossibleMatchesModal');
     } catch (error) {
         await showLostUploadAlert('error', 'Analysis failed', error.message || 'Failed to analyze matches.');

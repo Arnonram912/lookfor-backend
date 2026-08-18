@@ -573,14 +573,22 @@ function showAccessDeniedPopup(permName) {
                     && match.text_similarity !== undefined
                     && match.text_similarity !== null;
                 const finalScore = Math.max(0, Math.min(1, Number(match.score || 0)));
-                const decisionLabel = finalScore >= 0.75 ? 'Automatic threshold reached' : 'Possible match';
+                const isLinked = Boolean(match.is_linked);
+                const linkState = String(match.link_state || '');
+                const decisionLabel = isLinked
+                    ? (linkState === 'pending_approval'
+                        ? 'Automatic match reserved — activates after approval'
+                        : 'Automatic match linked — pending claim created')
+                    : (finalScore >= 0.75
+                        ? 'Eligible for automatic match — not linked'
+                        : 'Possible match — admin review required');
                 return `
                     <div style="padding:10px 12px; border:1px solid #dce6f0; border-radius:10px; background:#fff;">
                         <div style="display:flex; justify-content:space-between; gap:12px; font-weight:700; color:#114b7a;">
                             <span>${index + 1}. ${escapeFoundListHtml(match.item_code || `LOST-${match.id}`)} — ${escapeFoundListHtml(match.item_name || match.category || 'Lost item')}</span>
                             <span>Final: ${formatEvaluationScore(match.score)}</span>
                         </div>
-                        <div style="margin-top:5px; font-size:12px; color:${finalScore >= 0.75 ? '#147a45' : '#8a5a00'}; font-weight:700;">
+                        <div style="margin-top:5px; font-size:12px; color:${isLinked ? '#147a45' : '#8a5a00'}; font-weight:700;">
                             ${decisionLabel}
                         </div>
                         ${hasComponents ? `

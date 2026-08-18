@@ -96,6 +96,8 @@ class AdminFoundMatchEvaluationTests(unittest.TestCase):
         self.assertIn("AI Match Evaluation (Admin Only)", html)
         self.assertIn("/admin/items/found/${item.id}/match-evaluation", html)
         self.assertIn("'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}`", html)
+        self.assertIn("Eligible for automatic match — not linked", html)
+        self.assertIn("Automatic match linked — pending claim created", html)
 
 
 if __name__ == "__main__":

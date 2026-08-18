@@ -1139,8 +1139,6 @@ async def submit_user_lost_report(
     # 3. Create the Item Record
     saved_possible_matches = normalize_saved_possible_matches(possible_matches)
 
-    is_auto_match = matched_item_id is not None
-
     new_report = models.Item(
         status="lost",
         item_name=item_name.strip(),
@@ -1156,7 +1154,9 @@ async def submit_user_lost_report(
         user_id=current_user.id,
         date=parsed_date,
         time_found=(time_found or "").strip() or None,
-        is_matched=is_auto_match,
+        # Match state is established only after the server-side analysis has
+        # selected an available found item and created the claim transaction.
+        is_matched=False,
         department=None, # Explicitly no department for student reports
         is_surrendered=False, # Students keep their lost item (it's lost!)
         created_at=datetime.utcnow()
@@ -1170,34 +1170,43 @@ async def submit_user_lost_report(
         # exists. Later reads use this cache; new found uploads refresh it.
         from main import analyze_saved_item_details
 
-        await run_in_threadpool(
+        match_result = await run_in_threadpool(
             lambda: analyze_saved_item_details(db, new_report, record_type="item")
         )
 
         # 4. Handle possible match and notification logic
-        if matched_item_id:
-            if not current_user.student_no:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Your account does not have a student number yet. Please update your profile or contact an admin before claiming an item."
-                )
+        strongest_match = match_result.get("matched_item")
+        automatic_found_id = (
+            strongest_match.get("id")
+            if strongest_match and strongest_match.get("source", "found") == "found"
+            else None
+        )
+        ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
+        found_item = None
+        new_claim = None
+        if automatic_found_id is not None and ai_score >= MATCH_THRESHOLD:
+            found_item = db.query(models.Item).filter(
+                models.Item.id == automatic_found_id,
+                models.Item.status.ilike("found"),
+                models.Item.archived == False,
+                models.Item.deleted == False,
+                models.Item.is_matched == False,
+            ).first()
 
-            found_item = db.query(models.Item).filter(models.Item.id == matched_item_id).first()
-            if not found_item or found_item.status != "found" or found_item.archived:
-                raise HTTPException(status_code=404, detail="Selected possible match is no longer available.")
-
+        if found_item:
             new_report.is_matched = True
             found_item.is_matched = True
             new_claim = ensure_student_claim_for_pair(
                 db,
                 lost_item=new_report,
                 found_item=found_item,
-                claimant_id=current_user.id
+                claimant_id=current_user.id,
+                similarity_score=f"{ai_score * 100:.1f}%",
             )
 
             # Notification for Admin (Match)
             notif = models.Notification(
-                message=f"Possible AI match: {current_user.full_name} reported a lost item that may match Item #{matched_item_id}",
+                message=f"Automatic AI match: {current_user.full_name} reported a lost item matching Item #{found_item.id}",
                 type="match",
                 related_id=new_claim.id,
                 target_url=f"/admin/Reports?report_type=claim&claim_id={new_claim.id}",
@@ -1230,7 +1239,8 @@ async def submit_user_lost_report(
             "status": "success", 
             "item_id": new_report.id,
             "is_matched": bool(new_report.is_matched),
-            "has_possible_match": bool(matched_item_id)
+            "has_possible_match": bool(match_result.get("matched_items")),
+            "matched_item_id": found_item.id if found_item else None,
         }
 
     except Exception as e:

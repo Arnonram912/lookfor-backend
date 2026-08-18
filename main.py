@@ -74,6 +74,9 @@ from security import (
 from account_email import queue_item_event_email
 from lookfor_permissions import normalize_permissions
 from matching_metrics import (
+    BRAND_CONFLICT_MULTIPLIER,
+    COLOR_CONFLICT_MULTIPLIER,
+    ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD,
     MATCH_THRESHOLD,
     POSSIBLE_MATCH_THRESHOLD,
     calculate_detail_similarity,
@@ -1890,17 +1893,41 @@ def compute_text_detail_matches(
                 brand_conflict = brand_similarity is not None and brand_similarity < 0.35
                 color_conflict = color_similarity is not None and color_similarity < 0.35
 
-                # Explicit brand/color conflicts lower confidence. Clearly
-                # unrelated categories remain visible in the top-ten audit but
-                # cannot become possible or automatic matches.
+                # Brand and color are identity-bearing traits. Either explicit
+                # conflict prevents an automatic match; both conflicts prevent
+                # even a possible match. Location remains a ranking signal only
+                # because found items may be moved after they are reported.
                 if brand_conflict:
-                    score *= 0.92
+                    score *= BRAND_CONFLICT_MULTIPLIER
                 if color_conflict:
-                    score *= 0.95
-                warning = None
-                if cross_category or item_type_conflict:
+                    score *= COLOR_CONFLICT_MULTIPLIER
+                warning_parts = []
+                if brand_conflict and color_conflict:
                     score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
-                    warning = "Category or item type differs too much for automatic matching."
+                    warning_parts.append("Brand and color both conflict with the report.")
+                elif brand_conflict or color_conflict:
+                    score = min(score, MATCH_THRESHOLD - 0.0001)
+                    warning_parts.append(
+                        "Brand differs from the report; admin review is required."
+                        if brand_conflict
+                        else "Color differs from the report; admin review is required."
+                    )
+                strong_item_type_agreement = (
+                    item_type_similarity is not None
+                    and item_type_similarity >= ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD
+                )
+                if item_type_conflict or (cross_category and not strong_item_type_agreement):
+                    score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
+                    warning_parts.append("Category or item type differs too much for matching.")
+                elif cross_category:
+                    # Broad categories can be selected incorrectly. Keep a
+                    # strong item-name match for review, but require an admin
+                    # before linking records from different categories.
+                    score = min(score, MATCH_THRESHOLD - 0.0001)
+                    warning_parts.append(
+                        "Category differs, but the item type strongly agrees; admin review is required."
+                    )
+                warning = " ".join(warning_parts) or None
                 score = round(score, 4)
 
                 candidates.append({
@@ -1913,6 +1940,9 @@ def compute_text_detail_matches(
                     **detail_components,
                     "cross_category": cross_category,
                     "item_type_conflict": item_type_conflict,
+                    "category_overridden_by_item_type": bool(
+                        cross_category and strong_item_type_agreement
+                    ),
                     "brand_conflict": brand_conflict,
                     "color_conflict": color_conflict,
                     "warning": warning,
@@ -2451,7 +2481,7 @@ def analyze_lost_item_matches(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Return persisted matches without rerunning CLIP outside upload events."""
+    """Explicitly reanalyze a lost report and link an authoritative auto-match."""
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -2460,7 +2490,70 @@ def analyze_lost_item_matches(
     if not user_can_access_item(current_user, item):
         raise HTTPException(status_code=403, detail="You do not have access to this item")
 
-    return get_saved_item_possible_matches(item_id, db=db, current_user=current_user)
+    if bool(getattr(item, "archived", False)) or bool(getattr(item, "deleted", False)):
+        raise HTTPException(status_code=409, detail="Archived or deleted reports cannot be analyzed")
+
+    result = analyze_saved_item_details(db, item, record_type="item")
+    strongest_match = result.get("matched_item")
+    auto_linked = False
+    claim_id = None
+
+    if strongest_match and strongest_match.get("source", "found") == "found":
+        found_item = db.query(models.Item).filter(
+            models.Item.id == strongest_match.get("id"),
+            models.Item.status.ilike("found"),
+            models.Item.archived == False,
+            models.Item.deleted == False,
+        ).first()
+        if found_item:
+            existing_pair_claim = db.query(models.Claim).filter(
+                models.Claim.lost_item_id == item.id,
+                models.Claim.found_item_id == found_item.id,
+                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+            ).first()
+            conflicting_claim = db.query(models.Claim).filter(
+                or_(
+                    models.Claim.lost_item_id == item.id,
+                    models.Claim.found_item_id == found_item.id,
+                ),
+                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+            ).first()
+
+            if existing_pair_claim:
+                item.is_matched = True
+                found_item.is_matched = True
+                claim_id = existing_pair_claim.id
+                auto_linked = True
+            elif not conflicting_claim and not item.is_matched and not found_item.is_matched:
+                score = float(strongest_match.get("score", 0) or 0)
+                claim = models.Claim(
+                    lost_item_id=item.id,
+                    found_item_id=found_item.id,
+                    claimant_id=item.user_id or current_user.id,
+                    similarity_score=f"{score * 100:.1f}%",
+                    status="pending",
+                )
+                db.add(claim)
+                db.flush()
+                item.is_matched = True
+                found_item.is_matched = True
+                claim_id = claim.id
+                auto_linked = True
+                db.add(models.Notification(
+                    message=(
+                        f"Automatic AI match: Lost Item #{item.id} matched "
+                        f"Found Item #{found_item.id}."
+                    ),
+                    type="match",
+                    related_id=claim.id,
+                    target_url=f"/admin/Reports?report_type=claim&claim_id={claim.id}",
+                    is_read=False,
+                ))
+
+    db.commit()
+    result["auto_linked"] = auto_linked
+    result["claim_id"] = claim_id
+    return result
 
 
 @app.get("/api/users/list")

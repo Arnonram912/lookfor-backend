@@ -2517,11 +2517,34 @@ def get_found_item_match_evaluation(
         found_item_id=item_id,
         source=source,
     )
+    if source == "found":
+        linked_lost_ids = {
+            row[0] for row in db.query(models.Claim.lost_item_id).filter(
+                models.Claim.found_item_id == item_id,
+                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+            ).all()
+        }
+        for evaluation in evaluations:
+            evaluation["is_linked"] = evaluation["id"] in linked_lost_ids
+            evaluation["link_state"] = (
+                "active_claim" if evaluation["is_linked"] else "eligible_only"
+            )
+    else:
+        reserved_lost_id = getattr(found_item, "matched_item_id", None)
+        for evaluation in evaluations:
+            evaluation["is_linked"] = evaluation["id"] == reserved_lost_id
+            evaluation["link_state"] = (
+                "pending_approval" if evaluation["is_linked"] else "eligible_only"
+            )
     best_match = evaluations[0] if evaluations else None
     highest_score = float(best_match.get("score", 0) or 0) if best_match else 0.0
     return {
         "highest_score": round(highest_score, 4),
-        "matched_item": best_match if highest_score >= MATCH_THRESHOLD else None,
+        "matched_item": (
+            best_match
+            if highest_score >= MATCH_THRESHOLD and best_match.get("is_linked")
+            else None
+        ),
         "matched_items": evaluations,
         "action": "show_match" if evaluations else "no_match",
         "cached": True,

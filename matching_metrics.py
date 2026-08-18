@@ -18,6 +18,10 @@ MATCH_THRESHOLD = 0.75
 CLIP_SCORE_WEIGHT = 0.80
 DETAIL_SCORE_WEIGHT = 0.20
 
+BRAND_CONFLICT_MULTIPLIER = 0.80
+COLOR_CONFLICT_MULTIPLIER = 0.85
+ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD = 0.80
+
 
 def clamp_similarity_score(value: Any) -> float:
     """Keep internal similarity values within the display-safe 0..1 range."""
