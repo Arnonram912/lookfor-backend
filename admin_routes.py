@@ -372,6 +372,8 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             "color": match.get("color"),
             "description": match.get("description"),
             "source": match.get("source", "found"),
+            "category_match": bool(match.get("category_match")),
+            "category_similarity": clamp_similarity_score(match.get("category_similarity")),
             "cross_category": bool(match.get("cross_category")),
             "warning": match.get("warning"),
         })

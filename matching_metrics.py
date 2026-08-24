@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping
 from collections import defaultdict
 from datetime import date, datetime
 from difflib import SequenceMatcher
+import re
 from typing import Any
 
 
@@ -34,6 +35,41 @@ def clamp_similarity_score(value: Any) -> float:
 
 def _normalized_text(value: Any) -> str:
     return " ".join(str(value or "").strip().casefold().split())
+
+
+_CATEGORY_ALIASES = {
+    "electronic": "electronics",
+    "electronic item": "electronics",
+    "electronic items": "electronics",
+    "bag and case": "bags and cases",
+    "bag and cases": "bags and cases",
+    "bags and case": "bags and cases",
+    "personal item": "personal items",
+}
+
+
+def _canonical_category(value: Any) -> str:
+    """Normalize category labels without treating partial names as equal."""
+    normalized = _normalized_text(value)
+    normalized = re.sub(r"\([^)]*\)", "", normalized)
+    normalized = normalized.replace("&", " and ")
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    normalized = " ".join(normalized.split())
+    return _CATEGORY_ALIASES.get(normalized, normalized)
+
+
+def calculate_category_similarity(left: Any, right: Any) -> float | None:
+    """Return a separate exact-category signal.
+
+    Case, punctuation, parenthetical examples, and a small set of equivalent
+    labels are normalized. Substrings such as ``Accessories`` and
+    ``Phone Accessories`` are deliberately different categories.
+    """
+    left_category = _canonical_category(left)
+    right_category = _canonical_category(right)
+    if not left_category or not right_category:
+        return None
+    return 1.0 if left_category == right_category else 0.0
 
 
 def _text_field_similarity(left: Any, right: Any) -> float | None:
@@ -191,7 +227,7 @@ def calculate_detail_similarity(query: Mapping[str, Any], candidate: Mapping[str
     represented by the CLIP text score.
     """
     components = {
-        "category_similarity": _text_field_similarity(query.get("category"), candidate.get("category")),
+        "category_similarity": calculate_category_similarity(query.get("category"), candidate.get("category")),
         "item_type_similarity": _item_type_similarity(query.get("item_name"), candidate.get("item_name")),
         "location_similarity": _text_field_similarity(query.get("location"), candidate.get("location")),
         "brand_similarity": _text_field_similarity(query.get("brand"), candidate.get("brand")),

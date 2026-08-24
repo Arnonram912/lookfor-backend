@@ -152,13 +152,15 @@ App Service configuration:
 
 The detailed matching flow first calculates the CLIP score from 60% image
 cosine similarity and 40% text cosine similarity. It then uses 80% of that CLIP
-score plus 20% explicit detail similarity. The detail comparison favors the
-same or a close category, item type/name, location, brand, color, description, and event
+score plus 20% explicit detail similarity. Category is evaluated separately as
+an exact normalized signal. Case, punctuation, parenthetical examples, and known
+aliases may normalize to the same category, but partial labels do not. The remaining
+detail comparison favors item type/name, location, brand, color, description, and event
 date/time; missing fields are ignored rather than counted as mismatches. Date
 and time are evaluated as one timestamp when both are present. Clearly unrelated
-item types are capped below the possible-match threshold. A category conflict is also
-excluded unless the specific item names strongly agree; then it remains visible for admin
-review but cannot become automatic. An explicit brand
+item types are capped below the possible-match threshold. A different category cannot
+become an automatic match. If the specific item names strongly agree, it remains visible
+for admin review; otherwise it is excluded. An explicit brand
 or color conflict requires admin review and cannot become an automatic match; if both brand
 and color conflict, the candidate is capped below the possible-match threshold. Related color
 shades such as black and charcoal remain close rather than becoming hard rejections. Location

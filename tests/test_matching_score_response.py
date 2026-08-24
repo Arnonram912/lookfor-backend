@@ -240,6 +240,7 @@ class MatchingScoreResponseTests(unittest.TestCase):
 
         candidate_result = result["ranked_candidates"][0]
         self.assertFalse(candidate_result["cross_category"])
+        self.assertTrue(candidate_result["category_match"])
         self.assertTrue(candidate_result["item_type_conflict"])
         self.assertLess(candidate_result["score"], 0.45)
         self.assertIsNone(result["matched_item"])

@@ -1888,7 +1888,8 @@ def compute_text_detail_matches(
                 item_type_similarity = detail_components["item_type_similarity"]
                 brand_similarity = detail_components["brand_similarity"]
                 color_similarity = detail_components["color_similarity"]
-                cross_category = category_similarity is not None and category_similarity < 0.35
+                category_match = category_similarity == 1.0
+                cross_category = category_similarity is not None and not category_match
                 item_type_conflict = item_type_similarity is not None and item_type_similarity < 0.35
                 brand_conflict = brand_similarity is not None and brand_similarity < 0.35
                 color_conflict = color_similarity is not None and color_similarity < 0.35
@@ -1939,6 +1940,7 @@ def compute_text_detail_matches(
                     "detail_similarity": detail_score,
                     **detail_components,
                     "cross_category": cross_category,
+                    "category_match": category_match,
                     "item_type_conflict": item_type_conflict,
                     "category_overridden_by_item_type": bool(
                         cross_category and strong_item_type_agreement
@@ -2086,6 +2088,7 @@ def build_saved_match_payload(
         "color_similarity",
         "description_similarity",
         "event_time_similarity",
+        "category_match",
         "cross_category",
         "item_type_conflict",
         "brand_conflict",

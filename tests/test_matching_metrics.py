@@ -2,6 +2,7 @@ import unittest
 
 from matching_metrics import (
     MATCH_THRESHOLD,
+    calculate_category_similarity,
     calculate_detail_similarity,
     calculate_detailed_match_score,
     calculate_match_score,
@@ -61,6 +62,23 @@ class MatchScoreTests(unittest.TestCase):
         self.assertEqual(components["color_similarity"], 0.85)
         self.assertEqual(components["event_time_similarity"], 1.0)
         self.assertGreater(score, 0.95)
+
+    def test_category_is_a_separate_exact_signal(self):
+        self.assertEqual(
+            calculate_category_similarity("Bags & Cases", "bags and cases"),
+            1.0,
+        )
+        self.assertEqual(
+            calculate_category_similarity(
+                "Personal Items (Wallets/Keys)",
+                "Personal Items",
+            ),
+            1.0,
+        )
+        self.assertEqual(
+            calculate_category_similarity("Accessories", "Phone Accessories"),
+            0.0,
+        )
 
 
 class MatchEvaluationTests(unittest.TestCase):
