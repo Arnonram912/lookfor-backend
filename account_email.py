@@ -24,6 +24,7 @@ _EMAIL_WORKER: threading.Thread | None = None
 _OUTBOX_WORKER_LOCK = threading.Lock()
 _OUTBOX_WORKER: threading.Thread | None = None
 _OUTBOX_SEND_INTERVAL_SECONDS = max(0.0, float(os.getenv("ACCOUNT_EMAIL_SEND_INTERVAL_SECONDS", "2")))
+_PASSWORD_EMAIL_DELAY_MINUTES = max(0.0, float(os.getenv("ACCOUNT_PASSWORD_EMAIL_DELAY_MINUTES", "2")))
 
 
 def send_account_access_email(
@@ -54,6 +55,37 @@ def send_account_access_email(
         smtp.login(sender_email, app_password)
         smtp.send_message(username_message)
         smtp.send_message(password_message)
+
+
+def send_account_access_email_stage(
+    recipient_email: str,
+    full_name: str,
+    temporary_password: str,
+    *,
+    stage: str,
+    account_type: str = "user",
+) -> None:
+    """Send one credential message so the password can be delayed durably."""
+    sender_email = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
+    app_password = os.getenv("GMAIL_APP_PASSWORD", "").strip()
+    login_url = os.getenv("LOOKFOR_LOGIN_URL", "http://127.0.0.1:8000/login").strip()
+    if not sender_email or not app_password:
+        raise RuntimeError("Gmail SMTP credentials are not configured")
+    if stage not in {"username", "password"}:
+        raise ValueError("Unsupported account email stage")
+
+    messages = build_account_access_messages(
+        recipient_email,
+        full_name,
+        temporary_password,
+        sender_email=sender_email,
+        login_url=login_url,
+        account_type=account_type,
+    )
+    message = messages[0] if stage == "username" else messages[1]
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
+        smtp.login(sender_email, app_password)
+        smtp.send_message(message)
 
 
 def build_account_access_messages(
@@ -261,7 +293,13 @@ def _claim_next_account_email():
                 or_(
                     (models.AccountEmailOutbox.status == "pending")
                     & (models.AccountEmailOutbox.available_at <= now),
+                    (models.AccountEmailOutbox.status == "password_pending")
+                    & (models.AccountEmailOutbox.available_at <= now),
                     (models.AccountEmailOutbox.status == "sending")
+                    & (models.AccountEmailOutbox.available_at <= now),
+                    (models.AccountEmailOutbox.status == "sending_username")
+                    & (models.AccountEmailOutbox.available_at <= now),
+                    (models.AccountEmailOutbox.status == "sending_password")
                     & (models.AccountEmailOutbox.available_at <= now),
                 )
             )
@@ -270,7 +308,12 @@ def _claim_next_account_email():
         )
         if not job:
             return None
-        job.status = "sending"
+        stage = (
+            "password"
+            if job.status in {"password_pending", "sending_password"}
+            else "username"
+        )
+        job.status = f"sending_{stage}"
         job.attempt_count += 1
         # A worker that stops mid-send becomes eligible again after ten minutes.
         job.available_at = now + timedelta(minutes=10)
@@ -282,26 +325,51 @@ def _claim_next_account_email():
             "encrypted_temporary_password": job.encrypted_temporary_password,
             "account_type": job.account_type,
             "attempt_count": job.attempt_count,
+            "stage": stage,
         }
     finally:
         db.close()
 
 
-def _finish_account_email(job_id: int, *, error: Exception | None = None) -> None:
+def _finish_account_email(
+    job_id: int,
+    *,
+    stage: str = "password",
+    error: Exception | None = None,
+) -> None:
     db = SessionLocal()
     try:
         job = db.query(models.AccountEmailOutbox).filter(models.AccountEmailOutbox.id == job_id).first()
         if not job:
             return
         if error is None:
-            job.status = "sent"
-            job.sent_at = datetime.utcnow()
+            if stage == "username":
+                job.status = "password_pending"
+                job.attempt_count = 0
+                job.available_at = datetime.utcnow() + timedelta(minutes=_PASSWORD_EMAIL_DELAY_MINUTES)
+            else:
+                job.status = "sent"
+                job.sent_at = datetime.utcnow()
             job.last_error = None
         elif job.attempt_count >= 5:
-            job.status = "failed"
+            failed_status = f"failed_{stage}"
+            was_failed = job.status == failed_status
+            job.status = failed_status
             job.last_error = str(error)[:1000]
+            if not was_failed:
+                db.add(models.Notification(
+                    message=(
+                        f"The {stage} credential email failed for {job.recipient_email} "
+                        f"after {job.attempt_count} attempts."
+                    ),
+                    type="account_email_failed",
+                    related_id=job.id,
+                    target_url="/admin/User-Management",
+                    is_read=False,
+                    created_at=datetime.utcnow(),
+                ))
         else:
-            job.status = "pending"
+            job.status = "password_pending" if stage == "password" else "pending"
             job.last_error = str(error)[:1000]
             job.available_at = datetime.utcnow() + timedelta(minutes=min(30, 2 ** job.attempt_count))
         db.commit()
@@ -318,16 +386,20 @@ def _account_email_outbox_worker() -> None:
                 time.sleep(2)
                 continue
             password = _outbox_cipher().decrypt(job["encrypted_temporary_password"].encode("utf-8")).decode("utf-8")
-            send_account_access_email(
-                job["recipient_email"], job["full_name"], password, account_type=job["account_type"]
+            send_account_access_email_stage(
+                job["recipient_email"],
+                job["full_name"],
+                password,
+                stage=job["stage"],
+                account_type=job["account_type"],
             )
-            _finish_account_email(job["id"])
+            _finish_account_email(job["id"], stage=job["stage"])
             # Prevent a large upload from overwhelming the SMTP provider.
             if _OUTBOX_SEND_INTERVAL_SECONDS:
                 time.sleep(_OUTBOX_SEND_INTERVAL_SECONDS)
         except Exception as exc:
             if "job" in locals() and job:
-                _finish_account_email(job["id"], error=exc)
+                _finish_account_email(job["id"], stage=job.get("stage", "username"), error=exc)
             else:
                 print(f"Account email outbox worker error: {exc}")
             time.sleep(2)

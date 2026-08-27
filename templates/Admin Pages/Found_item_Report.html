@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=22">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=23">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
 
@@ -203,7 +203,7 @@
                 </div>
 
                 <div class="items-grid" id="lostItemsGrid">
-                    <p style="text-align:center; grid-column: 1/-1;">Loading lost reports...</p>
+                    <p style="text-align:center; grid-column: 1/-1;">Loading Found reports...</p>
                 </div>
 
                 <div id="foundPaginationControls" class="found-pagination-controls" style="display:none;">
@@ -1511,7 +1511,14 @@ async function moveFoundItemToDeleted(itemId, isPending = false) {
             });
 
             if (response.ok) {
-                await showFoundReportAlert('success', 'Item approved', 'Pending item approved successfully!');
+                const result = await response.json();
+                await showFoundReportAlert(
+                    'success',
+                    result.is_matched ? 'Item matched' : 'Item approved',
+                    result.message || (result.is_matched
+                        ? 'Pending item moved directly to Matched.'
+                        : 'Pending item approved successfully!')
+                );
                 closeModal('itemDetailModal');
                 loadLostItems();
             } else {

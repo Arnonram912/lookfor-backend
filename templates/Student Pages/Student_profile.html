@@ -9,7 +9,7 @@
     <title>Student Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/profile.css?v=16"> 
+    <link rel="stylesheet" href="/static/profile.css?v=17">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -229,21 +229,7 @@
         <div class="activity-section modern-activity">
             <h3>Recent Activity</h3>
             <div class="timeline" id="activity-timeline">
-                <div class="timeline-item">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content">
-                        <span class="activity-time">2 hours ago</span>
-                        <p>Approved claim for <strong>"Blue Wallet"</strong></p>
-                    </div>
-                </div>
-
-                <div class="timeline-item">
-                    <div class="timeline-dot"></div>
-                    <div class="timeline-content">
-                        <span class="activity-time">Yesterday</span>
-                        <p>Updated profile information</p>
-                    </div>
-                </div>
+                <p class="activity-empty">Loading your activity...</p>
             </div>
         </div>
 
@@ -408,6 +394,73 @@ function clearStudentSession() {
     localStorage.removeItem('token');
 }
 
+function formatActivityTime(timestamp) {
+    if (!timestamp) return "Date unavailable";
+    const activityDate = new Date(timestamp);
+    if (Number.isNaN(activityDate.getTime())) return "Date unavailable";
+
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - activityDate.getTime()) / 1000));
+    if (elapsedSeconds < 60) return "Just now";
+    if (elapsedSeconds < 3600) return `${Math.floor(elapsedSeconds / 60)} minute${elapsedSeconds < 120 ? "" : "s"} ago`;
+    if (elapsedSeconds < 86400) return `${Math.floor(elapsedSeconds / 3600)} hour${elapsedSeconds < 7200 ? "" : "s"} ago`;
+    if (elapsedSeconds < 172800) return "Yesterday";
+    if (elapsedSeconds < 604800) return `${Math.floor(elapsedSeconds / 86400)} days ago`;
+    return activityDate.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+async function loadRecentActivity(token) {
+    const timeline = document.getElementById("activity-timeline");
+    if (!timeline) return;
+
+    try {
+        const response = await fetch("/student/activity", {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error("Failed to load recent activity.");
+
+        const activities = await response.json();
+        timeline.replaceChildren();
+        if (!Array.isArray(activities) || activities.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "activity-empty";
+            empty.textContent = "No activity yet. Your reports, claims, and account updates will appear here.";
+            timeline.appendChild(empty);
+            return;
+        }
+
+        activities.forEach((activity) => {
+            const row = document.createElement(activity.target_url ? "a" : "div");
+            row.className = `timeline-item activity-${activity.type || "update"}`;
+            if (activity.target_url) {
+                row.href = window.lookforPortalRoot === "/faculty"
+                    ? String(activity.target_url).replace("/student/", "/faculty/")
+                    : activity.target_url;
+            }
+
+            const dot = document.createElement("div");
+            dot.className = "timeline-dot";
+            const content = document.createElement("div");
+            content.className = "timeline-content";
+            const time = document.createElement("span");
+            time.className = "activity-time";
+            time.textContent = formatActivityTime(activity.occurred_at);
+            const message = document.createElement("p");
+            message.textContent = activity.message || "Account activity";
+
+            content.append(time, message);
+            row.append(dot, content);
+            timeline.appendChild(row);
+        });
+    } catch (error) {
+        console.error("Recent activity load failed:", error);
+        timeline.replaceChildren();
+        const unavailable = document.createElement("p");
+        unavailable.className = "activity-empty";
+        unavailable.textContent = "Recent activity is temporarily unavailable.";
+        timeline.appendChild(unavailable);
+    }
+}
+
 function logout() {
     clearStudentSession();
     window.location.href = "/login";
@@ -499,6 +552,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const user = await response.json();
     const roleLabel = String(user.role_label || "").toLowerCase();
     const isFaculty = roleLabel === "faculty";
+    window.lookforPortalRoot = isFaculty ? "/faculty" : "/student";
+    loadRecentActivity(token);
     const displayLevel = user.level || user.section || "N/A";
     const idTitle = document.getElementById('label-id-title');
     const courseTitle = document.getElementById('label-course-title');
@@ -697,7 +752,7 @@ document.getElementById('imageUpload').onchange = evt => {
 
 <script src="/static/session-keepalive.js?v=8"></script>
 <script src="/static/force-password-change.js?v=2"></script>
-<script src="/static/student-sidebar-access.js?v=2"></script>
-<script src="/static/student-notifications.js?v=5"></script>
+<script src="/static/student-sidebar-access.js?v=3"></script>
+<script src="/static/student-notifications.js?v=6"></script>
 </body>
 </html>

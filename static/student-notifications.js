@@ -104,8 +104,17 @@
         }
     }
 
+    function getPortalPageUrl(path) {
+        const portalRoot = window.lookforPortalRoot === "/faculty" ? "/faculty" : "/student";
+        const normalizedPath = String(path || "");
+        if (normalizedPath.startsWith("/student/")) {
+            return normalizedPath.replace("/student/", `${portalRoot}/`);
+        }
+        return normalizedPath || `${portalRoot}/dashboard`;
+    }
+
     function getMessagePageUrl() {
-        return "/student/Messages";
+        return getPortalPageUrl("/student/Messages");
     }
 
     function formatMessageTime(value) {
@@ -221,7 +230,7 @@
         if (dropdown) dropdown.style.display = "none";
         updateMessageUnreadBadge();
 
-        if ((window.location.pathname || "").toLowerCase() === "/student/messages" && typeof window.openChat === "function") {
+        if (document.body.classList.contains("student-message-page") && typeof window.openChat === "function") {
             const item = document.querySelector(`.message-notification-item[data-partner-id="${partnerId}"]`);
             const name = item?.querySelector(".message-notification-title strong")?.textContent || "User";
             window.openChat(partnerId, name);
@@ -348,17 +357,17 @@
             });
 
             if (notif && notif.target_url) {
-                window.location.href = notif.target_url;
+                window.location.href = getPortalPageUrl(notif.target_url);
                 return;
             }
 
             if (notif && notif.type === "chat") {
-                window.location.href = "/student/Messages";
+                window.location.href = getMessagePageUrl();
                 return;
             }
 
             if (notif && (notif.type === "student_match" || notif.type === "student_update")) {
-                window.location.href = "/student/Lost-report";
+                window.location.href = getPortalPageUrl("/student/Lost-report");
                 return;
             }
 

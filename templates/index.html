@@ -489,7 +489,12 @@
         localStorage.setItem("user_email", payload.sub);
         localStorage.removeItem("pending_login_email");
 
-        showLoginSuccessModal(payload.is_admin ? "/admin/dashboard" : "/student/dashboard");
+        const portalUrl = payload.is_admin
+            ? "/admin/dashboard"
+            : payload.user_category === "FACULTY" || payload.role_label === "Faculty"
+                ? "/faculty/dashboard"
+                : "/student/dashboard";
+        showLoginSuccessModal(portalUrl);
     }
 
     function switchToLoginMode() {

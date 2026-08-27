@@ -1461,6 +1461,62 @@ body.dark-theme #bulkEmails {
     overflow-y: auto;
 }
 
+.profile-email-delivery-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: 14px;
+    padding: 14px 16px;
+    border: 1px solid #d9e2ec;
+    border-radius: 12px;
+    background: #f8fbff;
+}
+
+.profile-email-delivery-hint {
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.profile-email-delivery-action {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+.profile-email-delivery-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: #edf1f5;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.profile-email-delivery-status.pending { background: #fff3d6; color: #9a5a00; }
+.profile-email-delivery-status.sending { background: #e2f1ff; color: #075f9d; }
+.profile-email-delivery-status.sent { background: #dff6e8; color: #14753c; }
+.profile-email-delivery-status.failed { background: #fde7e9; color: #b4232f; }
+
+.profile-resend-email-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 36px;
+    width: auto;
+    padding: 8px 13px;
+    white-space: nowrap;
+}
+
 .admin-profile-view .permission-chip {
     padding: 5px 9px;
     font-size: 11px;
@@ -1729,6 +1785,16 @@ body.dark-theme #bulkEmails {
 
     .user-profile-actions {
         flex-direction: column-reverse;
+    }
+
+    .profile-email-delivery-panel,
+    .profile-email-delivery-action {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .profile-email-delivery-action {
+        justify-content: flex-start;
     }
 }
 

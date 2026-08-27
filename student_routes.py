@@ -67,7 +67,7 @@ def get_active_student_user(
     if STUDENT_ACCESS_PERMISSION not in permissions:
         raise HTTPException(
             status_code=403,
-            detail="Your student account is still deactivated. Please wait for admin activation."
+            detail="Your portal account is still deactivated. Please wait for admin activation."
         )
 
     return current_user
@@ -337,6 +337,117 @@ def get_student_notifications(
     return notifications
 
 
+def _recent_activity_entry(
+    *,
+    activity_id: str,
+    activity_type: str,
+    message: str,
+    occurred_at: datetime | None,
+    target_url: str | None,
+) -> dict:
+    serialized_time = None
+    if occurred_at:
+        serialized_time = occurred_at.isoformat()
+        if occurred_at.tzinfo is None:
+            serialized_time += "Z"
+    return {
+        "id": activity_id,
+        "type": activity_type,
+        "message": message,
+        "occurred_at": serialized_time,
+        "target_url": target_url,
+        "_sort_at": occurred_at or datetime.min,
+    }
+
+
+@router.get("/activity")
+def get_student_recent_activity(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_active_student_user),
+):
+    """Return real, user-owned events for the profile activity timeline."""
+    activities = []
+
+    notifications = db.query(models.Notification).filter(
+        models.Notification.type.in_(["student_match", "student_update"]),
+        models.Notification.related_id == current_user.id,
+    ).order_by(models.Notification.created_at.desc()).limit(10).all()
+    for notification in notifications:
+        activities.append(_recent_activity_entry(
+            activity_id=f"notification-{notification.id}",
+            activity_type=notification.type or "update",
+            message=notification.message,
+            occurred_at=notification.created_at,
+            target_url=notification.target_url,
+        ))
+
+    items = db.query(models.Item).filter(
+        or_(
+            models.Item.user_id == current_user.id,
+            models.Item.report_owner_user_id == current_user.id,
+        ),
+    ).order_by(models.Item.created_at.desc()).limit(10).all()
+    for item in items:
+        item_status = str(item.status or "item").strip().casefold()
+        report_kind = "lost" if item_status == "lost" else "found"
+        activities.append(_recent_activity_entry(
+            activity_id=f"item-{item.id}",
+            activity_type=f"{report_kind}_report",
+            message=f'Reported {report_kind} item "{item.item_name}"',
+            occurred_at=item.created_at,
+            target_url=(
+                f"/student/Lost-report?item_id={item.id}"
+                if report_kind == "lost"
+                else f"/student/Found-report?item_id={item.id}"
+            ),
+        ))
+
+    pending_found_items = db.query(models.PendingItem).filter(
+        models.PendingItem.user_id == current_user.id,
+    ).order_by(models.PendingItem.created_at.desc()).limit(10).all()
+    for item in pending_found_items:
+        activities.append(_recent_activity_entry(
+            activity_id=f"pending-found-{item.id}",
+            activity_type="found_report",
+            message=f'Submitted found item "{item.item_name}" for approval',
+            occurred_at=item.created_at,
+            target_url=f"/student/Found-report?item_id={item.id}",
+        ))
+
+    claims = db.query(models.Claim).filter(
+        models.Claim.claimant_id == current_user.id,
+    ).order_by(models.Claim.created_at.desc()).limit(10).all()
+    for claim in claims:
+        claim_status = str(claim.status or "pending").strip().casefold()
+        item = claim.found_item or claim.lost_item
+        item_name = item.item_name if item else "item"
+        if claim_status in models.CLAIMED_CLAIM_STATUSES:
+            message = f'Claim approved for "{item_name}"'
+            activity_type = "claim_approved"
+        elif claim_status == "rejected":
+            message = f'Claim rejected for "{item_name}"'
+            activity_type = "claim_rejected"
+        else:
+            message = f'Submitted a claim for "{item_name}"'
+            activity_type = "claim_submitted"
+        activities.append(_recent_activity_entry(
+            activity_id=f"claim-{claim.id}",
+            activity_type=activity_type,
+            message=message,
+            occurred_at=claim.admin_decision_date or claim.created_at,
+            target_url=(
+                f"/student/Lost-report?item_id={claim.lost_item_id}"
+                if claim.lost_item_id
+                else "/student/Lost-report"
+            ),
+        ))
+
+    activities.sort(key=lambda entry: entry["_sort_at"], reverse=True)
+    for activity in activities:
+        activity.pop("_sort_at", None)
+    return activities[:10]
+
+
 @router.get("/notifications/unread-count")
 def get_student_notification_unread_count(
     db: Session = Depends(get_db),
@@ -603,12 +714,12 @@ async def update_student_profile(
     create_student_notification(
         db,
         user.id,
-        "Your student profile was updated successfully.",
+        "Your profile was updated successfully.",
         "student_update",
         "/student/profile"
     )
     db.commit()
-    return {"message": "Student profile updated successfully"}
+    return {"message": "Profile updated successfully"}
 
 @router.get("/dashboard")
 def Student_dashboard(
@@ -706,13 +817,13 @@ def update_student_settings(
     create_student_notification(
         db,
         user.id,
-        "Your student settings were updated successfully.",
+        "Your settings were updated successfully.",
         "student_update",
         "/student/settings"
     )
     db.commit()
 
-    return {"status": "success", "message": "Student settings updated successfully"}
+    return {"status": "success", "message": "Settings updated successfully"}
 
 
 # ... (your existing imports)

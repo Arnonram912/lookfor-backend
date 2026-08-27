@@ -38,7 +38,11 @@ from utils import (
 )
 from sqlalchemy import and_, or_, func, text
 from concurrent.futures import ThreadPoolExecutor
-from account_email import queue_account_access_email, queue_item_event_email
+from account_email import (
+    ensure_account_email_outbox_worker,
+    queue_account_access_email,
+    queue_item_event_email,
+)
 from matching_metrics import MATCH_THRESHOLD, calculate_match_score, clamp_similarity_score
 from automatic_match_evaluation import calculate_automatic_match_evaluation
 from item_match_lifecycle import (
@@ -4124,8 +4128,49 @@ def list_users_paginated(
         .limit(page_size)
         .all()
     )
+    serialized_users = [serialize_user_management_user(user, current_admin) for user in users]
+    displayed_emails = {
+        clean_text(item.get("email")).casefold()
+        for item in serialized_users
+        if clean_text(item.get("email"))
+    }
+    latest_email_jobs = {}
+    if displayed_emails:
+        latest_job_ids = (
+            db.query(func.max(models.AccountEmailOutbox.id).label("id"))
+            .filter(func.lower(models.AccountEmailOutbox.recipient_email).in_(displayed_emails))
+            .group_by(func.lower(models.AccountEmailOutbox.recipient_email))
+            .subquery()
+        )
+        jobs = (
+            db.query(models.AccountEmailOutbox)
+            .join(latest_job_ids, models.AccountEmailOutbox.id == latest_job_ids.c.id)
+            .all()
+        )
+        latest_email_jobs = {
+            clean_text(job.recipient_email).casefold(): job
+            for job in jobs
+        }
+
+    for item in serialized_users:
+        email_job = latest_email_jobs.get(clean_text(item.get("email")).casefold())
+        raw_status = clean_text(email_job.status).casefold() if email_job else "not_queued"
+        if raw_status in {"pending", "password_pending"}:
+            delivery_status = "pending"
+        elif raw_status in {"sending", "sending_username", "sending_password"}:
+            delivery_status = "sending"
+        elif raw_status in {"failed", "failed_username", "failed_password"}:
+            delivery_status = "failed"
+        elif raw_status == "sent":
+            delivery_status = "sent"
+        else:
+            delivery_status = "not_queued"
+        item["email_delivery_status"] = delivery_status
+        item["email_delivery_attempts"] = int(email_job.attempt_count or 0) if email_job else 0
+        item["email_sent_at"] = email_job.sent_at.isoformat() if email_job and email_job.sent_at else None
+
     return {
-        "items": [serialize_user_management_user(user, current_admin) for user in users],
+        "items": serialized_users,
         "pagination": {
             "page": page,
             "page_size": page_size,
@@ -4607,7 +4652,8 @@ async def approve_item(
         matched_lost_item = db.query(models.Item).filter(
             models.Item.id == pending.matched_item_id,
             models.Item.status == "lost",
-            models.Item.archived == False
+            models.Item.archived == False,
+            models.Item.deleted == False,
         ).first()
 
     if matched_lost_item:
@@ -4638,18 +4684,32 @@ async def approve_item(
         )
 
     # 3. Remove from pending
+    final_status = "matched" if matched_lost_item else "approved"
     db.delete(pending)
     db.commit()
     create_admin_notification(
         db,
-        f"Pending item #{item_id} was approved and moved to active inventory.",
-        "new_report",
+        (
+            f"Pending item #{item_id} is now matched with lost item #{matched_lost_item.id}."
+            if matched_lost_item
+            else f"Pending item #{item_id} was approved and moved to active inventory."
+        ),
+        "match" if matched_lost_item else "new_report",
         new_item.id,
         "/admin/Found_Items_Report",
         created_by_admin_id=current_admin.id
     )
 
-    return {"status": "success", "message": "Item approved and moved to inventory"}
+    return {
+        "status": "success",
+        "item_status": final_status,
+        "is_matched": bool(matched_lost_item),
+        "message": (
+            "Pending item approved and moved directly to Matched."
+            if matched_lost_item
+            else "Item approved and moved to inventory."
+        ),
+    }
 
 
 
@@ -5366,6 +5426,58 @@ async def get_stats(
         ).count(),
         "claimed_count": claimed_count,
         "approved_claim_count": claimed_count,  # Legacy response key.
+    }
+
+
+@router.post("/users/{user_id}/credential-email/resend")
+def resend_user_credential_email(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("user_management.create")),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found.")
+
+    recipient_email = clean_text(displayed_email(user))
+    if not recipient_email:
+        raise HTTPException(status_code=400, detail="This account does not have an email address.")
+
+    email_job = (
+        db.query(models.AccountEmailOutbox)
+        .filter(func.lower(models.AccountEmailOutbox.recipient_email) == recipient_email.casefold())
+        .order_by(models.AccountEmailOutbox.id.desc())
+        .first()
+    )
+    if not email_job:
+        raise HTTPException(
+            status_code=409,
+            detail="No credential email is available to resend. Reset the password to generate new credentials.",
+        )
+    failed_status = clean_text(email_job.status).casefold()
+    if failed_status not in {"failed", "failed_username", "failed_password"}:
+        raise HTTPException(status_code=409, detail="Only failed credential emails can be resent.")
+
+    # If only the delayed password message failed, retry that stage without
+    # sending a duplicate username email. Legacy failures restart both stages.
+    email_job.status = "password_pending" if failed_status == "failed_password" else "pending"
+    email_job.attempt_count = 0
+    email_job.available_at = datetime.utcnow()
+    email_job.sent_at = None
+    email_job.last_error = None
+    create_admin_notification(
+        db,
+        f"Credential email resend queued for {recipient_email}.",
+        "user_management_students",
+        user.id,
+        target_url="/admin/User-Management",
+        created_by_admin_id=current_admin.id,
+    )
+    db.commit()
+    ensure_account_email_outbox_worker()
+    return {
+        "message": f"Credential email resend queued for {recipient_email}.",
+        "email_delivery_status": "pending",
     }
 
 

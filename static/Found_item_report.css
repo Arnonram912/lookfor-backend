@@ -501,9 +501,31 @@ body {
   width: min(760px, 92vw);
   max-width: min(760px, 92vw) !important;
   max-height: min(92vh, 720px);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 16px 20px;
   border-radius: 14px;
+}
+
+.detail-modal::-webkit-scrollbar {
+  width: 9px;
+}
+
+.detail-modal::-webkit-scrollbar-track {
+  margin-block: 12px;
+  background: transparent;
+}
+
+.detail-modal::-webkit-scrollbar-thumb {
+  background: #9aa8b7;
+  border: 2px solid #fff;
+  border-radius: 999px;
+}
+
+.detail-modal::-webkit-scrollbar-thumb:hover {
+  background: #6f8092;
 }
 
 .form-title {

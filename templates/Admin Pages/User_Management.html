@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/User_Management.css?v=29">
+    <link rel="stylesheet" href="/static/User_Management.css?v=30">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
@@ -252,7 +252,7 @@
 
 <div id="adminContainer" class="table-box">
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="adminTableBody"></tbody>
     </table>
 </div>
@@ -267,14 +267,14 @@
         <span id="studentAcademicTermStatus" class="student-year-term-status">Active</span>
     </div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>Student ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course / Strand</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>Student ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course / Strand</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="studentTableBody"></tbody>
     </table>
 </div>
 
 <div id="facultyContainer" class="table-box" style="display:none;">
     <table class="user-table">
-        <thead><tr><th>Select</th><th>Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="facultyTableBody"></tbody>
     </table>
 </div>
@@ -283,7 +283,7 @@
     <h3 id="archiveTitle"><i class="fas fa-box-archive"></i> Archived Accounts</h3>
     <div id="archiveFolderGrid" class="archive-folder-grid"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="archiveTableBody"></tbody>
     </table>
 </div>
@@ -292,7 +292,7 @@
     <h3 id="deleteTitle"><i class="fas fa-trash"></i> Trash</h3>
     <div id="trashFolderGrid" class="archive-folder-grid"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="deleteTableBody"></tbody>
     </table>
 </div>
@@ -638,6 +638,19 @@
             <div class="permission-summary-title">Profile Information</div>
             <div id="profileViewDetails" class="permission-summary-text">No additional information available.</div>
             <div id="profileViewPermissions" class="permission-chip-list"></div>
+        </div>
+
+        <div class="profile-email-delivery-panel">
+            <div>
+                <div class="permission-summary-title">Credential Email</div>
+                <div id="profileViewEmailDeliveryHint" class="profile-email-delivery-hint">Delivery status unavailable.</div>
+            </div>
+            <div class="profile-email-delivery-action">
+                <span id="profileViewEmailDeliveryStatus" class="profile-email-delivery-status">Not queued</span>
+                <button id="profileResendEmailBtn" class="btn-primary profile-resend-email-btn" type="button" style="display:none;">
+                    <i class="fas fa-paper-plane" aria-hidden="true"></i> Resend Email
+                </button>
+            </div>
         </div>
 
         <div class="user-profile-actions">
@@ -1044,6 +1057,9 @@
         <div id="progressBar" style="width:0%; height:100%; background:linear-gradient(90deg, var(--sti-yellow) 0%, #fff2a6 45%, var(--sti-yellow) 70%); background-size:220% 100%; transition: width 0.55s ease;"></div>
     </div>
 </div>
+<div id="bulkUploadElapsedTimer" role="timer" aria-live="off" style="display:none; position:fixed; top:18px; right:20px; z-index:10001; padding:7px 11px; border-radius:999px; background:#0f2f57; color:#fff; border:1px solid rgba(255,255,255,0.25); box-shadow:0 6px 18px rgba(0,51,102,0.22); font:600 12px/1.2 Montserrat,sans-serif; letter-spacing:0.02em;">
+    Upload&nbsp; 00:00
+</div>
 
 <script>
 
@@ -1128,6 +1144,7 @@ const MODULE_ACTION_PERMISSIONS = {
 };
 const BULK_JOB_STORAGE_KEY = "active_bulk_registration_job_id";
 const BULK_JOB_AUTO_OPEN_STORAGE_KEY = "active_bulk_registration_job_auto_open";
+const BULK_JOB_STARTED_AT_STORAGE_KEY = "active_bulk_registration_started_at";
 
 let currentAdminPermissions = [];
 let activeBulkJobId = null;
@@ -1137,6 +1154,56 @@ let bulkJobAutoOpenResult = false;
 let lastKnownBulkJobStatus = null;
 let lastCompletedBulkJob = null;
 let bulkLoadingOverlayTimer = null;
+let bulkUploadElapsedInterval = null;
+
+function parseBulkJobTime(value) {
+    if (!value) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    const normalized = String(value);
+    const timestamp = Date.parse(
+        normalized.endsWith('Z') || /[+-]\d\d:\d\d$/.test(normalized)
+            ? normalized
+            : `${normalized}Z`
+    );
+    return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function formatBulkElapsed(elapsedMilliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(elapsedMilliseconds / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return hours > 0
+        ? `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+        : `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function startBulkUploadElapsedTimer(startedAt = null) {
+    const timer = document.getElementById('bulkUploadElapsedTimer');
+    if (!timer) return;
+
+    const storedStart = Number(localStorage.getItem(BULK_JOB_STARTED_AT_STORAGE_KEY));
+    const resolvedStart = parseBulkJobTime(startedAt) || (Number.isFinite(storedStart) && storedStart > 0 ? storedStart : Date.now());
+    localStorage.setItem(BULK_JOB_STARTED_AT_STORAGE_KEY, String(resolvedStart));
+
+    if (bulkUploadElapsedInterval) clearInterval(bulkUploadElapsedInterval);
+    const updateTimer = () => {
+        timer.textContent = `Upload  ${formatBulkElapsed(Date.now() - resolvedStart)}`;
+    };
+    timer.style.display = 'block';
+    updateTimer();
+    bulkUploadElapsedInterval = setInterval(updateTimer, 1000);
+}
+
+function stopBulkUploadElapsedTimer() {
+    if (bulkUploadElapsedInterval) {
+        clearInterval(bulkUploadElapsedInterval);
+        bulkUploadElapsedInterval = null;
+    }
+    const timer = document.getElementById('bulkUploadElapsedTimer');
+    if (timer) timer.style.display = 'none';
+    localStorage.removeItem(BULK_JOB_STARTED_AT_STORAGE_KEY);
+}
 
 function hasAccessPermission(permission) {
     return currentAdminPermissions.includes(permission);
@@ -1247,6 +1314,7 @@ function dismissBulkJobCard() {
         localStorage.removeItem(BULK_JOB_STORAGE_KEY);
         localStorage.removeItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY);
         activeBulkJobId = null;
+        stopBulkUploadElapsedTimer();
     }
 }
 
@@ -1341,7 +1409,12 @@ function renderBulkJobCard(job, options = {}) {
     percentBadge.style.justifyContent = 'center';
     percentBadge.innerText = `${visibleProgress}%`;
 
+    if (job.status === 'queued' || job.status === 'running') {
+        startBulkUploadElapsedTimer(job.started_at || job.created_at);
+    }
+
     if (job.status === 'completed') {
+        stopBulkUploadElapsedTimer();
         progressBar.classList.remove('bulk-progress-moving');
         progressBar.style.width = '100%';
         progressBar.style.background = 'linear-gradient(90deg, #16a34a, #22c55e)';
@@ -1375,6 +1448,7 @@ function renderBulkJobCard(job, options = {}) {
     }
 
     if (job.status === 'failed') {
+        stopBulkUploadElapsedTimer();
         progressBar.classList.remove('bulk-progress-moving');
         progressBar.style.width = `${fillWidth}%`;
         progressBar.style.background = 'linear-gradient(90deg, #dc3545, #ff6b6b)';
@@ -1456,6 +1530,7 @@ async function pollBulkJobStatus() {
         }
     } catch (error) {
         console.error('Bulk job polling failed:', error);
+        stopBulkUploadElapsedTimer();
         const card = document.getElementById('bulkJobStatusCard');
         const title = document.getElementById('bulkJobTitle');
         const message = document.getElementById('bulkJobMessage');
@@ -1483,6 +1558,7 @@ function startBulkJobPolling(jobId, options = {}) {
         ? true
         : localStorage.getItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY) === 'true';
     localStorage.setItem(BULK_JOB_STORAGE_KEY, jobId);
+    startBulkUploadElapsedTimer();
     if (bulkJobAutoOpenResult) {
         localStorage.setItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY, 'true');
     }
@@ -1500,6 +1576,7 @@ function startBulkJobPolling(jobId, options = {}) {
 function resumePersistedBulkJob() {
     const persistedBulkJobId = localStorage.getItem(BULK_JOB_STORAGE_KEY);
     if (persistedBulkJobId) {
+        startBulkUploadElapsedTimer();
         startBulkJobPolling(persistedBulkJobId, {
             autoOpenResult: localStorage.getItem(BULK_JOB_AUTO_OPEN_STORAGE_KEY) === 'true'
         });
@@ -1626,6 +1703,42 @@ function setProfileText(id, value) {
     if (element) element.textContent = value || 'N/A';
 }
 
+function renderProfileEmailDelivery(user) {
+    const statusElement = document.getElementById('profileViewEmailDeliveryStatus');
+    const hintElement = document.getElementById('profileViewEmailDeliveryHint');
+    const resendButton = document.getElementById('profileResendEmailBtn');
+    if (!statusElement || !hintElement || !resendButton) return;
+
+    const status = String(user?.email_delivery_status || 'not_queued').toLowerCase();
+    const labels = {
+        pending: 'Pending',
+        sending: 'Sending',
+        sent: 'Sent',
+        failed: 'Failed',
+        not_queued: 'Not queued'
+    };
+    const hints = {
+        pending: 'The credential email is queued. The password email follows the username email after two minutes.',
+        sending: 'The mail provider is currently processing the credential email.',
+        sent: 'Both credential emails were accepted by the mail provider.',
+        failed: 'The credential email could not be delivered after automatic retries.',
+        not_queued: 'No stored credential email is available for this account.'
+    };
+    const normalizedStatus = Object.prototype.hasOwnProperty.call(labels, status) ? status : 'not_queued';
+    statusElement.textContent = labels[normalizedStatus];
+    statusElement.className = `profile-email-delivery-status ${normalizedStatus.replace('_', '-')}`;
+    hintElement.textContent = hints[normalizedStatus];
+
+    const canResend = normalizedStatus === 'failed'
+        && hasAccessPermission('User-Management-Create')
+        && !!user?.email;
+    resendButton.style.display = canResend ? 'inline-flex' : 'none';
+    resendButton.disabled = false;
+    resendButton.onclick = canResend
+        ? () => resendCredentialEmail(user.id, resendButton)
+        : null;
+}
+
 function openUserProfileModal(userId, mode = 'view') {
     const user = allUsers.find(item => Number(item.id) === Number(userId));
     if (!user) {
@@ -1669,6 +1782,7 @@ function openUserProfileModal(userId, mode = 'view') {
     setProfileText('profileViewBatch', user.batch_id || 'N/A');
     setProfileText('profileViewLastLogin', formatUserProfileDate(user.last_login));
     setProfileText('profileViewDetails', nameParts.length ? nameParts.join(' | ') : 'No additional profile name fields available.');
+    renderProfileEmailDelivery(user);
 
     if (statusBadge) {
         statusBadge.textContent = statusLabel;
@@ -2885,7 +2999,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
 
     if (!pageRows.length) {
         const columnCount = currentRole === 'admin' || currentRole === 'staff' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete'
-            ? 7
+            ? 8
             : 6;
         tableBody.innerHTML = `<tr><td colspan="${columnCount}" style="text-align:center; padding:18px; color:#5b6f86; font-weight:700;">No records found.</td></tr>`;
         updateUserPaginationControls(totalRows);
@@ -2977,6 +3091,32 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
             ? `<td><input type="checkbox" class="row-select" ${isMe ? 'disabled title="You cannot select your own account."' : ''} ${selectedUserIds.has(user.id) ? 'checked' : ''} onchange="toggleUserSelection(${user.id}, this.checked)"></td>`
             : '';
 
+        const emailStatus = String(user.email_delivery_status || 'not_queued').toLowerCase();
+        const emailStatusLabels = {
+            pending: 'Pending',
+            sending: 'Sending',
+            sent: 'Sent',
+            failed: 'Failed',
+            not_queued: 'Not queued'
+        };
+        const emailStatusColors = {
+            pending: '#b26a00',
+            sending: '#0b63a8',
+            sent: '#198754',
+            failed: '#dc3545',
+            not_queued: '#6c757d'
+        };
+        const resendButton = emailStatus === 'failed' && hasAccessPermission('User-Management-Create')
+            ? `<button class="action-btn" type="button" onclick="resendCredentialEmail(${user.id}, this)" style="margin-top:6px; padding:5px 9px; white-space:nowrap;" title="Retry the failed credential email"><i class="fas fa-paper-plane" aria-hidden="true"></i> Resend Email</button>`
+            : '';
+        const emailStatusColumn = `
+            <td>
+                <span style="font-weight:700; color:${emailStatusColors[emailStatus] || emailStatusColors.not_queued};" title="Sent means accepted by the mail provider; inbox placement is not guaranteed.">
+                    ${emailStatusLabels[emailStatus] || emailStatusLabels.not_queued}
+                </span>
+                ${resendButton}
+            </td>`;
+
         return `
             <tr data-user-id="${user.id}" class="${isMe ? 'self-row' : ''} ${user.is_archived ? 'archived-row' : ''}">
                 ${selectColumn}
@@ -2984,6 +3124,7 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                 <td>${user.full_name} ${isMe ? '<span class="you-badge">YOU</span>' : ''}</td>
                 ${infoColumn}
                 <td style="font-size: 0.85rem; color: #555;">${loginDisplay}</td>
+                ${emailStatusColumn}
                 <td>
                     <span class="status-pill ${(user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'status-active' : 'status-deactivated'}">
                         ${user.is_archived ? 'Archived / Disabled' : ((user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'Active' : 'Deactivated')}
@@ -3000,6 +3141,48 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
 
     updateUserPaginationControls(totalRows);
     updateSelectionActionButtons();
+}
+
+async function resendCredentialEmail(userId, button) {
+    if (!hasAccessPermission('User-Management-Create')) {
+        Swal.fire('Access denied', 'You do not have permission to resend credential emails.', 'error');
+        return;
+    }
+
+    const confirmation = await Swal.fire({
+        title: 'Resend credential email?',
+        text: 'This retries the existing email and does not create another account or password.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Resend Email'
+    });
+    if (!confirmation.isConfirmed) return;
+
+    const originalHtml = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Queuing...';
+    }
+    try {
+        const response = await fetch(`/admin/users/${userId}/credential-email/resend`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || 'Unable to resend the credential email.');
+        if (selectedProfileUser && Number(selectedProfileUser.id) === Number(userId)) {
+            selectedProfileUser.email_delivery_status = 'pending';
+            renderProfileEmailDelivery(selectedProfileUser);
+        }
+        await Swal.fire('Email queued', result.message || 'The credential email was queued for delivery.', 'success');
+        await loadUsers(currentView);
+    } catch (error) {
+        Swal.fire('Resend failed', error.message, 'error');
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+        }
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -4796,6 +4979,7 @@ async function submitBulk() {
 
     btn.innerText = `Starting ${usersToRegister.length} Account${usersToRegister.length === 1 ? '' : 's'}...`;
     btn.disabled = true;
+    startBulkUploadElapsedTimer(Date.now());
     setBulkLoadingOverlay(true, {
         title: 'Starting bulk registration',
         message: `Preparing ${usersToRegister.length.toLocaleString()} student/faculty account${usersToRegister.length === 1 ? '' : 's'} in one background request...`,
@@ -4839,6 +5023,7 @@ async function submitBulk() {
         startBulkJobPolling(data.job_id, { autoOpenResult: true });
     } catch (err) { 
         console.error(err);
+        stopBulkUploadElapsedTimer();
         setBulkLoadingOverlay(false);
         await showUserManagementAlert('error', 'Bulk registration failed', err.message || 'Server connection failed.'); 
     } finally { 
@@ -5606,7 +5791,7 @@ window.addEventListener('pageshow', () => {
 
 <script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=3"></script>
-<script src="/static/admin-notifications.js?v=5"></script>
+<script src="/static/admin-notifications.js?v=6"></script>
 <script src="/static/force-password-change.js"></script>
 </body>
 </html>

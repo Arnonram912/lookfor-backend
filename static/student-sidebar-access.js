@@ -1,7 +1,9 @@
 (function () {
     const ALLOWED_WHEN_DEACTIVATED = new Set([
         "/student/profile",
-        "/student/settings"
+        "/student/settings",
+        "/faculty/profile",
+        "/faculty/settings"
     ]);
 
     function decodeTokenPayload(token) {
@@ -20,7 +22,16 @@
         return (path || "").replace(/\/+$/, "").toLowerCase();
     }
 
-    function showNoAccessPopup() {
+    function rewriteFacultyPageLinks() {
+        document.querySelectorAll('a[href^="/student/"]').forEach((link) => {
+            link.setAttribute("href", link.getAttribute("href").replace("/student/", "/faculty/"));
+        });
+        document.querySelectorAll('[onclick*="/student/"]').forEach((element) => {
+            element.setAttribute("onclick", element.getAttribute("onclick").replaceAll("/student/", "/faculty/"));
+        });
+    }
+
+    function showNoAccessPopup(accountLabel = "Student") {
         const existing = document.getElementById("student-no-access-modal");
         if (existing) {
             existing.style.display = "flex";
@@ -41,7 +52,7 @@
                 <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
                 <h2 style="color: #d9534f; margin-bottom: 10px; font-family: 'Montserrat', sans-serif;">No Access</h2>
                 <p style="color: #555; line-height: 1.5;">
-                    Your student account is currently deactivated. Please wait for admin activation before opening this page.
+                    Your ${accountLabel.toLowerCase()} account is currently deactivated. Please wait for admin activation before opening this page.
                 </p>
                 <button onclick="document.getElementById('student-no-access-modal').remove()"
                     style="margin-top: 22px; padding: 12px 28px; background: #003366; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
@@ -57,9 +68,6 @@
         const token = getStudentToken();
         if (!token) return;
 
-        const sidebarLinks = Array.from(document.querySelectorAll('.sidebar .nav-links a[href^="/student/"]'));
-        if (sidebarLinks.length === 0) return;
-
         try {
             const response = await fetch("/api/current-user", {
                 headers: { "Authorization": `Bearer ${token}` }
@@ -73,6 +81,18 @@
                 return;
             }
 
+            const roleLabel = String(currentUser.role_label || "Student");
+            if (["Faculty", "Staff"].includes(roleLabel)) {
+                document.title = `${roleLabel} Portal | LookFor STI`;
+            }
+            const isFaculty = roleLabel === "Faculty";
+            document.body.dataset.portalRole = roleLabel.toLowerCase();
+            window.lookforPortalRoot = isFaculty ? "/faculty" : "/student";
+            if (isFaculty) rewriteFacultyPageLinks();
+
+            const sidebarLinks = Array.from(document.querySelectorAll('.sidebar .nav-links a[href^="/student/"], .sidebar .nav-links a[href^="/faculty/"]'));
+            if (sidebarLinks.length === 0) return;
+
             if (currentUser.is_student_active) return;
 
             sidebarLinks.forEach((link) => {
@@ -81,7 +101,7 @@
 
                 link.addEventListener("click", (event) => {
                     event.preventDefault();
-                    showNoAccessPopup();
+                    showNoAccessPopup(roleLabel);
                 });
             });
         } catch (error) {

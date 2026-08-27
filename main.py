@@ -73,6 +73,7 @@ from security import (
 )
 from account_email import ensure_account_email_outbox_worker, queue_item_event_email
 from lookfor_permissions import normalize_permissions
+from lookfor_constants import normalize_user_category
 from matching_metrics import (
     ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD,
     MATCH_THRESHOLD,
@@ -345,6 +346,42 @@ PAGE_ALIASES = {
         "label": "Student Settings",
         "no_store": True,
     },
+    "/faculty/dashboard": {
+        "alias": "612e5b17-3835-5317-a459-d8634f27b201",
+        "template": "student2.0.html",
+        "label": "Faculty Dashboard",
+        "no_store": True,
+    },
+    "/faculty/Messages": {
+        "alias": "7e405c49-6dde-51f6-96af-49b9ab4dc27e",
+        "template": "Student Pages/Student_Messages.html",
+        "label": "Faculty Messages",
+        "no_store": True,
+    },
+    "/faculty/Lost-report": {
+        "alias": "b5394659-9f8a-589e-a2a8-dd4b6269ca36",
+        "template": "Student Pages/Student_LostReport.html",
+        "label": "Faculty Lost Report",
+        "no_store": True,
+    },
+    "/faculty/Found-report": {
+        "alias": "f2fa135d-7e56-5201-b999-4fd60131fabc",
+        "template": "Student Pages/Student_FoundReport.html",
+        "label": "Faculty Found Report",
+        "no_store": True,
+    },
+    "/faculty/profile": {
+        "alias": "f695849d-b0b6-5902-9784-e095f6dd16c3",
+        "template": "Student Pages/Student_profile.html",
+        "label": "Faculty Profile",
+        "no_store": True,
+    },
+    "/faculty/settings": {
+        "alias": "273441b5-59b9-5c1c-8782-43a776744e06",
+        "template": "Student Pages/Student_Settings.html",
+        "label": "Faculty Settings",
+        "no_store": True,
+    },
 }
 
 PAGE_ALIAS_BY_ID = {
@@ -356,6 +393,18 @@ PAGE_ALIAS_BY_ID = {
 def set_no_store_headers(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
+
+
+def portal_root_for_user(user: models.User) -> str:
+    if user.is_admin:
+        return "/admin"
+    return "/faculty" if get_user_role_label(user) == "Faculty" else "/student"
+
+
+@app.get("/faculty", include_in_schema=False)
+@app.get("/faculty/", include_in_schema=False)
+def faculty_portal_root():
+    return RedirectResponse("/faculty/dashboard", status_code=307)
 
 
 @app.middleware("http")
@@ -383,7 +432,7 @@ def hashed_page(
         raise HTTPException(status_code=404, detail="Page not found")
 
     page_path = str(page.get("path") or "")
-    if page_path.startswith(("/admin/", "/student/")):
+    if page_path.startswith(("/admin/", "/student/", "/faculty/")):
         token = (request.cookies.get("admin_access_token") or "").strip()
         if not token:
             return RedirectResponse("/login", status_code=303)
@@ -392,9 +441,18 @@ def hashed_page(
         except Exception:
             return RedirectResponse("/login", status_code=303)
         if page_path.startswith("/admin/") and not authenticated_user.is_admin:
-            return RedirectResponse("/student/dashboard", status_code=303)
-        if page_path.startswith("/student/") and authenticated_user.is_admin:
+            destination = f"{portal_root_for_user(authenticated_user)}/dashboard"
+            return RedirectResponse(destination, status_code=303)
+        if page_path.startswith(("/student/", "/faculty/")) and authenticated_user.is_admin:
             return RedirectResponse("/admin/dashboard", status_code=303)
+        is_faculty = get_user_role_label(authenticated_user) == "Faculty"
+        if page_path.startswith("/faculty/") and not is_faculty:
+            return RedirectResponse("/student/dashboard", status_code=303)
+        if page_path.startswith("/student/") and is_faculty:
+            faculty_path = page_path.replace("/student/", "/faculty/", 1)
+            if request.url.query:
+                faculty_path = f"{faculty_path}?{request.url.query}"
+            return RedirectResponse(faculty_path, status_code=303)
 
         required_permission = {
             "/admin/dashboard": "dashboard.view",
@@ -417,7 +475,7 @@ def hashed_page(
             require_admin_permission(authenticated_user, required_permission)
 
     page_response = templates.TemplateResponse(page["template"], {"request": request})
-    if page.get("no_store") or page_path.startswith(("/admin/", "/student/")):
+    if page.get("no_store") or page_path.startswith(("/admin/", "/student/", "/faculty/")):
         set_no_store_headers(page_response)
     return page_response
 
@@ -1090,11 +1148,15 @@ If you did not request this reset, you can safely ignore this email.
 
 
 def build_auth_response(user: models.User):
+    user_category = normalize_user_category(getattr(user, "user_category", None))
+    role_label = get_user_role_label(user)
     access_token = create_access_token(
         data={
             "sub": user.email,
             "id": user.id,
             "is_admin": user.is_admin,
+            "user_category": user_category,
+            "role_label": role_label,
             "must_change": bool(user.must_change_password),
         }
     )
@@ -1102,7 +1164,9 @@ def build_auth_response(user: models.User):
     payload = {
         "access_token": access_token,
         "token_type": "bearer",
-        "is_admin": user.is_admin
+        "is_admin": user.is_admin,
+        "user_category": user_category,
+        "role_label": role_label,
     }
     response = JSONResponse(payload)
     response.set_cookie(
@@ -1434,11 +1498,15 @@ def update_auth_settings(
 def refresh_access_token(
     current_user: models.User = Depends(get_current_user),
 ):
+    user_category = normalize_user_category(getattr(current_user, "user_category", None))
+    role_label = get_user_role_label(current_user)
     access_token = create_access_token(
         data={
             "sub": current_user.email,
             "id": current_user.id,
             "is_admin": current_user.is_admin,
+            "user_category": user_category,
+            "role_label": role_label,
             "must_change": bool(current_user.must_change_password),
         }
     )
@@ -1447,6 +1515,8 @@ def refresh_access_token(
         "access_token": access_token,
         "token_type": "bearer",
         "is_admin": current_user.is_admin,
+        "user_category": user_category,
+        "role_label": role_label,
     })
     response.set_cookie(
         "admin_access_token",
@@ -1573,6 +1643,20 @@ def get_user_role_label(user: models.User) -> str:
     if user.is_admin:
         return "Admin"
 
+    category = normalize_user_category(getattr(user, "user_category", None))
+    if category == "FACULTY":
+        return "Faculty"
+    if category == "STAFF":
+        return "Staff"
+    if category in {"COLLEGE_STUDENT", "SHS_STUDENT"}:
+        return "Student"
+
+    personnel = str(getattr(user, "personnel", None) or "").strip().casefold()
+    if personnel in {"faculty", "teacher", "teaching"}:
+        return "Faculty"
+    if personnel == "staff":
+        return "Staff"
+
     has_department = bool((user.department or "").strip()) and (user.department or "").strip() != "N/A"
     has_course = bool((user.course or "").strip())
     has_section = bool((user.section or "").strip())
@@ -1625,6 +1709,7 @@ def get_current_user_profile(current_user: models.User = Depends(get_current_use
         "level": getattr(current_user, "level", None),
         "department": current_user.department,
         "personnel": getattr(current_user, "personnel", None),
+        "user_category": getattr(current_user, "user_category", None),
         "profile_pic": deployed_static_path(current_user.profile_pic),
         "is_admin": bool(current_user.is_admin),
         "role_label": role_label,
@@ -2561,6 +2646,7 @@ def analyze_lost_item_matches(
     strongest_match = result.get("matched_item")
     auto_linked = False
     claim_id = None
+    pending_approval = False
 
     if strongest_match and strongest_match.get("source", "found") == "found":
         found_item = db.query(models.Item).filter(
@@ -2617,9 +2703,46 @@ def analyze_lost_item_matches(
                     is_read=False,
                 ))
 
+    elif strongest_match and strongest_match.get("source") == "pending_found":
+        pending_found = db.query(models.PendingItem).filter(
+            models.PendingItem.id == strongest_match.get("id"),
+            models.PendingItem.archived == False,
+            models.PendingItem.deleted == False,
+        ).first()
+        if pending_found and pending_found.matched_item_id in {None, item.id}:
+            active_claim = db.query(models.Claim.id).filter(
+                models.Claim.lost_item_id == item.id,
+                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+            ).first()
+            other_pending_link = db.query(models.PendingItem.id).filter(
+                models.PendingItem.matched_item_id == item.id,
+                models.PendingItem.id != pending_found.id,
+                models.PendingItem.archived == False,
+                models.PendingItem.deleted == False,
+            ).first()
+            if not active_claim and not other_pending_link:
+                # Reserve the pair without approving the found report or
+                # creating a claim. Approval converts this pending record into
+                # a matched found inventory item and creates the claim then.
+                pending_found.matched_item_id = item.id
+                item.is_matched = True
+                auto_linked = True
+                pending_approval = True
+                db.add(models.Notification(
+                    message=(
+                        f"Automatic AI match reserved: Pending Found Item #{pending_found.id} "
+                        f"matches Lost Item #{item.id} and is awaiting approval."
+                    ),
+                    type="match",
+                    related_id=pending_found.id,
+                    target_url="/admin/Found_Items_Report",
+                    is_read=False,
+                ))
+
     db.commit()
     result["auto_linked"] = auto_linked
     result["claim_id"] = claim_id
+    result["pending_approval"] = pending_approval
     return result
 
 
@@ -2910,11 +3033,13 @@ async def save_found_item(
         matched_lost_item = db.query(models.Item).filter(
             models.Item.id == matched_item_id,
             models.Item.status == "lost",
-            models.Item.archived == False
+            models.Item.archived == False,
+            models.Item.deleted == False,
         ).first()
 
         if matched_lost_item:
             new_pending.matched_item_id = matched_lost_item.id
+            matched_lost_item.is_matched = True
             possible_match_count = prepend_lost_possible_match(
                 matched_lost_item,
                 serialize_pending_found_match(new_pending, match_score)

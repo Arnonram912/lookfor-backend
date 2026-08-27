@@ -144,6 +144,29 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertTrue(lost.is_matched)
         self.assertTrue(found.is_matched)
 
+    @patch("main.analyze_saved_item_details")
+    def test_pending_found_match_is_reserved_without_creating_claim(self, analyzer):
+        lost = lost_item()
+        pending = SimpleNamespace(id=99, matched_item_id=None, archived=False, deleted=False)
+        db = SequencedFakeSession([lost, pending, None, None])
+        analyzer.return_value = {
+            "highest_score": 0.84,
+            "matched_item": {"id": 99, "source": "pending_found", "score": 0.84},
+            "matched_items": [{"id": 99, "source": "pending_found", "score": 0.84}],
+            "action": "show_match",
+        }
+
+        result = analyze_lost_item_matches(7162, db=db, current_user=user())
+
+        claims = [value for value in db.added if isinstance(value, models.Claim)]
+        self.assertTrue(result["auto_linked"])
+        self.assertTrue(result["pending_approval"])
+        self.assertIsNone(result["claim_id"])
+        self.assertEqual(pending.matched_item_id, lost.id)
+        self.assertTrue(lost.is_matched)
+        self.assertEqual(claims, [])
+        self.assertTrue(db.committed)
+
 
 if __name__ == "__main__":
     unittest.main()

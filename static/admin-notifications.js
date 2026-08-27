@@ -26,6 +26,7 @@
     function getNotificationLabel(type) {
         if (type === "match") return "Possible Match";
         if (type === "chat") return "";
+        if (type === "account_email_failed") return "Email Failed";
         if (type === "user_management_admin" || type === "user_management_students") return "User Update";
         return "Update";
     }
