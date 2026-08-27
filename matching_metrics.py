@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping
 from collections import defaultdict
 from datetime import date, datetime
 from difflib import SequenceMatcher
+import math
 import re
 from typing import Any
 
@@ -19,9 +20,11 @@ MATCH_THRESHOLD = 0.75
 CLIP_SCORE_WEIGHT = 0.80
 DETAIL_SCORE_WEIGHT = 0.20
 
-# Ranked candidates receive a small confidence decay as their rank increases.
-# Rank 1 keeps 100%, rank 2 keeps 95%, rank 3 keeps 90%, etc.
-RANK_DECAY = 0.05
+COMPETITION_TEMPERATURE = 0.05
+# Only near-ties should make a match ambiguous. Candidates farther than this
+# from the strongest raw score remain reviewable but do not dilute it.
+COMPETITION_SIMILARITY_MARGIN = 0.03
+COMPETITION_PRIMARY_SIGNAL_MARGIN = 0.05
 
 ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD = 0.80
 
@@ -344,19 +347,81 @@ def evaluate_match_dataset(
     }
 
 
-def apply_rank_decay(score: float, rank: int, decay: float = RANK_DECAY) -> float:
-    """Reduce a candidate's displayed score according to its ranking position.
+def calculate_competition_confidences(
+    scores: Iterable[float],
+    *,
+    eligibility_threshold: float = POSSIBLE_MATCH_THRESHOLD,
+    temperature: float = COMPETITION_TEMPERATURE,
+    similarity_margin: float = COMPETITION_SIMILARITY_MARGIN,
+    primary_similarity_scores: Iterable[float] | None = None,
+    primary_similarity_margin: float = COMPETITION_PRIMARY_SIGNAL_MARGIN,
+) -> list[float]:
+    """Turn raw similarities into ambiguity-aware candidate confidences.
 
-    Rank 1 keeps the original score. Each subsequent rank loses ``decay``
-    fraction of the original score. The result is always clamped to 0..1.
+    Only candidates that pass the review threshold and fall within the near-tie
+    margin of the strongest score compete. When primary similarities (normally
+    CLIP image scores) are supplied, they must also be visually close. Softmax
+    gives tied candidates equal shares. The share is applied as a logarithmic
+    odds penalty, not direct division, so a distinctive candidate retains its
+    raw confidence.
     """
-    if rank < 1:
-        raise ValueError("rank must be at least 1.")
-    if not 0.0 <= float(decay) <= 1.0:
-        raise ValueError("decay must be between 0 and 1.")
+    raw_scores = [clamp_similarity_score(score) for score in scores]
+    if temperature <= 0:
+        raise ValueError("temperature must be greater than zero.")
+    if similarity_margin < 0:
+        raise ValueError("similarity_margin cannot be negative.")
+    if primary_similarity_margin < 0:
+        raise ValueError("primary_similarity_margin cannot be negative.")
 
-    ranking_factor = max(0.0, 1.0 - ((rank - 1) * float(decay)))
-    return round(clamp_similarity_score(float(score) * ranking_factor), 4)
+    primary_scores = None
+    if primary_similarity_scores is not None:
+        primary_scores = [clamp_similarity_score(score) for score in primary_similarity_scores]
+        if len(primary_scores) != len(raw_scores):
+            raise ValueError("primary_similarity_scores must have the same length as scores.")
+
+    eligible_indexes = [
+        index for index, score in enumerate(raw_scores)
+        if score >= float(eligibility_threshold)
+    ]
+    confidences = [
+        score if index in eligible_indexes else 0.0
+        for index, score in enumerate(raw_scores)
+    ]
+    if not eligible_indexes:
+        return confidences
+
+    maximum_score = max(raw_scores[index] for index in eligible_indexes)
+    strongest_index = max(eligible_indexes, key=lambda index: raw_scores[index])
+    strongest_primary_score = primary_scores[strongest_index] if primary_scores is not None else None
+    competing_indexes = [
+        index for index in eligible_indexes
+        if maximum_score - raw_scores[index] <= float(similarity_margin)
+        and (
+            primary_scores is None
+            or abs(primary_scores[index] - strongest_primary_score)
+            <= float(primary_similarity_margin)
+        )
+    ]
+    weights = {
+        index: math.exp((raw_scores[index] - maximum_score) / float(temperature))
+        for index in competing_indexes
+    }
+    total_weight = sum(weights.values())
+    for index in competing_indexes:
+        competition_share = weights[index] / total_weight
+        raw_score = min(raw_scores[index], 1.0 - 1e-6)
+        raw_odds = raw_score / (1.0 - raw_score)
+        adjusted_odds = raw_odds * competition_share
+        confidences[index] = round(adjusted_odds / (1.0 + adjusted_odds), 4)
+
+    # Scores are displayed in raw-score rank order. Keep adjusted confidence
+    # monotonic so a lower-ranked non-competing candidate cannot appear more
+    # confident than a stronger candidate that was reduced by a near tie.
+    previous_confidence = 1.0
+    for index in sorted(eligible_indexes, key=lambda value: raw_scores[value], reverse=True):
+        confidences[index] = min(confidences[index], previous_confidence)
+        previous_confidence = confidences[index]
+    return confidences
 
 
 def evaluate_ranking_metrics(
@@ -390,12 +455,6 @@ def evaluate_ranking_metrics(
 
     for candidates in grouped.values():
         ranked = sorted(candidates, key=lambda candidate: candidate[0], reverse=True)
-
-        # Apply ranking decay after sorting so the best candidate remains unchanged.
-        ranked = [
-            (apply_rank_decay(score, rank), actual)
-            for rank, (score, actual) in enumerate(ranked, start=1)
-        ]
 
         relevant_total = sum(1 for _, actual in ranked if actual)
         if relevant_total == 0:

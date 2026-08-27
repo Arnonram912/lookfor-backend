@@ -30,6 +30,10 @@ from clip_test import combine_embeddings, get_text_embedding, get_image_embeddin
 from models import SettingsUpdate
 from account_email import queue_item_event_email
 from matching_metrics import MATCH_THRESHOLD, clamp_similarity_score
+from item_match_lifecycle import (
+    delete_item_claims_and_release_matches,
+    release_pending_found_link,
+)
 
 
 router = APIRouter(prefix="/student", tags=["Student"])
@@ -1243,6 +1247,7 @@ async def submit_user_lost_report(
             "is_matched": bool(new_report.is_matched),
             "has_possible_match": bool(match_result.get("matched_items")),
             "matched_item_id": found_item.id if found_item else None,
+            "analysis": match_result,
         }
 
     except Exception as e:
@@ -1444,22 +1449,10 @@ def permanently_delete_my_report(
         return {"message": "Report removed from your items"}
     if not bool(getattr(item, "deleted", False)):
         raise HTTPException(status_code=404, detail="Deleted report not found")
-    if record_type != "pending-found":
-        linked_claims = db.query(models.Claim).filter(or_(
-            models.Claim.lost_item_id == item_id,
-            models.Claim.found_item_id == item_id,
-        )).all()
-        if linked_claims:
-            claim_ids = [claim.id for claim in linked_claims]
-            db.query(models.ClaimDecisionReport).filter(
-                models.ClaimDecisionReport.claim_id.in_(claim_ids)
-            ).delete(synchronize_session=False)
-            db.query(models.ClaimProof).filter(
-                models.ClaimProof.claim_id.in_(claim_ids)
-            ).delete(synchronize_session=False)
-            db.query(models.Claim).filter(
-                models.Claim.id.in_(claim_ids)
-            ).delete(synchronize_session=False)
+    if record_type == "pending-found":
+        release_pending_found_link(db, item)
+    else:
+        delete_item_claims_and_release_matches(db, item)
     db.delete(item)
     db.commit()
     return {

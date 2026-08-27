@@ -988,7 +988,7 @@ function renderDetailPossibleMatches(result, categoryFallback = '', isMatched = 
                         <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
                         ${formatMatchScoreBreakdown(match)}
                     </div>
-                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Final: ${formatMatchScore(match.score)}</div>
+                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Confidence: ${formatMatchScore(match.score)}</div>
                 </div>
             </label>
         `).join('');
@@ -1262,6 +1262,7 @@ async function analyzeLostItemMatches() {
             <div style="margin-top:6px; font-size:12px; line-height:1.55; color:#556678;">
                 Image: ${formatMatchScore(match.image_similarity)} &middot;
                 Text: ${formatMatchScore(match.text_similarity)}
+                ${match.raw_score !== undefined ? ` &middot; Raw: ${formatMatchScore(match.raw_score)}` : ''}
             </div>
         `;
     }
@@ -1308,7 +1309,7 @@ async function analyzeLostItemMatches() {
                         <div style="font-size: 20px; font-weight: 700; color: #0e2742;">${escapeModalHtml(topMatch.category || 'Matched Item')}</div>
                         <div style="margin-top: 8px; color: #41556b;">ID: ${escapeModalHtml(String(topMatch.id || 'N/A'))}</div>
                         <div style="margin-top: 4px; color: #41556b;">Location: ${escapeModalHtml(topMatch.location || 'Unknown')}</div>
-                        <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Final score: ${formatMatchScore(topMatch.score)}</div>
+                        <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Adjusted confidence: ${formatMatchScore(topMatch.score)}</div>
                         ${formatMatchScoreBreakdown(topMatch)}
                     </div>
                 </div>
@@ -1331,7 +1332,7 @@ async function analyzeLostItemMatches() {
                         ${formatMatchScoreBreakdown(match)}
                         </div>
                     </div>
-                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Final: ${formatMatchScore(match.score)}</div>
+                    <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Confidence: ${formatMatchScore(match.score)}</div>
                 </div>
             </label>
         `).join('');
@@ -1862,7 +1863,17 @@ async function executeSubmitLegacy() {
         });
 
         if (saveRes.ok) {
-            alert(`Success! Lost item report registered in ${deptName}`);
+            const savedResult = await saveRes.json();
+            const savedAnalysis = savedResult?.analysis || {};
+            const analyzedCandidates = Array.isArray(savedAnalysis.matched_items)
+                ? savedAnalysis.matched_items
+                : [];
+            const matchedFoundItem = savedAnalysis?.matched_item || analyzedCandidates[0] || null;
+            alert(
+                matchedFoundItem
+                    ? `Success! Lost item registered in ${deptName}. Top found item #${matchedFoundItem.id}: adjusted ${formatMatchScore(matchedFoundItem.score)}, raw ${formatMatchScore(matchedFoundItem.raw_score ?? matchedFoundItem.score)}, rank #${matchedFoundItem.rank || 1}.`
+                    : `Success! Lost item registered in ${deptName}. No matching found item was detected.`
+            );
             location.reload();
         } else {
             const errorData = await saveRes.json();
@@ -1990,7 +2001,19 @@ async function executeSubmit() {
         });
 
         if (saveRes.ok) {
-            await showLostUploadAlert('success', 'Report submitted', `Lost item report registered in ${deptName}.`);
+            const savedResult = await saveRes.json();
+            const savedAnalysis = savedResult?.analysis || {};
+            const analyzedCandidates = Array.isArray(savedAnalysis.matched_items)
+                ? savedAnalysis.matched_items
+                : [];
+            const matchedFoundItem = savedAnalysis?.matched_item || analyzedCandidates[0] || null;
+            await showLostUploadAlert(
+                'success',
+                matchedFoundItem ? 'Report submitted — match analyzed' : 'Report submitted',
+                matchedFoundItem
+                    ? `Lost item registered in ${deptName}. Top found item #${matchedFoundItem.id}: adjusted ${formatMatchScore(matchedFoundItem.score)}, raw ${formatMatchScore(matchedFoundItem.raw_score ?? matchedFoundItem.score)}, rank #${matchedFoundItem.rank || 1}.`
+                    : `Lost item registered in ${deptName}. No matching found item was detected.`
+            );
             location.reload();
         } else {
             const errorData = await saveRes.json();

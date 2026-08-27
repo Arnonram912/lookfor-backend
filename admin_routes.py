@@ -40,6 +40,10 @@ from sqlalchemy import and_, or_, func, text
 from concurrent.futures import ThreadPoolExecutor
 from account_email import queue_account_access_email, queue_item_event_email
 from matching_metrics import MATCH_THRESHOLD, calculate_match_score, clamp_similarity_score
+from item_match_lifecycle import (
+    delete_item_claims_and_release_matches,
+    release_pending_found_link,
+)
 from lookfor_constants import (
     ACADEMIC_CLASSIFICATIONS,
     IDENTIFIER_RE,
@@ -55,6 +59,7 @@ from lookfor_constants import (
     infer_legacy_classification,
     normalize_level,
     normalize_user_category,
+    tertiary_term_for_level,
     valid_levels_for_category,
 )
 from lookfor_permissions import (
@@ -4436,28 +4441,31 @@ def bulk_register(
         if selected_category == "SHS_STUDENT"
         else f"BATCH-{term_setting.current_academic_year} {term_setting.current_semester}"
     )
-    known_programs = {
-        clean_text(value).casefold()
-        for (value,) in db.query(models.User.course)
-        .filter(models.User.course.isnot(None), func.ltrim(func.rtrim(models.User.course)) != "")
-        .distinct().all()
-        if clean_text(value)
-    }
+
+    def imported_batch_id(student: dict) -> str:
+        if selected_category != "COLLEGE_STUDENT":
+            return automatic_batch_id
+        encoded_term = tertiary_term_for_level(student.get("level"))
+        if not encoded_term:
+            return automatic_batch_id
+        return academic_archive_batch_id(
+            "TERTIARY",
+            term_setting.current_academic_year,
+            encoded_term,
+        )
+
     expected_source = "employee" if selected_category == "FACULTY" else "student"
     students_list = [
         {
             **student,
-            "batch_id": automatic_batch_id,
+            "batch_id": imported_batch_id(student),
             "user_category": selected_category,
             "source_type": expected_source,
             "department": selected_department if selected_category == "FACULTY" else student.get("department"),
-            "validation_errors": (
-                ["Program is not in the configured program list"]
-                if selected_category in {"COLLEGE_STUDENT", "SHS_STUDENT"}
-                and known_programs
-                and clean_text(student.get("course") or student.get("program")).casefold() not in known_programs
-                else []
-            ),
+            # Bulk learner files are an authoritative enrollment source. Keep
+            # the supplied program on the account even when it has not appeared
+            # in a previous import instead of rejecting the student.
+            "validation_errors": [],
         }
         for student in students_list
         if isinstance(student, dict)
@@ -4713,6 +4721,7 @@ def dispose_pending_item(
             deleted_at=datetime.utcnow(),
         )
         db.add(reference_item)
+        release_pending_found_link(db, pending)
         db.delete(pending)
         db.commit()
         create_admin_notification(
@@ -5054,7 +5063,8 @@ async def finalize_lost_upload(
             "status": "success", 
             "item_id": new_item.id,
             "uploader": current_user.full_name,
-            "auto_matched": is_auto_match
+            "auto_matched": is_auto_match,
+            "analysis": match_result,
         }
         
     except Exception as e:
@@ -5329,25 +5339,7 @@ async def dispose_item(
     )
 
     try:
-        linked_claims = db.query(models.Claim).filter(
-            or_(
-                models.Claim.lost_item_id == item_id,
-                models.Claim.found_item_id == item_id,
-            )
-        ).all()
-
-        if linked_claims:
-            claim_ids = [claim.id for claim in linked_claims]
-            db.query(models.ClaimDecisionReport).filter(
-                models.ClaimDecisionReport.claim_id.in_(claim_ids)
-            ).delete(synchronize_session=False)
-            db.query(models.ClaimProof).filter(
-                models.ClaimProof.claim_id.in_(claim_ids)
-            ).delete(synchronize_session=False)
-            db.query(models.Claim).filter(
-                models.Claim.id.in_(claim_ids)
-            ).delete(synchronize_session=False)
-
+        delete_item_claims_and_release_matches(db, item)
         store_item_as_reference(db, item, reason="disposed")
         db.delete(item)
         db.commit()

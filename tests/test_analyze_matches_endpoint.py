@@ -123,6 +123,27 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertEqual(claims[0].similarity_score, "82.0%")
         self.assertTrue(db.committed)
 
+    @patch("main.analyze_saved_item_details")
+    def test_reanalysis_repairs_stale_matched_flags_when_no_active_claim_exists(self, analyzer):
+        lost = lost_item()
+        lost.is_matched = True
+        found = SimpleNamespace(id=7194, is_matched=True)
+        db = SequencedFakeSession([lost, found, None, None])
+        analyzer.return_value = {
+            "highest_score": 0.796,
+            "matched_item": {"id": 7194, "source": "found", "score": 0.796},
+            "matched_items": [{"id": 7194, "source": "found", "score": 0.796}],
+            "action": "show_match",
+        }
+
+        result = analyze_lost_item_matches(7162, db=db, current_user=user())
+
+        claims = [value for value in db.added if isinstance(value, models.Claim)]
+        self.assertTrue(result["auto_linked"])
+        self.assertEqual(len(claims), 1)
+        self.assertTrue(lost.is_matched)
+        self.assertTrue(found.is_matched)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -102,6 +102,15 @@ def normalize_level(value: object | None) -> str | None:
     return _LEVEL_ALIASES.get(normalized)
 
 
+def tertiary_term_for_level(value: object | None) -> str | None:
+    """Return the semester encoded by compact tertiary levels such as 3Y2."""
+    normalized = clean_text(value).casefold()
+    compact_tertiary_level = re.fullmatch(r"[1-4]\s*y\s*([12])", normalized)
+    if not compact_tertiary_level:
+        return None
+    return "First Semester" if compact_tertiary_level.group(1) == "1" else "Second Semester"
+
+
 def classification_for_category(category: object | None) -> str | None:
     normalized = normalize_user_category(category)
     return USER_CATEGORY_CLASSIFICATION.get(normalized)

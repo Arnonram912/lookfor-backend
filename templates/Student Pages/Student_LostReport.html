@@ -942,7 +942,19 @@ async function executeSubmit() {
         });
 
         if (saveRes.ok) {
-            await showLostUploadAlert('success', 'Report submitted', 'Your lost item report has been submitted.');
+            const savedResult = await saveRes.json();
+            const savedAnalysis = savedResult?.analysis || {};
+            const analyzedCandidates = Array.isArray(savedAnalysis.matched_items)
+                ? savedAnalysis.matched_items
+                : [];
+            const matchedFoundItem = savedAnalysis?.matched_item || analyzedCandidates[0] || null;
+            await showLostUploadAlert(
+                'success',
+                matchedFoundItem ? 'Report submitted — match analyzed' : 'Report submitted',
+                matchedFoundItem
+                    ? `Top found item #${matchedFoundItem.id}: adjusted ${(Number(matchedFoundItem.score || 0) * 100).toFixed(1)}%, raw ${(Number(matchedFoundItem.raw_score ?? matchedFoundItem.score ?? 0) * 100).toFixed(1)}%, rank #${matchedFoundItem.rank || 1}.`
+                    : 'Your lost item report was submitted. No matching found item was detected.'
+            );
             location.reload();
         } else if (saveRes.status === 401) {
             throw new Error("Login session expired. Please log in again.");
@@ -1123,12 +1135,18 @@ async function executeSubmit() {
         });
 
         if (saveRes.ok) {
+            const savedResult = await saveRes.json();
+            const savedAnalysis = savedResult?.analysis || {};
+            const analyzedCandidates = Array.isArray(savedAnalysis.matched_items)
+                ? savedAnalysis.matched_items
+                : [];
+            const matchedFoundItem = savedAnalysis?.matched_item || analyzedCandidates[0] || null;
             await showLostUploadAlert(
                 'success',
-                'Report submitted',
-                hasConfirmedMatch
-                    ? 'Your lost item report has been submitted and a strong possible match was detected for review.'
-                    : 'Your lost item report has been submitted successfully.'
+                matchedFoundItem ? 'Report submitted — match analyzed' : 'Report submitted',
+                matchedFoundItem
+                    ? `Top found item #${matchedFoundItem.id}: adjusted ${(Number(matchedFoundItem.score || 0) * 100).toFixed(1)}%, raw ${(Number(matchedFoundItem.raw_score ?? matchedFoundItem.score ?? 0) * 100).toFixed(1)}%, rank #${matchedFoundItem.rank || 1}.`
+                    : 'Your lost item report was submitted. No matching found item was detected.'
             );
             location.reload();
         } else if (saveRes.status === 401) {
@@ -1278,7 +1296,7 @@ async function loadPossibleMatchesForDetail(itemId, categoryFallback = '') {
                     ${match.source === 'pending_found' ? '<div style="margin-top:5px; color:#a96600; font-weight:700; font-size:12px;">AWAITING APPROVAL</div>' : ''}
                     <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                     <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
-                    <div style="margin-top:4px; color:#556678;">Score: ${formatMatchScore(match.score)}</div>
+                    <div style="margin-top:4px; color:#556678;">Confidence: ${formatMatchScore(match.score)}${match.raw_score !== undefined ? ` · Raw: ${formatMatchScore(match.raw_score)}` : ''}</div>
                 </div>
             </div>
         `).join('');
@@ -1303,6 +1321,24 @@ async function analyzeStudentLostItemMatches() {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.detail || 'Match analysis failed.');
+        if (result.auto_linked) {
+            studentLostItemsCache = studentLostItemsCache.map(item =>
+                item.id === currentStudentLostItemId
+                    ? { ...item, is_matched: true, display_status: 'Matched' }
+                    : item
+            );
+            renderStudentLostItems();
+            const statusEl = document.getElementById('modalStatus');
+            if (statusEl) {
+                statusEl.innerText = 'MATCHED';
+                statusEl.style.color = '#28a745';
+            }
+            await showLostUploadAlert(
+                'success',
+                'Automatic match linked',
+                'The confidence reached 75%, both items were marked as matched, and a pending claim was created.'
+            );
+        }
         const container = document.getElementById('modalPossibleMatches');
         const matchedItems = Array.isArray(result?.matched_items) ? result.matched_items : [];
         container.innerHTML = matchedItems.length ? matchedItems.map((match, index) => `
@@ -1313,7 +1349,7 @@ async function analyzeStudentLostItemMatches() {
                     ${match.source === 'pending_found' ? '<div style="margin-top:5px; color:#a96600; font-weight:700; font-size:12px;">AWAITING APPROVAL</div>' : ''}
                     <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                     <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
-                    <div style="margin-top:4px; color:#556678;">Score: ${formatMatchScore(match.score)}</div>
+                    <div style="margin-top:4px; color:#556678;">Confidence: ${formatMatchScore(match.score)}${match.raw_score !== undefined ? ` · Raw: ${formatMatchScore(match.raw_score)}` : ''}</div>
                 </div>
             </div>
         `).join('') : 'No possible matches found for this item yet.';

@@ -3,6 +3,7 @@ import unittest
 from matching_metrics import (
     MATCH_THRESHOLD,
     calculate_category_similarity,
+    calculate_competition_confidences,
     calculate_detail_similarity,
     calculate_detailed_match_score,
     calculate_match_score,
@@ -14,6 +15,45 @@ from matching_metrics import (
 
 
 class MatchScoreTests(unittest.TestCase):
+    def test_equal_candidates_share_confidence_without_artificial_rank_advantage(self):
+        confidences = calculate_competition_confidences([0.9] * 100)
+        self.assertEqual(set(confidences), {0.0826})
+
+    def test_clear_winner_keeps_confidence_when_other_candidates_do_not_qualify(self):
+        confidences = calculate_competition_confidences([0.9, 0.4, 0.2])
+        self.assertEqual(confidences, [0.9, 0.0, 0.0])
+
+    def test_clear_winner_remains_strong_among_many_weak_qualifiers(self):
+        confidences = calculate_competition_confidences([0.9, *([0.5] * 99)])
+        self.assertEqual(confidences[0], 0.9)
+        self.assertTrue(all(value == 0.5 for value in confidences[1:]))
+
+    def test_only_candidates_really_similar_to_the_best_apply_decay(self):
+        confidences = calculate_competition_confidences([0.9, 0.88, 0.86, 0.7])
+
+        self.assertLess(confidences[0], 0.9)
+        self.assertLess(confidences[1], 0.88)
+        # The third candidate does not participate in the near tie, but its
+        # display confidence is capped to preserve the raw ranking order.
+        self.assertEqual(confidences[2], confidences[1])
+        self.assertEqual(confidences[3], 0.7)
+
+    def test_candidate_outside_three_point_margin_does_not_decay_winner(self):
+        confidences = calculate_competition_confidences([0.9, 0.8699])
+        self.assertEqual(confidences, [0.9, 0.8699])
+
+    def test_overall_near_tie_does_not_decay_when_images_are_not_close(self):
+        confidences = calculate_competition_confidences(
+            [0.9, 0.89],
+            primary_similarity_scores=[1.0, 0.864],
+        )
+        self.assertEqual(confidences, [0.9, 0.89])
+
+    def test_lower_rank_cannot_display_higher_adjusted_confidence(self):
+        confidences = calculate_competition_confidences([0.9, 0.89, 0.85])
+        self.assertGreaterEqual(confidences[0], confidences[1])
+        self.assertGreaterEqual(confidences[1], confidences[2])
+
     def test_canonical_formula_uses_image_and_text_similarity(self):
         score = calculate_match_score(0.8, 0.6)
         self.assertEqual(score, 0.72)

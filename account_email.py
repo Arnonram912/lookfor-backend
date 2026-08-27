@@ -33,7 +33,7 @@ def send_account_access_email(
     *,
     account_type: str = "user",
 ) -> None:
-    """Send the credentials and first-login instructions for a new account."""
+    """Send account access details and the temporary password separately."""
     sender_email = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
     app_password = os.getenv("GMAIL_APP_PASSWORD", "").strip()
     login_url = os.getenv("LOOKFOR_LOGIN_URL", "http://127.0.0.1:8000/login").strip()
@@ -41,45 +41,86 @@ def send_account_access_email(
     if not sender_email or not app_password:
         raise RuntimeError("Gmail SMTP credentials are not configured")
 
-    display_name = (full_name or "there").strip()
-    role_label = (account_type or "user").strip().title()
+    username_message, password_message = build_account_access_messages(
+        recipient_email,
+        full_name,
+        temporary_password,
+        sender_email=sender_email,
+        login_url=login_url,
+        account_type=account_type,
+    )
 
-    message = EmailMessage()
-    message["Subject"] = "Your LookFor account is ready"
-    message["From"] = sender_email
-    message["To"] = recipient_email
-    message.set_content(
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
+        smtp.login(sender_email, app_password)
+        smtp.send_message(username_message)
+        smtp.send_message(password_message)
+
+
+def build_account_access_messages(
+    recipient_email: str,
+    full_name: str,
+    temporary_password: str,
+    *,
+    sender_email: str,
+    login_url: str,
+    account_type: str = "user",
+) -> tuple[EmailMessage, EmailMessage]:
+    """Build separate username and temporary-password account emails."""
+    display_name = (full_name or "there").strip()
+    username = (recipient_email or "").strip()
+    # Retain the argument for compatibility with queued jobs. The requested
+    # copy applies uniformly to every LookFor account type.
+    _ = account_type
+
+    username_message = EmailMessage()
+    username_message["Subject"] = "Your LookFor Account Has Been Created"
+    username_message["From"] = sender_email
+    username_message["To"] = recipient_email
+    username_message.set_content(
         f"""Hello {display_name},
 
-Your LookFor {role_label.lower()} account has been created.
+Welcome to LookFor!
 
-How to access your account:
+Your LookFor account has been successfully created. LookFor is a web and mobile application designed to help students, faculty, and staff easily find and manage lost and found items within the campus.
+
+Your Account Details
+
+- Username: {username}
+
+How to Access Your Account
+
 1. Open {login_url}
-2. Sign in using your email: {recipient_email}
-3. Enter your temporary password: {temporary_password}
+2. Sign in using your username.
+3. Enter the temporary password provided in the separate email.
 4. Change your temporary password when prompted.
 5. A verification code will be sent to your email during sign-in.
 
-For your security, do not share your temporary password or verification code.
+For your security, please do not share your account credentials or verification code with anyone.
+
+Thank you for using LookFor!
 
 - LookFor Team"""
     )
 
-    message.add_alternative(
+    username_message.add_alternative(
         f"""
         <html>
             <body>
                 <p>Hello {html.escape(display_name)},</p>
-                <p>Your LookFor {html.escape(role_label.lower())} account has been created.</p>
-                <h3>How to access your account</h3>
+                <p>Welcome to LookFor!</p>
+                <p>Your LookFor account has been successfully created. LookFor is a web and mobile application designed to help students, faculty, and staff easily find and manage lost and found items within the campus.</p>
+                <h3>Your Account Details</h3>
+                <p><strong>Username:</strong> {html.escape(username)}</p>
+                <h3>How to Access Your Account</h3>
                 <ol>
                     <li>Open <a href="{html.escape(login_url, quote=True)}">the LookFor login page</a>.</li>
-                    <li>Sign in using <strong>{html.escape(recipient_email)}</strong>.</li>
-                    <li>Enter your temporary password: <strong>{html.escape(temporary_password)}</strong>.</li>
+                    <li>Sign in using your username.</li>
+                    <li>Enter the temporary password provided in the separate email.</li>
                     <li>Change your temporary password when prompted.</li>
                     <li>A verification code will be sent to your email during sign-in.</li>
                 </ol>
-                <p>For your security, do not share your temporary password or verification code.</p>
+                <p>For your security, please do not share your account credentials or verification code with anyone.</p>
+                <p>Thank you for using LookFor!</p>
                 <p>- LookFor Team</p>
             </body>
         </html>
@@ -87,9 +128,40 @@ For your security, do not share your temporary password or verification code.
         subtype="html",
     )
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
-        smtp.login(sender_email, app_password)
-        smtp.send_message(message)
+    password_message = EmailMessage()
+    password_message["Subject"] = "Your LookFor Temporary Password"
+    password_message["From"] = sender_email
+    password_message["To"] = recipient_email
+    password_message.set_content(
+        f"""Hello {display_name},
+
+Your LookFor account has been successfully created. Below is your temporary password:
+
+Temporary Password: {temporary_password}
+
+Please use this password when signing in to your LookFor account. You will be prompted to change it after your first login.
+
+For your security, please do not share your temporary password or verification code with anyone.
+
+- LookFor Team"""
+    )
+    password_message.add_alternative(
+        f"""
+        <html>
+            <body>
+                <p>Hello {html.escape(display_name)},</p>
+                <p>Your LookFor account has been successfully created. Below is your temporary password:</p>
+                <p><strong>Temporary Password:</strong> {html.escape(temporary_password)}</p>
+                <p>Please use this password when signing in to your LookFor account. You will be prompted to change it after your first login.</p>
+                <p>For your security, please do not share your temporary password or verification code with anyone.</p>
+                <p>- LookFor Team</p>
+            </body>
+        </html>
+        """,
+        subtype="html",
+    )
+
+    return username_message, password_message
 
 
 def send_item_event_email(

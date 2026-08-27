@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 import numpy as np
 
-from main import compute_text_detail_matches
+from matching_metrics import MATCH_THRESHOLD
+from main import (
+    actively_linked_found_candidate_ids,
+    cached_found_candidate_ids,
+    compute_text_detail_matches,
+)
 
 
 class FakeQuery:
@@ -26,8 +31,10 @@ class FakeSession:
     def __init__(self, items):
         self.items = items
 
-    def query(self, *args, **kwargs):
-        return FakeQuery(self.items)
+    def query(self, model, *args, **kwargs):
+        from models import PendingItem
+
+        return FakeQuery([] if model is PendingItem else self.items)
 
 
 class ModelAwareFakeSession:
@@ -62,6 +69,59 @@ def candidate(item_id, **overrides):
 
 
 class MatchingScoreResponseTests(unittest.TestCase):
+    def test_cached_approved_match_is_retained_for_reanalysis(self):
+        item = SimpleNamespace(possible_matches=json.dumps([
+            {"id": 1116, "source": "found", "score": 0.91},
+            {"id": 44, "source": "pending_found", "score": 0.82},
+            {"id": "invalid", "source": "found"},
+        ]))
+        self.assertEqual(cached_found_candidate_ids(item), {1116})
+
+    def test_active_claim_recovers_match_removed_from_cache(self):
+        db = FakeSession([(1116,), (None,)])
+        self.assertEqual(actively_linked_found_candidate_ids(db, 7162), {1116})
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_already_matched_candidate_is_analyzed_but_not_linked_again(self, _text_embedding):
+        result = compute_text_detail_matches(
+            FakeSession([candidate(1116, is_matched=True)]),
+            category="Wallet",
+            item_name="Wallet 1116",
+            location="Main Library",
+            description="Black wallet",
+            brand="Acme",
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+        )
+
+        analyzed = result["ranked_candidates"][0]
+        self.assertTrue(analyzed["is_already_matched"])
+        self.assertFalse(analyzed["available_for_match"])
+        self.assertIsNone(result["matched_item"])
+        self.assertEqual(result["matched_items"][0]["id"], 1116)
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_own_existing_match_remains_available_during_reanalysis(self, _text_embedding):
+        result = compute_text_detail_matches(
+            FakeSession([candidate(1116, is_matched=True)]),
+            category="Wallet",
+            item_name="Wallet 1116",
+            location="Main Library",
+            description="Black wallet",
+            brand="Acme",
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+            include_candidate_ids={1116},
+        )
+
+        analyzed = result["ranked_candidates"][0]
+        self.assertTrue(analyzed["available_for_match"])
+        self.assertEqual(result["matched_item"]["id"], 1116)
+
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_seventy_four_percent_is_possible_but_not_automatic(self, _text_embedding):
         result = compute_text_detail_matches(
@@ -98,11 +158,16 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(len(result["ranked_candidates"]), 10)
         self.assertEqual(len(result["matched_items"]), 5)
         top = result["ranked_candidates"][0]
+        second = result["ranked_candidates"][1]
+        self.assertEqual(top["rank"], 1)
+        self.assertEqual(second["rank"], 2)
+        self.assertAlmostEqual(top["score"], second["score"])
+        self.assertGreater(second["competition_decay"], 0)
         self.assertEqual(top["image_similarity"], 1.0)
         self.assertEqual(top["text_similarity"], 1.0)
         self.assertGreater(top["detail_similarity"], 0.9)
         self.assertEqual(top["brand_similarity"], 1.0)
-        self.assertGreater(top["score"], 0.98)
+        self.assertGreater(top["raw_score"], 0.98)
         self.assertEqual(result["matched_item"]["id"], 1)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
@@ -169,6 +234,7 @@ class MatchingScoreResponseTests(unittest.TestCase):
         result = compute_text_detail_matches(
             FakeSession([alcohol]),
             category="SIM Card",
+            item_name="SIM Card",
             location="Main Library",
             description="Black SIM card",
             brand="Telco",
@@ -185,7 +251,7 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(result["matched_items"], [])
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_exact_item_type_keeps_cross_category_candidate_for_review(self, _text_embedding):
+    def test_exact_item_type_can_automatically_match_across_categories(self, _text_embedding):
         found_case = candidate(
             12,
             item_name="Eyeglasses case",
@@ -211,10 +277,10 @@ class MatchingScoreResponseTests(unittest.TestCase):
         candidate_result = result["ranked_candidates"][0]
         self.assertTrue(candidate_result["cross_category"])
         self.assertTrue(candidate_result["category_overridden_by_item_type"])
-        self.assertEqual(candidate_result["score"], 0.7499)
-        self.assertIsNone(result["matched_item"])
+        self.assertGreaterEqual(candidate_result["score"], MATCH_THRESHOLD)
+        self.assertEqual(result["matched_item"]["id"], 12)
         self.assertEqual(result["matched_items"][0]["id"], 12)
-        self.assertIn("item type strongly agrees", candidate_result["warning"])
+        self.assertIn("category does not block", candidate_result["warning"])
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_eyeglasses_cannot_match_charger_inside_same_broad_category(self, _text_embedding):

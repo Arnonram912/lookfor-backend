@@ -77,6 +77,7 @@ from matching_metrics import (
     ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD,
     MATCH_THRESHOLD,
     POSSIBLE_MATCH_THRESHOLD,
+    calculate_competition_confidences,
     calculate_detail_similarity,
     calculate_detailed_match_score,
     calculate_match_score,
@@ -1805,6 +1806,7 @@ def compute_text_detail_matches(
     date_value: date | str | None = None,
     time_found: str | None = None,
     exclude_item_id: int | None = None,
+    include_candidate_ids: set[int] | None = None,
 ):
     normalized_status = " ".join(str(status or "").strip().lower().split())
     normalized_category = (category or "").strip()
@@ -1892,22 +1894,20 @@ def compute_text_detail_matches(
                 item_type_conflict = item_type_similarity is not None and item_type_similarity < 0.35
                 brand_conflict = brand_similarity is not None and brand_similarity < 0.35
                 color_conflict = color_similarity is not None and color_similarity < 0.35
+                is_already_matched = bool(getattr(item, "is_matched", False))
+                available_for_match = not is_already_matched or item.id in included_ids
 
                 warning_parts = []
                 strong_item_type_agreement = (
                     item_type_similarity is not None
                     and item_type_similarity >= ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD
                 )
-                if item_type_conflict or (cross_category and not strong_item_type_agreement):
+                if item_type_conflict:
                     score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
-                    warning_parts.append("Category or item type differs too much for matching.")
+                    warning_parts.append("Item type differs too much for matching.")
                 elif cross_category:
-                    # Broad categories can be selected incorrectly. Keep a
-                    # strong item-name match for review, but require an admin
-                    # before linking records from different categories.
-                    score = min(score, MATCH_THRESHOLD - 0.0001)
                     warning_parts.append(
-                        "Category differs, but the item type strongly agrees; admin review is required."
+                        "Category differs; matching remains enabled because category does not block a strong match."
                     )
                 warning = " ".join(warning_parts) or None
                 score = round(score, 4)
@@ -1928,6 +1928,8 @@ def compute_text_detail_matches(
                     ),
                     "brand_conflict": brand_conflict,
                     "color_conflict": color_conflict,
+                    "is_already_matched": is_already_matched,
+                    "available_for_match": available_for_match,
                     "warning": warning,
                     "item_name": item.item_name,
                     "category": item_category_name(item),
@@ -1943,9 +1945,11 @@ def compute_text_detail_matches(
                 continue
         return candidates
 
+    included_ids = {int(value) for value in (include_candidate_ids or set())}
+    # Analyze every active opposite-side report. Already-linked records remain
+    # visible as scored evidence but are marked unavailable for a second claim.
     candidate_items = db.query(models.Item).outerjoin(models.Category).filter(
         models.Item.status.ilike(target_status),
-        models.Item.is_matched == False,
         models.Item.archived == False
     ).all()
 
@@ -1965,22 +1969,53 @@ def compute_text_detail_matches(
         ).all()
         ranked_candidates.extend(score_items(pending_items, "pending_found"))
 
+    # Rank by evidence first. Decay is applied only after the order is fixed so
+    # it cannot promote a weaker candidate over a stronger one.
     ranked_candidates.sort(key=lambda x: x["score"], reverse=True)
     # Retain ten for Recall@10 audits, expose five for review, and use the
     # first candidate as the single automatic-match decision.
+    competition_confidences = calculate_competition_confidences(
+        [candidate.get("score", 0) for candidate in ranked_candidates],
+        eligibility_threshold=possible_match_threshold,
+        primary_similarity_scores=[
+            candidate.get("image_similarity", 0) for candidate in ranked_candidates
+        ],
+    )
+    for rank, (candidate, confidence) in enumerate(
+        zip(ranked_candidates, competition_confidences),
+        start=1,
+    ):
+        raw_score = round(float(candidate.get("score", 0) or 0), 4)
+        candidate["rank"] = rank
+        candidate["raw_score"] = raw_score
+        candidate["score"] = confidence
+        candidate["competition_decay"] = round(raw_score - confidence, 4)
+
     ranked_candidates = ranked_candidates[:10]
+
+    # Review eligibility uses the unmodified evidence score. A true candidate
+    # is therefore not hidden merely because another candidate ranked above it.
     all_matches = [
         candidate for candidate in ranked_candidates[:5]
-        if candidate["score"] >= possible_match_threshold
+        if candidate["raw_score"] >= possible_match_threshold
     ]
 
     best_match = ranked_candidates[0] if ranked_candidates else None
     highest_score = best_match["score"] if best_match else 0.0
+    highest_raw_score = best_match["raw_score"] if best_match else 0.0
+    automatic_match = (
+        best_match
+        if best_match
+        and best_match.get("available_for_match", True)
+        and highest_score >= strict_match_threshold
+        else None
+    )
 
     return {
         "highest_score": round(highest_score, 4),
+        "highest_raw_score": round(highest_raw_score, 4),
         "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else [],
-        "matched_item": best_match if best_match and highest_score >= strict_match_threshold else None,
+        "matched_item": automatic_match,
         "matched_items": all_matches,
         "ranked_candidates": ranked_candidates,
         "action": "show_match" if all_matches else "no_match",
@@ -2069,11 +2104,16 @@ def build_saved_match_payload(
         "color_similarity",
         "description_similarity",
         "event_time_similarity",
+        "rank",
+        "raw_score",
+        "competition_decay",
         "category_match",
         "cross_category",
         "item_type_conflict",
         "brand_conflict",
         "color_conflict",
+        "is_already_matched",
+        "available_for_match",
         "warning",
     ):
         if evaluation is not None and key in evaluation:
@@ -2125,6 +2165,38 @@ def remove_possible_match(lost_item: models.Item, *, match_id: int, source: str)
     lost_item.possible_matches = json.dumps(remaining) if remaining else None
 
 
+def cached_found_candidate_ids(item) -> set[int]:
+    """Return approved found-item IDs already cached for a lost report."""
+    cached = getattr(item, "possible_matches", None)
+    if not cached:
+        return set()
+    try:
+        matches = json.loads(cached)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return set()
+    if not isinstance(matches, list):
+        return set()
+
+    candidate_ids = set()
+    for match in matches:
+        if not isinstance(match, dict) or match.get("source", "found") != "found":
+            continue
+        try:
+            candidate_ids.add(int(match.get("id")))
+        except (TypeError, ValueError):
+            continue
+    return candidate_ids
+
+
+def actively_linked_found_candidate_ids(db: Session, lost_item_id: int) -> set[int]:
+    """Return found reports already linked to this lost report by active claims."""
+    rows = db.query(models.Claim.found_item_id).filter(
+        models.Claim.lost_item_id == lost_item_id,
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+    ).all()
+    return {int(found_item_id) for (found_item_id,) in rows if found_item_id is not None}
+
+
 def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
     text_query_parts = [
         f"A {item.color}" if item.color else "An item",
@@ -2146,6 +2218,13 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
 
     search_vec = image_vec if image_vec is not None and image_vec.size else None
 
+    included_candidate_ids = set()
+    if record_type == "item" and str(getattr(item, "status", "") or "").strip().lower() == "lost":
+        included_candidate_ids.update(cached_found_candidate_ids(item))
+        included_candidate_ids.update(actively_linked_found_candidate_ids(db, item.id))
+    elif record_type in {"pending-found", "found"} and getattr(item, "matched_item_id", None):
+        included_candidate_ids.add(int(item.matched_item_id))
+
     result = compute_text_detail_matches(
         db,
         category=item.category,
@@ -2160,6 +2239,7 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
         date_value=getattr(item, "date", None),
         time_found=getattr(item, "time_found", None),
         exclude_item_id=item.id if record_type == "item" else None,
+        include_candidate_ids=included_candidate_ids,
     )
 
     if record_type == "item" and item.status == "lost":
@@ -2508,7 +2588,10 @@ def analyze_lost_item_matches(
                 found_item.is_matched = True
                 claim_id = existing_pair_claim.id
                 auto_linked = True
-            elif not conflicting_claim and not item.is_matched and not found_item.is_matched:
+            elif not conflicting_claim:
+                # No active claim owns either item. Any remaining is_matched
+                # value is stale (for example after an older permanent delete)
+                # and must not prevent a valid authoritative reanalysis.
                 score = float(strongest_match.get("score", 0) or 0)
                 claim = models.Claim(
                     lost_item_id=item.id,
@@ -2866,6 +2949,7 @@ async def save_found_item(
         "pending_id": new_pending.id,
         "item_code": format_item_code("pending_found", new_pending.id),
         "reported_by": format_user_display_name(current_user),
+        "analysis": match_result,
     }
 
 
@@ -3040,7 +3124,8 @@ async def lost_report_upload(
         "item_code": format_item_code("lost", new_lost_report.id, getattr(new_lost_report, "item_code", None)),
         "reported_by": format_user_display_name(current_user),
         "match_score": f"{final_score * 100:.1f}%" if ai_match_found else None,
-        "is_matched": False
+        "is_matched": False,
+        "analysis": match_result,
     }
     
 
