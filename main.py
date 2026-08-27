@@ -74,8 +74,6 @@ from security import (
 from account_email import ensure_account_email_outbox_worker, queue_item_event_email
 from lookfor_permissions import normalize_permissions
 from matching_metrics import (
-    BRAND_CONFLICT_MULTIPLIER,
-    COLOR_CONFLICT_MULTIPLIER,
     ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD,
     MATCH_THRESHOLD,
     POSSIBLE_MATCH_THRESHOLD,
@@ -1895,25 +1893,7 @@ def compute_text_detail_matches(
                 brand_conflict = brand_similarity is not None and brand_similarity < 0.35
                 color_conflict = color_similarity is not None and color_similarity < 0.35
 
-                # Brand and color are identity-bearing traits. Either explicit
-                # conflict prevents an automatic match; both conflicts prevent
-                # even a possible match. Location remains a ranking signal only
-                # because found items may be moved after they are reported.
-                if brand_conflict:
-                    score *= BRAND_CONFLICT_MULTIPLIER
-                if color_conflict:
-                    score *= COLOR_CONFLICT_MULTIPLIER
                 warning_parts = []
-                if brand_conflict and color_conflict:
-                    score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
-                    warning_parts.append("Brand and color both conflict with the report.")
-                elif brand_conflict or color_conflict:
-                    score = min(score, MATCH_THRESHOLD - 0.0001)
-                    warning_parts.append(
-                        "Brand differs from the report; admin review is required."
-                        if brand_conflict
-                        else "Color differs from the report; admin review is required."
-                    )
                 strong_item_type_agreement = (
                     item_type_similarity is not None
                     and item_type_similarity >= ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD

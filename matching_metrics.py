@@ -23,8 +23,6 @@ DETAIL_SCORE_WEIGHT = 0.20
 # Rank 1 keeps 100%, rank 2 keeps 95%, rank 3 keeps 90%, etc.
 RANK_DECAY = 0.05
 
-BRAND_CONFLICT_MULTIPLIER = 0.00
-COLOR_CONFLICT_MULTIPLIER = 0.00
 ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD = 0.80
 
 
@@ -248,8 +246,10 @@ def calculate_detail_similarity(query: Mapping[str, Any], candidate: Mapping[str
         "category_similarity": 0.20,
         "item_type_similarity": 0.20,
         "location_similarity": 0.15,
-        "brand_similarity": 0.12,
-        "color_similarity": 0.08,
+        # Brand and color remain visible comparison details, but they do not
+        # raise or lower the match score.
+        "brand_similarity": 0.00,
+        "color_similarity": 0.00,
         "description_similarity": 0.10,
         "event_time_similarity": 0.15,
     }
