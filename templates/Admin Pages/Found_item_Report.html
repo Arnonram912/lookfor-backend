@@ -1841,18 +1841,10 @@ async function executeSubmit() {
         });
 
         if (saveRes.ok) {
-            const savedResult = await saveRes.json();
-            const savedAnalysis = savedResult?.analysis || {};
-            const analyzedCandidates = Array.isArray(savedAnalysis.ranked_candidates)
-                ? savedAnalysis.ranked_candidates
-                : [];
-            const matchedLostItem = savedAnalysis?.matched_item || analyzedCandidates[0] || null;
             await showFoundReportAlert(
                 'success',
-                matchedLostItem ? 'Report submitted — matched item analyzed' : 'Report submitted',
-                matchedLostItem
-                    ? `Found item registered in ${deptName}. Top lost item #${matchedLostItem.id}: adjusted ${formatEvaluationScore(matchedLostItem.score)}, raw ${formatEvaluationScore(matchedLostItem.raw_score ?? matchedLostItem.score)}, rank #${matchedLostItem.rank || 1}.`
-                    : `Found item registered in ${deptName}. No matching lost item was found.`
+                'Report submitted',
+                `Found item registered in ${deptName}.`
             );
             location.reload();
         } else {

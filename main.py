@@ -77,7 +77,6 @@ from matching_metrics import (
     ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD,
     MATCH_THRESHOLD,
     POSSIBLE_MATCH_THRESHOLD,
-    apply_rank_decay,
     calculate_detail_similarity,
     calculate_detailed_match_score,
     calculate_match_score,
@@ -1966,35 +1965,22 @@ def compute_text_detail_matches(
         ).all()
         ranked_candidates.extend(score_items(pending_items, "pending_found"))
 
-    # Rank by evidence first. Decay is applied only after the order is fixed so
-    # it cannot promote a weaker candidate over a stronger one.
     ranked_candidates.sort(key=lambda x: x["score"], reverse=True)
     # Retain ten for Recall@10 audits, expose five for review, and use the
     # first candidate as the single automatic-match decision.
     ranked_candidates = ranked_candidates[:10]
-    for rank, candidate in enumerate(ranked_candidates, start=1):
-        raw_score = round(float(candidate.get("score", 0) or 0), 4)
-        candidate["rank"] = rank
-        candidate["raw_score"] = raw_score
-        candidate["score"] = apply_rank_decay(raw_score, rank)
-        candidate["rank_decay"] = round(raw_score - candidate["score"], 4)
-
-    # Review eligibility uses the unmodified evidence score. A true candidate
-    # is therefore not hidden merely because another candidate ranked above it.
     all_matches = [
         candidate for candidate in ranked_candidates[:5]
-        if candidate["raw_score"] >= possible_match_threshold
+        if candidate["score"] >= possible_match_threshold
     ]
 
     best_match = ranked_candidates[0] if ranked_candidates else None
     highest_score = best_match["score"] if best_match else 0.0
-    highest_raw_score = best_match["raw_score"] if best_match else 0.0
 
     return {
         "highest_score": round(highest_score, 4),
-        "highest_raw_score": round(highest_raw_score, 4),
         "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else [],
-        "matched_item": best_match if best_match and highest_raw_score >= strict_match_threshold else None,
+        "matched_item": best_match if best_match and highest_score >= strict_match_threshold else None,
         "matched_items": all_matches,
         "ranked_candidates": ranked_candidates,
         "action": "show_match" if all_matches else "no_match",
@@ -2083,9 +2069,6 @@ def build_saved_match_payload(
         "color_similarity",
         "description_similarity",
         "event_time_similarity",
-        "rank",
-        "raw_score",
-        "rank_decay",
         "category_match",
         "cross_category",
         "item_type_conflict",
@@ -2883,7 +2866,6 @@ async def save_found_item(
         "pending_id": new_pending.id,
         "item_code": format_item_code("pending_found", new_pending.id),
         "reported_by": format_user_display_name(current_user),
-        "analysis": match_result,
     }
 
 

@@ -708,7 +708,7 @@ window.onclick = function(event) {
                 }
                 appendOptionalImages(formData);
 
-                const response = await fetch('/api/save-found-item', {
+                const response = await fetch('/student/found', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -720,12 +720,6 @@ window.onclick = function(event) {
                     const errorData = await response.json();
                     throw new Error(errorData.detail || "Failed to submit surrender report.");
                 }
-                const savedResult = await response.json();
-                const savedAnalysis = savedResult?.analysis || {};
-                const analyzedCandidates = Array.isArray(savedAnalysis.ranked_candidates)
-                    ? savedAnalysis.ranked_candidates
-                    : [];
-                const matchedLostItem = savedAnalysis?.matched_item || analyzedCandidates[0] || null;
 
                 await Swal.fire({
                     target: document.body,
@@ -733,10 +727,8 @@ window.onclick = function(event) {
                         container: 'swal2-on-top'
                     },
                     icon: "success",
-                    title: matchedLostItem ? "Report submitted — match analyzed" : "Report submitted",
-                    text: matchedLostItem
-                        ? `Top lost item #${matchedLostItem.id}: adjusted ${(Number(matchedLostItem.score || 0) * 100).toFixed(1)}%, raw ${(Number(matchedLostItem.raw_score ?? matchedLostItem.score ?? 0) * 100).toFixed(1)}%, rank #${matchedLostItem.rank || 1}.`
-                        : "Your surrendered item report was submitted. No matching lost item was found.",
+                    title: "Report submitted",
+                    text: "Your surrendered item report has been submitted.",
                     confirmButtonText: "OK"
                 });
                 location.reload();
