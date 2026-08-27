@@ -83,6 +83,7 @@ from matching_metrics import (
     calculate_detailed_match_score,
     calculate_match_score,
     clamp_similarity_score,
+    is_automatic_match_candidate,
 )
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
@@ -2088,13 +2089,10 @@ def compute_text_detail_matches(
     best_match = ranked_candidates[0] if ranked_candidates else None
     highest_score = best_match["score"] if best_match else 0.0
     highest_raw_score = best_match["raw_score"] if best_match else 0.0
-    automatic_match = (
-        best_match
-        if best_match
-        and best_match.get("available_for_match", True)
-        and highest_score >= strict_match_threshold
-        else None
-    )
+    automatic_match = best_match if is_automatic_match_candidate(
+        best_match,
+        threshold=strict_match_threshold,
+    ) else None
 
     return {
         "highest_score": round(highest_score, 4),
@@ -2491,7 +2489,7 @@ async def update_item_details(
     analysis = {
         "highest_score": float(best_cached.get("score", 0) or 0) if best_cached else 0.0,
         "generated_embedding": [],
-        "matched_item": best_cached if best_cached and float(best_cached.get("score", 0) or 0) >= MATCH_THRESHOLD else None,
+        "matched_item": best_cached if is_automatic_match_candidate(best_cached) else None,
         "matched_items": cached_matches[:5],
         "action": "show_match" if cached_matches else "no_match",
         "cached": True,
@@ -2606,7 +2604,7 @@ def get_saved_item_possible_matches(
             return {
                 "highest_score": round(highest_score, 4),
                 "generated_embedding": [],
-                "matched_item": best_match if highest_score >= MATCH_THRESHOLD else None,
+                "matched_item": best_match if is_automatic_match_candidate(best_match) else None,
                 "matched_items": saved_matches,
                 "action": "show_match"
             }

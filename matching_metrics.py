@@ -6,7 +6,6 @@ from collections.abc import Iterable, Mapping
 from collections import defaultdict
 from datetime import date, datetime
 from difflib import SequenceMatcher
-import math
 import re
 from typing import Any
 
@@ -21,12 +20,43 @@ CLIP_SCORE_WEIGHT = 0.80
 DETAIL_SCORE_WEIGHT = 0.20
 
 COMPETITION_TEMPERATURE = 0.05
-# Only near-ties should make a match ambiguous. Candidates farther than this
-# from the strongest raw score remain reviewable but do not dilute it.
+# Retained as public configuration for compatibility with older callers. The
+# current decay model counts every raw candidate at or above the 75% threshold.
 COMPETITION_SIMILARITY_MARGIN = 0.03
 COMPETITION_PRIMARY_SIGNAL_MARGIN = 0.05
+# Competition may lower a strong score to express ambiguity, but it must not
+# push a candidate that was already at least 75% below the match threshold.
+COMPETITION_CONFIDENCE_FLOOR = MATCH_THRESHOLD
 
 ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD = 0.80
+
+
+def competition_decay_for_count(candidate_count: int) -> float:
+    """Return the cumulative one-time penalty for the qualifying-match count."""
+    count = max(0, int(candidate_count))
+    if count <= 1:
+        return 0.0
+    # Competing items add 3%, then 2%, then 1%. That reaches the strict 6%
+    # maximum, so later 0.5%-and-smaller increments cannot increase the total.
+    if count == 2:
+        return 0.03
+    if count == 3:
+        return 0.05
+    return 0.06
+
+
+def is_automatic_match_candidate(
+    candidate: Mapping[str, Any] | None,
+    *,
+    threshold: float = MATCH_THRESHOLD,
+) -> bool:
+    """Reject an ambiguity-floor score while preserving a genuine raw 75%."""
+    if not candidate or not candidate.get("available_for_match", True):
+        return False
+    score = clamp_similarity_score(candidate.get("score"))
+    decay = clamp_similarity_score(candidate.get("competition_decay"))
+    reached_ambiguity_floor = decay > 0 and score <= COMPETITION_CONFIDENCE_FLOOR
+    return score >= float(threshold) and not reached_ambiguity_floor
 
 
 def clamp_similarity_score(value: Any) -> float:
@@ -355,15 +385,14 @@ def calculate_competition_confidences(
     similarity_margin: float = COMPETITION_SIMILARITY_MARGIN,
     primary_similarity_scores: Iterable[float] | None = None,
     primary_similarity_margin: float = COMPETITION_PRIMARY_SIGNAL_MARGIN,
+    confidence_floor: float = COMPETITION_CONFIDENCE_FLOOR,
 ) -> list[float]:
     """Turn raw similarities into ambiguity-aware candidate confidences.
 
-    Only candidates that pass the review threshold and fall within the near-tie
-    margin of the strongest score compete. When primary similarities (normally
-    CLIP image scores) are supplied, they must also be visually close. Softmax
-    gives tied candidates equal shares. The share is applied as a logarithmic
-    odds penalty, not direct division, so a distinctive candidate retains its
-    raw confidence.
+    Every candidate whose raw score is at least the confidence floor competes.
+    The total grows through diminishing steps (3, 5, then 6 percentage points)
+    and is capped at 6%. The current total is applied once to each original raw
+    score, so saved decay is never reused and the strongest raw item stays first.
     """
     raw_scores = [clamp_similarity_score(score) for score in scores]
     if temperature <= 0:
@@ -372,6 +401,7 @@ def calculate_competition_confidences(
         raise ValueError("similarity_margin cannot be negative.")
     if primary_similarity_margin < 0:
         raise ValueError("primary_similarity_margin cannot be negative.")
+    floor = clamp_similarity_score(confidence_floor)
 
     primary_scores = None
     if primary_similarity_scores is not None:
@@ -390,33 +420,24 @@ def calculate_competition_confidences(
     if not eligible_indexes:
         return confidences
 
-    maximum_score = max(raw_scores[index] for index in eligible_indexes)
-    strongest_index = max(eligible_indexes, key=lambda index: raw_scores[index])
-    strongest_primary_score = primary_scores[strongest_index] if primary_scores is not None else None
+    # The similarity and primary-signal margin arguments remain accepted for
+    # backward compatibility, but the approved rule now counts all raw 75%+
+    # candidates instead of only candidates close to the strongest score.
     competing_indexes = [
         index for index in eligible_indexes
-        if maximum_score - raw_scores[index] <= float(similarity_margin)
-        and (
-            primary_scores is None
-            or abs(primary_scores[index] - strongest_primary_score)
-            <= float(primary_similarity_margin)
-        )
+        if raw_scores[index] >= floor
     ]
-    weights = {
-        index: math.exp((raw_scores[index] - maximum_score) / float(temperature))
-        for index in competing_indexes
-    }
-    total_weight = sum(weights.values())
+    group_decay = competition_decay_for_count(len(competing_indexes))
     for index in competing_indexes:
-        competition_share = weights[index] / total_weight
-        raw_score = min(raw_scores[index], 1.0 - 1e-6)
-        raw_odds = raw_score / (1.0 - raw_score)
-        adjusted_odds = raw_odds * competition_share
-        confidences[index] = round(adjusted_odds / (1.0 + adjusted_odds), 4)
+        adjusted_confidence = raw_scores[index] - group_decay
+        # Never raise a score that started below the floor. For qualifying
+        # scores, only the decay itself is prevented from crossing 75%.
+        decay_floor = min(raw_scores[index], floor)
+        confidences[index] = round(max(adjusted_confidence, decay_floor), 4)
 
     # Scores are displayed in raw-score rank order. Keep adjusted confidence
     # monotonic so a lower-ranked non-competing candidate cannot appear more
-    # confident than a stronger candidate that was reduced by a near tie.
+    # confident than a stronger candidate that received the group penalty.
     previous_confidence = 1.0
     for index in sorted(eligible_indexes, key=lambda value: raw_scores[value], reverse=True):
         confidences[index] = min(confidences[index], previous_confidence)

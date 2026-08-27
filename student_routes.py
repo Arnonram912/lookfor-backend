@@ -29,7 +29,7 @@ from utils import (
 from clip_test import combine_embeddings, get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
 from account_email import queue_item_event_email
-from matching_metrics import MATCH_THRESHOLD, clamp_similarity_score
+from matching_metrics import MATCH_THRESHOLD, clamp_similarity_score, is_automatic_match_candidate
 from item_match_lifecycle import (
     delete_item_claims_and_release_matches,
     release_pending_found_link,
@@ -1096,7 +1096,7 @@ async def reanalyze_student_item_edit(
     return {
         "highest_score": highest_score,
         "generated_embedding": [],
-        "matched_item": best_match if highest_score >= MATCH_THRESHOLD else None,
+        "matched_item": best_match if is_automatic_match_candidate(best_match) else None,
         "matched_items": cached_matches[:5],
         "action": "show_match" if cached_matches else "no_match",
         "cached": True,

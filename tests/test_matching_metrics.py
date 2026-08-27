@@ -4,12 +4,14 @@ from matching_metrics import (
     MATCH_THRESHOLD,
     calculate_category_similarity,
     calculate_competition_confidences,
+    competition_decay_for_count,
     calculate_detail_similarity,
     calculate_detailed_match_score,
     calculate_match_score,
     clamp_similarity_score,
     evaluate_match_dataset,
     evaluate_ranking_metrics,
+    is_automatic_match_candidate,
     is_match,
 )
 
@@ -17,7 +19,38 @@ from matching_metrics import (
 class MatchScoreTests(unittest.TestCase):
     def test_equal_candidates_share_confidence_without_artificial_rank_advantage(self):
         confidences = calculate_competition_confidences([0.9] * 100)
-        self.assertEqual(set(confidences), {0.0826})
+        self.assertEqual(set(confidences), {0.84})
+
+    def test_diminishing_steps_form_one_cumulative_decay_total(self):
+        self.assertEqual(competition_decay_for_count(1), 0.0)
+        self.assertEqual(competition_decay_for_count(2), 0.03)
+        self.assertEqual(competition_decay_for_count(3), 0.05)
+        self.assertEqual(competition_decay_for_count(4), 0.06)
+        self.assertEqual(competition_decay_for_count(5), 0.06)
+        self.assertEqual(competition_decay_for_count(100), 0.06)
+        self.assertEqual(calculate_competition_confidences([0.90] * 5), [0.84] * 5)
+
+    def test_ambiguity_floor_requires_review_instead_of_automatic_match(self):
+        self.assertFalse(is_automatic_match_candidate({
+            "score": 0.75,
+            "raw_score": 0.90,
+            "competition_decay": 0.15,
+            "available_for_match": True,
+        }))
+        self.assertTrue(is_automatic_match_candidate({
+            "score": 0.75,
+            "raw_score": 0.75,
+            "competition_decay": 0.0,
+            "available_for_match": True,
+        }))
+
+    def test_decay_never_pushes_qualifying_candidate_below_seventy_five_percent(self):
+        confidences = calculate_competition_confidences([0.91, 0.90, 0.89])
+        self.assertTrue(all(confidence >= 0.75 for confidence in confidences))
+
+    def test_floor_does_not_artificially_raise_a_lower_raw_score(self):
+        confidences = calculate_competition_confidences([0.74, 0.73])
+        self.assertEqual(confidences, [0.74, 0.73])
 
     def test_clear_winner_keeps_confidence_when_other_candidates_do_not_qualify(self):
         confidences = calculate_competition_confidences([0.9, 0.4, 0.2])
@@ -28,26 +61,32 @@ class MatchScoreTests(unittest.TestCase):
         self.assertEqual(confidences[0], 0.9)
         self.assertTrue(all(value == 0.5 for value in confidences[1:]))
 
-    def test_only_candidates_really_similar_to_the_best_apply_decay(self):
+    def test_all_candidates_above_seventy_five_apply_group_decay(self):
         confidences = calculate_competition_confidences([0.9, 0.88, 0.86, 0.7])
 
-        self.assertLess(confidences[0], 0.9)
-        self.assertLess(confidences[1], 0.88)
-        # The third candidate does not participate in the near tie, but its
-        # display confidence is capped to preserve the raw ranking order.
-        self.assertEqual(confidences[2], confidences[1])
+        self.assertEqual(confidences[0], 0.85)
+        self.assertEqual(confidences[1], 0.83)
+        self.assertEqual(confidences[2], 0.81)
         self.assertEqual(confidences[3], 0.7)
 
-    def test_candidate_outside_three_point_margin_does_not_decay_winner(self):
+    def test_distant_candidate_above_threshold_still_counts_for_decay(self):
         confidences = calculate_competition_confidences([0.9, 0.8699])
-        self.assertEqual(confidences, [0.9, 0.8699])
+        self.assertEqual(confidences, [0.87, 0.8399])
 
-    def test_overall_near_tie_does_not_decay_when_images_are_not_close(self):
+    def test_mixed_example_counts_only_raw_scores_at_or_above_threshold(self):
+        confidences = calculate_competition_confidences([0.98, 0.87, 0.85, 0.73])
+        self.assertEqual(confidences, [0.93, 0.82, 0.80, 0.73])
+
+    def test_exactly_seventy_five_percent_participates_but_stays_at_floor(self):
+        confidences = calculate_competition_confidences([0.98, 0.75, 0.7499])
+        self.assertEqual(confidences, [0.95, 0.75, 0.7499])
+
+    def test_primary_image_gap_does_not_exclude_a_threshold_match_from_decay(self):
         confidences = calculate_competition_confidences(
             [0.9, 0.89],
             primary_similarity_scores=[1.0, 0.864],
         )
-        self.assertEqual(confidences, [0.9, 0.89])
+        self.assertEqual(confidences, [0.87, 0.86])
 
     def test_lower_rank_cannot_display_higher_adjusted_confidence(self):
         confidences = calculate_competition_confidences([0.9, 0.89, 0.85])
