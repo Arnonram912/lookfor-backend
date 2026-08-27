@@ -34,6 +34,10 @@ class UnifiedUserRequestTests(unittest.TestCase):
         self.assertEqual(request.permissions, ["Student-Portal-Access"])
         self.assertEqual(request.level, "1st Year")
 
+    def test_compact_tertiary_level_is_saved_as_year(self):
+        request = UnifiedUserCreate(**self.valid_student(level="2Y1"))
+        self.assertEqual(request.level, "2nd Year")
+
     def test_whitespace_only_required_value_is_rejected(self):
         with self.assertRaises(ValidationError):
             UnifiedUserCreate(**self.valid_student(first_name="   "))

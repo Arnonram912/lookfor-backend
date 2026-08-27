@@ -339,6 +339,27 @@ class SavedReport(Base):
 
     created_by_admin = relationship("User", foreign_keys=[created_by_admin_id])
 
+
+class AccountEmailOutbox(Base):
+    """Durable delivery queue for new-account credentials.
+
+    Temporary passwords are encrypted before they are persisted, so a restart does
+    not silently lose a large batch of student notifications.
+    """
+    __tablename__ = "account_email_outbox"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipient_email = Column(String(255), nullable=False, index=True)
+    full_name = Column(String(255), nullable=False)
+    encrypted_temporary_password = Column(Text, nullable=False)
+    account_type = Column(String(30), nullable=False, default="student")
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    available_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    sent_at = Column(DateTime, nullable=True)
+    last_error = Column(String(1000), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
 class Category(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)

@@ -87,6 +87,18 @@ def normalize_user_category(value: object | None) -> str | None:
 
 def normalize_level(value: object | None) -> str | None:
     normalized = clean_text(value).casefold()
+    # Tertiary spreadsheets use compact year/semester codes such as 1Y1
+    # (first year, first semester) and 3Y2 (third year, second semester).
+    # A user's semester is represented by their academic batch, while the
+    # normalized year is stored in User.level.
+    compact_tertiary_level = re.fullmatch(r"([1-4])\s*y\s*[12]", normalized)
+    if compact_tertiary_level:
+        return {
+            "1": "1st Year",
+            "2": "2nd Year",
+            "3": "3rd Year",
+            "4": "4th Year",
+        }[compact_tertiary_level.group(1)]
     return _LEVEL_ALIASES.get(normalized)
 
 

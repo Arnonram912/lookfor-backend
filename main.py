@@ -71,7 +71,7 @@ from security import (
     get_login_email_candidates,
     resolve_authenticated_user,
 )
-from account_email import queue_item_event_email
+from account_email import ensure_account_email_outbox_worker, queue_item_event_email
 from lookfor_permissions import normalize_permissions
 from matching_metrics import (
     BRAND_CONFLICT_MULTIPLIER,
@@ -93,6 +93,7 @@ load_dotenv()
 
 # --- 2. DATABASE & APP INITIALIZATION ---
 models.Base.metadata.create_all(bind=engine)
+ensure_account_email_outbox_worker()
 
 
 app = FastAPI(title="LookFor Admin Dashboard")
@@ -1500,11 +1501,11 @@ def download_android_app():
         # ".zip" despite the APK MIME type. A generic binary attachment plus
         # an explicit filename reliably preserves the .apk extension.
         media_type="application/octet-stream",
-        filename="LookFor-Android.apk",
+        filename="LookFor-v3.0.0.apk",
         headers={
             "Content-Disposition": (
-                'attachment; filename="LookFor-Android.apk"; '
-                "filename*=UTF-8''LookFor-Android.apk"
+                'attachment; filename="LookFor-v3.0.0.apk"; '
+                "filename*=UTF-8''LookFor-v3.0.0.apk"
             ),
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "no-transform",
@@ -3784,7 +3785,10 @@ def get_report_module_data(
                     models.User.last_name,
                 ),
             )
-            .filter(models.Item.archived == False)
+            .filter(
+                models.Item.archived == False,
+                models.Item.deleted == False,
+            )
         )
         if report_type == "lost":
             item_query = item_query.filter(models.Item.status == "lost")
@@ -4321,6 +4325,88 @@ def get_report_module_data(
     }
 
 
+
+
+class ReportRecordDeleteRequest(BaseModel):
+    row_type: str
+    row_id: str
+    item_id: int | None = None
+
+
+@app.post("/api/admin/report-module/delete")
+def delete_report_module_record(
+    payload: ReportRecordDeleteRequest,
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("reports.manage")),
+):
+    """Delete a Reports row using the lifecycle of its source module."""
+    row_type = str(payload.row_type or "").strip().lower()
+    row_id = str(payload.row_id or "").strip().upper()
+    record_id = payload.item_id
+
+    if row_type in {"lost", "found"}:
+        require_admin_permission(current_admin, f"{row_type}_items.delete")
+        item = db.query(models.Item).filter(
+            models.Item.id == record_id,
+            models.Item.status == row_type,
+        ).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Report item not found")
+        item.deleted = True
+        message = f"{row_type.title()} item #{item.id} moved to Deleted Items from Reports."
+    elif row_type == "pending":
+        require_admin_permission(current_admin, "found_items.delete")
+        item = db.query(models.PendingItem).filter(models.PendingItem.id == record_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Pending found item not found")
+        item.deleted = True
+        message = f"Pending found item #{item.id} moved to Deleted Items from Reports."
+    elif row_type == "claim":
+        require_admin_permission(current_admin, "claim_management.decide")
+        claim = db.query(models.Claim).filter(models.Claim.id == record_id).first()
+        if not claim:
+            raise HTTPException(status_code=404, detail="Claim report not found")
+        db.query(models.ClaimDecisionReport).filter(
+            models.ClaimDecisionReport.claim_id == claim.id
+        ).delete(synchronize_session=False)
+        db.query(models.ClaimProof).filter(models.ClaimProof.claim_id == claim.id).delete(
+            synchronize_session=False
+        )
+        db.delete(claim)
+        message = f"Claim report #{record_id} was permanently deleted from Reports."
+    elif row_type == "confiscated":
+        require_admin_permission(current_admin, "confiscated_items.delete")
+        item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == record_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Confiscated item report not found")
+        db.delete(item)
+        message = f"Confiscated item #{record_id} was permanently deleted from Reports."
+    elif row_type == "disposal":
+        if row_id.startswith("DISP-"):
+            try:
+                disposal_id = int(row_id.removeprefix("DISP-"))
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Invalid disposal report record") from exc
+            report = db.query(models.DisposalReport).filter(models.DisposalReport.id == disposal_id).first()
+            if not report:
+                raise HTTPException(status_code=404, detail="Disposal report not found")
+            db.delete(report)
+        elif row_id.startswith("REF-"):
+            reference = db.query(models.ReferenceItem).filter(models.ReferenceItem.id == record_id).first()
+            if not reference:
+                raise HTTPException(status_code=404, detail="Reference report not found")
+            db.delete(reference)
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported disposal report record")
+        message = f"Report record #{record_id} was permanently deleted."
+    else:
+        raise HTTPException(status_code=400, detail="This report row must be managed from its original module.")
+
+    db.commit()
+    create_admin_notification(
+        db, message, "reports", record_id or 0, "/admin/Reports", created_by_admin_id=current_admin.id
+    )
+    return {"message": message}
 
 
 @app.post("/api/admin/manual-claim")

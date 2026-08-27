@@ -19,8 +19,12 @@ MATCH_THRESHOLD = 0.75
 CLIP_SCORE_WEIGHT = 0.80
 DETAIL_SCORE_WEIGHT = 0.20
 
-BRAND_CONFLICT_MULTIPLIER = 0.80
-COLOR_CONFLICT_MULTIPLIER = 0.85
+# Ranked candidates receive a small confidence decay as their rank increases.
+# Rank 1 keeps 100%, rank 2 keeps 95%, rank 3 keeps 90%, etc.
+RANK_DECAY = 0.05
+
+BRAND_CONFLICT_MULTIPLIER = 0.00
+COLOR_CONFLICT_MULTIPLIER = 0.00
 ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD = 0.80
 
 
@@ -340,6 +344,21 @@ def evaluate_match_dataset(
     }
 
 
+def apply_rank_decay(score: float, rank: int, decay: float = RANK_DECAY) -> float:
+    """Reduce a candidate's displayed score according to its ranking position.
+
+    Rank 1 keeps the original score. Each subsequent rank loses ``decay``
+    fraction of the original score. The result is always clamped to 0..1.
+    """
+    if rank < 1:
+        raise ValueError("rank must be at least 1.")
+    if not 0.0 <= float(decay) <= 1.0:
+        raise ValueError("decay must be between 0 and 1.")
+
+    ranking_factor = max(0.0, 1.0 - ((rank - 1) * float(decay)))
+    return round(clamp_similarity_score(float(score) * ranking_factor), 4)
+
+
 def evaluate_ranking_metrics(
     records: Iterable[Mapping[str, Any]],
     k: int = 5,
@@ -371,6 +390,13 @@ def evaluate_ranking_metrics(
 
     for candidates in grouped.values():
         ranked = sorted(candidates, key=lambda candidate: candidate[0], reverse=True)
+
+        # Apply ranking decay after sorting so the best candidate remains unchanged.
+        ranked = [
+            (apply_rank_decay(score, rank), actual)
+            for rank, (score, actual) in enumerate(ranked, start=1)
+        ]
+
         relevant_total = sum(1 for _, actual in ranked if actual)
         if relevant_total == 0:
             queries_without_relevant += 1

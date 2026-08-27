@@ -504,6 +504,7 @@ function renderReportTable(rows) {
 
     tbody.innerHTML = rows.map((row, index) => {
         const isForDisposal = row.row_type === 'for_disposal';
+        const canDelete = ['lost', 'found', 'pending', 'claim', 'confiscated', 'disposal'].includes(row.row_type);
         const editLabel = row.row_type === 'claim'
             ? 'Edit claim decision'
             : (isForDisposal ? 'Maintain in For Disposal' : 'Edit report record');
@@ -511,7 +512,7 @@ function renderReportTable(rows) {
         const actionButtons = `
             <button type="button" class="report-action view" onclick="openViewModal(${index})" title="View report" aria-label="View report"><i class="fas fa-eye" aria-hidden="true"></i></button>
             <button type="button" class="report-action edit" onclick="openEditModal(${index})" title="${editLabel}" aria-label="${editLabel}"><i class="fas ${editIcon}" aria-hidden="true"></i></button>
-            <button type="button" class="report-action delete" onclick="openDeleteModal(${index})" title="Exclude from this report" aria-label="Exclude from this report"><i class="fas fa-trash" aria-hidden="true"></i></button>`;
+            ${canDelete ? `<button type="button" class="report-action delete" onclick="openDeleteModal(${index})" title="Delete report record" aria-label="Delete report record"><i class="fas fa-trash" aria-hidden="true"></i></button>` : ''}`;
         return `<tr><td><input type="checkbox" class="rowCheckbox" data-index="${index}" onchange="updateBulkSelectionControls()"></td><td>${escapeHtml(row.item_code || row.row_id || '-')}</td><td>${escapeHtml(row.item || '-')}</td><td>${escapeHtml(row.category || '-')}</td><td>${escapeHtml(row.location || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(formatSimpleDate(row.date) || 'Not specified')}</td><td>${escapeHtml(row.reported_by || '-')}</td><td class="report-actions">${actionButtons}</td></tr>`;
     }).join('');
     updateBulkSelectionControls();
@@ -731,15 +732,43 @@ function openEditModal(index) {
 }
 function closeEditModal() {}
 function saveEdit() {}
-function openDeleteModal(index) {
+async function deleteReportRows(rows) {
+    const token = sessionStorage.getItem('admin_token');
+    if (!token) {
+        window.location.href = '/';
+        return;
+    }
+
+    for (const row of rows) {
+        const response = await fetch('/api/admin/report-module/delete', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ row_type: row.row_type, row_id: row.row_id, item_id: row.item_id }),
+        });
+        if (!response.ok) {
+            let message = 'Unable to delete the report record.';
+            try { message = (await response.json()).detail || message; } catch (_) {}
+            throw new Error(message);
+        }
+    }
+    await loadReportData();
+}
+
+async function openDeleteModal(index) {
     const row = reportRowsCache[index];
     if (!row) {
         return;
     }
 
-    if (!confirm('Exclude this record from the current generated report? The original system record will not be deleted.')) return;
-    reportRowsCache = reportRowsCache.filter((_, rowIndex) => rowIndex !== index);
-    renderReportTable(reportRowsCache);
+    if (!confirm('Delete this record? Lost and found records are moved to Deleted Items; other report-only records are permanently deleted.')) return;
+    try {
+        await deleteReportRows([row]);
+    } catch (error) {
+        alert(error.message || 'Unable to delete the report record.');
+    }
 }
 function closeDeleteModal() {}
 function confirmDelete() {
@@ -762,11 +791,18 @@ function updateBulkSelectionControls() {
     }
 }
 
-function removeSelectedRows() {
+async function removeSelectedRows() {
     const selected = Array.from(document.querySelectorAll('.rowCheckbox:checked')).map(cb => Number(cb.dataset.index)).filter(index => !Number.isNaN(index));
     if (!selected.length) { alert('Select at least one row first.'); return; }
-    reportRowsCache = reportRowsCache.filter((_, index) => !selected.includes(index));
-    renderReportTable(reportRowsCache);
+    const rows = selected.map(index => reportRowsCache[index]).filter(Boolean);
+    const unsupported = rows.find(row => !['lost', 'found', 'pending', 'claim', 'confiscated', 'disposal'].includes(row.row_type));
+    if (unsupported) { alert('One or more selected records must be managed from their original module.'); return; }
+    if (!confirm(`Delete ${rows.length} selected report record(s)?`)) return;
+    try {
+        await deleteReportRows(rows);
+    } catch (error) {
+        alert(error.message || 'Unable to delete the selected report records.');
+    }
 }
 
 function openClaimReportModal(index) {

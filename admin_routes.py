@@ -1208,7 +1208,7 @@ def compute_item_match_score(lost_item: models.Item, found_item: models.Item) ->
 
 print("Admin routes loaded")
 
-_AZURE_B1_DEFAULT_BULK_ROWS = 1000 if (os.getenv("WEBSITE_SITE_NAME") or os.getenv("WEBSITE_INSTANCE_ID")) else 5000
+_AZURE_B1_DEFAULT_BULK_ROWS = 5000
 MAX_BULK_REGISTRATION_ROWS = max(100, int(os.getenv("MAX_BULK_REGISTRATION_ROWS", str(_AZURE_B1_DEFAULT_BULK_ROWS))))
 
 

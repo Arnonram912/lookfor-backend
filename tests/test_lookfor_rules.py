@@ -31,6 +31,10 @@ class UserValidationRuleTests(unittest.TestCase):
 
     def test_level_combinations_are_controlled(self):
         self.assertEqual(normalize_level("first year"), "1st Year")
+        self.assertEqual(normalize_level("1Y1"), "1st Year")
+        self.assertEqual(normalize_level("2y1"), "2nd Year")
+        self.assertEqual(normalize_level("3Y2"), "3rd Year")
+        self.assertEqual(normalize_level("4 Y 1"), "4th Year")
         self.assertIn("Grade 12", valid_levels_for_category("SHS_STUDENT"))
         self.assertNotIn("Grade 12", valid_levels_for_category("COLLEGE_STUDENT"))
         self.assertEqual(valid_levels_for_category("STAFF"), ())

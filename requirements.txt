@@ -16,3 +16,4 @@ numpy
 torch
 transformers
 cloudinary
+cryptography

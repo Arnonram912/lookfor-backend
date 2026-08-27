@@ -3,10 +3,16 @@ import os
 import queue
 import smtplib
 import threading
+import time
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 
+from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
+from sqlalchemy import or_
 
+from database import SessionLocal
+import models
 
 load_dotenv()
 
@@ -15,6 +21,9 @@ _EMAIL_QUEUE: queue.Queue[dict] = queue.Queue(
 )
 _EMAIL_WORKER_LOCK = threading.Lock()
 _EMAIL_WORKER: threading.Thread | None = None
+_OUTBOX_WORKER_LOCK = threading.Lock()
+_OUTBOX_WORKER: threading.Thread | None = None
+_OUTBOX_SEND_INTERVAL_SECONDS = max(0.0, float(os.getenv("ACCOUNT_EMAIL_SEND_INTERVAL_SECONDS", "2")))
 
 
 def send_account_access_email(
@@ -162,6 +171,111 @@ def _ensure_account_email_worker() -> None:
         _EMAIL_WORKER.start()
 
 
+def _outbox_cipher() -> Fernet:
+    key = os.getenv("ACCOUNT_EMAIL_ENCRYPTION_KEY", "").strip().encode("utf-8")
+    if not key:
+        raise RuntimeError("ACCOUNT_EMAIL_ENCRYPTION_KEY is not configured")
+    return Fernet(key)
+
+
+def _claim_next_account_email():
+    """Claim one job before SMTP delivery so a restart cannot lose the batch."""
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        job = (
+            db.query(models.AccountEmailOutbox)
+            .filter(
+                or_(
+                    (models.AccountEmailOutbox.status == "pending")
+                    & (models.AccountEmailOutbox.available_at <= now),
+                    (models.AccountEmailOutbox.status == "sending")
+                    & (models.AccountEmailOutbox.available_at <= now),
+                )
+            )
+            .order_by(models.AccountEmailOutbox.id.asc())
+            .first()
+        )
+        if not job:
+            return None
+        job.status = "sending"
+        job.attempt_count += 1
+        # A worker that stops mid-send becomes eligible again after ten minutes.
+        job.available_at = now + timedelta(minutes=10)
+        db.commit()
+        return {
+            "id": job.id,
+            "recipient_email": job.recipient_email,
+            "full_name": job.full_name,
+            "encrypted_temporary_password": job.encrypted_temporary_password,
+            "account_type": job.account_type,
+            "attempt_count": job.attempt_count,
+        }
+    finally:
+        db.close()
+
+
+def _finish_account_email(job_id: int, *, error: Exception | None = None) -> None:
+    db = SessionLocal()
+    try:
+        job = db.query(models.AccountEmailOutbox).filter(models.AccountEmailOutbox.id == job_id).first()
+        if not job:
+            return
+        if error is None:
+            job.status = "sent"
+            job.sent_at = datetime.utcnow()
+            job.last_error = None
+        elif job.attempt_count >= 5:
+            job.status = "failed"
+            job.last_error = str(error)[:1000]
+        else:
+            job.status = "pending"
+            job.last_error = str(error)[:1000]
+            job.available_at = datetime.utcnow() + timedelta(minutes=min(30, 2 ** job.attempt_count))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _account_email_outbox_worker() -> None:
+    while True:
+        job = None
+        try:
+            job = _claim_next_account_email()
+            if not job:
+                time.sleep(2)
+                continue
+            password = _outbox_cipher().decrypt(job["encrypted_temporary_password"].encode("utf-8")).decode("utf-8")
+            send_account_access_email(
+                job["recipient_email"], job["full_name"], password, account_type=job["account_type"]
+            )
+            _finish_account_email(job["id"])
+            # Prevent a large upload from overwhelming the SMTP provider.
+            if _OUTBOX_SEND_INTERVAL_SECONDS:
+                time.sleep(_OUTBOX_SEND_INTERVAL_SECONDS)
+        except Exception as exc:
+            if "job" in locals() and job:
+                _finish_account_email(job["id"], error=exc)
+            else:
+                print(f"Account email outbox worker error: {exc}")
+            time.sleep(2)
+
+
+def ensure_account_email_outbox_worker() -> None:
+    global _OUTBOX_WORKER
+    if _OUTBOX_WORKER and _OUTBOX_WORKER.is_alive():
+        return
+    with _OUTBOX_WORKER_LOCK:
+        if _OUTBOX_WORKER and _OUTBOX_WORKER.is_alive():
+            return
+        _OUTBOX_WORKER = threading.Thread(
+            target=_account_email_outbox_worker,
+            name="lookfor-account-email-outbox-worker",
+            daemon=True,
+        )
+        _OUTBOX_WORKER.start()
+
+
 def queue_account_access_email(
     recipient_email: str,
     full_name: str,
@@ -169,18 +283,31 @@ def queue_account_access_email(
     *,
     account_type: str = "user",
 ) -> bool:
-    """Queue an account email without holding up the request or bulk job."""
-    _ensure_account_email_worker()
+    """Persist an account email before delivery so bulk imports survive restarts."""
+    if not recipient_email or not temporary_password:
+        return False
     try:
-        _EMAIL_QUEUE.put_nowait({
-            "recipient_email": recipient_email,
-            "full_name": full_name,
-            "temporary_password": temporary_password,
-            "account_type": account_type,
-        })
+        encrypted_password = _outbox_cipher().encrypt(temporary_password.encode("utf-8")).decode("utf-8")
+        db = SessionLocal()
+        db.add(models.AccountEmailOutbox(
+            recipient_email=recipient_email,
+            full_name=full_name,
+            encrypted_temporary_password=encrypted_password,
+            account_type=account_type,
+            status="pending",
+            available_at=datetime.utcnow(),
+        ))
+        db.commit()
+        db.close()
+        ensure_account_email_outbox_worker()
         return True
-    except queue.Full:
-        print(f"Account email queue is full; email not queued for {recipient_email}")
+    except Exception as exc:
+        try:
+            db.rollback()
+            db.close()
+        except Exception:
+            pass
+        print(f"Account email was not persisted for {recipient_email}: {exc}")
         return False
 
 

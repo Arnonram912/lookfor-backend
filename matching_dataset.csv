@@ -1,5 +1,5 @@
 query_id,actual_match,image_similarity,text_similarity,brand_comparison,color_comparison,location_comparison
-lost-001,true,0.82,0.76,same,same,same
+lost-001,true,0.80,0.81,different,different,different
 lost-001,false,0.72,0.55,different,different,different
 lost-002,true,0.68,0.61,not_provided,not_provided,same
 lost-002,false,0.31,0.28,not_provided,not_provided,not_provided
