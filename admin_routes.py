@@ -5054,7 +5054,8 @@ async def finalize_lost_upload(
             "status": "success", 
             "item_id": new_item.id,
             "uploader": current_user.full_name,
-            "auto_matched": is_auto_match
+            "auto_matched": is_auto_match,
+            "analysis": match_result,
         }
         
     except Exception as e:

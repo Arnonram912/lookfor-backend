@@ -98,6 +98,12 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(len(result["ranked_candidates"]), 10)
         self.assertEqual(len(result["matched_items"]), 5)
         top = result["ranked_candidates"][0]
+        second = result["ranked_candidates"][1]
+        self.assertEqual(top["rank"], 1)
+        self.assertEqual(top["score"], top["raw_score"])
+        self.assertEqual(second["rank"], 2)
+        self.assertEqual(second["score"], round(second["raw_score"] * 0.95, 4))
+        self.assertGreater(second["rank_decay"], 0)
         self.assertEqual(top["image_similarity"], 1.0)
         self.assertEqual(top["text_similarity"], 1.0)
         self.assertGreater(top["detail_similarity"], 0.9)
