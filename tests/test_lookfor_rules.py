@@ -9,7 +9,6 @@ from lookfor_constants import (
     display_claim_status,
     infer_legacy_classification,
     normalize_level,
-    tertiary_term_for_level,
     normalize_user_category,
     valid_levels_for_category,
 )
@@ -40,7 +39,7 @@ class UserValidationRuleTests(unittest.TestCase):
         self.assertNotIn("Grade 12", valid_levels_for_category("COLLEGE_STUDENT"))
         self.assertEqual(valid_levels_for_category("STAFF"), ())
 
-    def test_compact_tertiary_levels_preserve_their_semester(self):
+    def test_all_compact_tertiary_suffixes_are_accepted_as_year_levels(self):
         second_semester_levels = {
             "1Y2": "1st Year",
             "2y2": "2nd Year",
@@ -48,11 +47,7 @@ class UserValidationRuleTests(unittest.TestCase):
             "4Y2": "4th Year",
         }
         for level, expected_year in second_semester_levels.items():
-            self.assertEqual(tertiary_term_for_level(level), "Second Semester")
             self.assertEqual(normalize_level(level), expected_year)
-        for level in ("1Y1", "2y1", "3 Y 1", "4Y1"):
-            self.assertEqual(tertiary_term_for_level(level), "First Semester")
-        self.assertIsNone(tertiary_term_for_level("2nd Year"))
 
     def test_name_and_identifier_rules(self):
         self.assertTrue(NAME_RE.fullmatch("María O'Neil-Santos"))

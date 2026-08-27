@@ -40,6 +40,7 @@ from sqlalchemy import and_, or_, func, text
 from concurrent.futures import ThreadPoolExecutor
 from account_email import queue_account_access_email, queue_item_event_email
 from matching_metrics import MATCH_THRESHOLD, calculate_match_score, clamp_similarity_score
+from automatic_match_evaluation import calculate_automatic_match_evaluation
 from item_match_lifecycle import (
     delete_item_claims_and_release_matches,
     release_pending_found_link,
@@ -59,7 +60,6 @@ from lookfor_constants import (
     infer_legacy_classification,
     normalize_level,
     normalize_user_category,
-    tertiary_term_for_level,
     valid_levels_for_category,
 )
 from lookfor_permissions import (
@@ -4442,23 +4442,13 @@ def bulk_register(
         else f"BATCH-{term_setting.current_academic_year} {term_setting.current_semester}"
     )
 
-    def imported_batch_id(student: dict) -> str:
-        if selected_category != "COLLEGE_STUDENT":
-            return automatic_batch_id
-        encoded_term = tertiary_term_for_level(student.get("level"))
-        if not encoded_term:
-            return automatic_batch_id
-        return academic_archive_batch_id(
-            "TERTIARY",
-            term_setting.current_academic_year,
-            encoded_term,
-        )
-
     expected_source = "employee" if selected_category == "FACULTY" else "student"
     students_list = [
         {
             **student,
-            "batch_id": imported_batch_id(student),
+            # Compact levels such as 1Y2 and 4Y2 identify the year only. Every
+            # imported learner belongs to the currently active academic term.
+            "batch_id": automatic_batch_id,
             "user_category": selected_category,
             "source_type": expected_source,
             "department": selected_department if selected_category == "FACULTY" else student.get("department"),
@@ -5361,15 +5351,46 @@ async def get_stats(
     return {
         "welcome": f"Hello {current_admin.email}",
         "pending_count": db.query(models.PendingItem.id).filter(
-            models.PendingItem.archived == False
+            models.PendingItem.archived == False,
+            models.PendingItem.deleted == False,
+        ).count(),
+        "lost_count": db.query(models.Item.id).filter(
+            models.Item.status == "lost",
+            models.Item.archived == False,
+            models.Item.deleted == False,
         ).count(),
         "found_count": db.query(models.Item.id).filter(
             models.Item.status == "found",
-            models.Item.archived == False
+            models.Item.archived == False,
+            models.Item.deleted == False,
         ).count(),
         "claimed_count": claimed_count,
         "approved_claim_count": claimed_count,  # Legacy response key.
     }
+
+
+@router.get("/matching-evaluation-metrics")
+def get_automatic_matching_evaluation(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("dashboard.view")),
+):
+    decided_claims = db.query(models.Claim).filter(
+        models.Claim.status.in_((*models.CLAIMED_CLAIM_STATUSES, "rejected"))
+    ).all()
+    approved_lost_ids = {
+        int(claim.lost_item_id)
+        for claim in decided_claims
+        if claim.lost_item_id is not None
+        and str(claim.status or "").strip().lower() in models.CLAIMED_CLAIM_STATUSES
+    }
+    lost_items = (
+        db.query(models.Item).filter(models.Item.id.in_(approved_lost_ids)).all()
+        if approved_lost_ids
+        else []
+    )
+    result = calculate_automatic_match_evaluation(decided_claims, lost_items)
+    result["evaluated_at"] = datetime.utcnow().isoformat()
+    return result
 
 
 # --- 8. AI & UPLOAD ROUTES ---
