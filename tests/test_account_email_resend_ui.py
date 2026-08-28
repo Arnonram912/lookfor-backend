@@ -14,10 +14,10 @@ class AccountEmailResendUiTests(unittest.TestCase):
         cls.routes = (ROOT / "admin_routes.py").read_text(encoding="utf-8")
         cls.email_worker = (ROOT / "account_email.py").read_text(encoding="utf-8")
 
-    def test_resend_button_is_only_rendered_for_failed_delivery(self):
-        self.assertIn("emailStatus === 'failed'", self.template)
-        self.assertIn("resendCredentialEmail(${user.id}, this)", self.template)
-        self.assertNotIn("emailStatus === 'sent' && hasAccessPermission", self.template)
+    def test_delivery_status_is_not_rendered_in_user_tables(self):
+        self.assertNotIn("<th>Email Status</th>", self.template)
+        self.assertNotIn("const emailStatusColumn", self.template)
+        self.assertNotIn("resendCredentialEmail(${user.id}, this)", self.template)
 
     def test_profile_view_shows_delivery_status_and_failed_resend_action(self):
         self.assertIn('id="profileViewEmailDeliveryStatus"', self.template)

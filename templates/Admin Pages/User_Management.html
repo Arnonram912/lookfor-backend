@@ -252,7 +252,7 @@
 
 <div id="adminContainer" class="table-box">
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="adminTableBody"></tbody>
     </table>
 </div>
@@ -267,14 +267,14 @@
         <span id="studentAcademicTermStatus" class="student-year-term-status">Active</span>
     </div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>Student ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course / Strand</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>Student ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Course / Strand</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="studentTableBody"></tbody>
     </table>
 </div>
 
 <div id="facultyContainer" class="table-box" style="display:none;">
     <table class="user-table">
-        <thead><tr><th>Select</th><th>Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Department</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="facultyTableBody"></tbody>
     </table>
 </div>
@@ -283,7 +283,7 @@
     <h3 id="archiveTitle"><i class="fas fa-box-archive"></i> Archived Accounts</h3>
     <div id="archiveFolderGrid" class="archive-folder-grid"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="archiveTableBody"></tbody>
     </table>
 </div>
@@ -292,7 +292,7 @@
     <h3 id="deleteTitle"><i class="fas fa-trash"></i> Trash</h3>
     <div id="trashFolderGrid" class="archive-folder-grid"></div>
     <table class="user-table">
-        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Email Status</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Select</th><th>ID / Student/Faculty ID</th><th class="sortable-th" onclick="toggleFullNameSort()" title="Sort A-Z / Z-A">Full Name <span class="sort-indicator" data-sort-indicator></span></th><th>Role / Details</th><th>Last Login</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="deleteTableBody"></tbody>
     </table>
 </div>
@@ -2999,8 +2999,8 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
 
     if (!pageRows.length) {
         const columnCount = currentRole === 'admin' || currentRole === 'staff' || currentRole === 'student' || currentRole === 'faculty' || currentRole === 'archive' || currentRole === 'delete'
-            ? 8
-            : 6;
+            ? 7
+            : 5;
         tableBody.innerHTML = `<tr><td colspan="${columnCount}" style="text-align:center; padding:18px; color:#5b6f86; font-weight:700;">No records found.</td></tr>`;
         updateUserPaginationControls(totalRows);
         updateSelectionActionButtons();
@@ -3091,32 +3091,6 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
             ? `<td><input type="checkbox" class="row-select" ${isMe ? 'disabled title="You cannot select your own account."' : ''} ${selectedUserIds.has(user.id) ? 'checked' : ''} onchange="toggleUserSelection(${user.id}, this.checked)"></td>`
             : '';
 
-        const emailStatus = String(user.email_delivery_status || 'not_queued').toLowerCase();
-        const emailStatusLabels = {
-            pending: 'Pending',
-            sending: 'Sending',
-            sent: 'Sent',
-            failed: 'Failed',
-            not_queued: 'Not queued'
-        };
-        const emailStatusColors = {
-            pending: '#b26a00',
-            sending: '#0b63a8',
-            sent: '#198754',
-            failed: '#dc3545',
-            not_queued: '#6c757d'
-        };
-        const resendButton = emailStatus === 'failed' && hasAccessPermission('User-Management-Create')
-            ? `<button class="action-btn" type="button" onclick="resendCredentialEmail(${user.id}, this)" style="margin-top:6px; padding:5px 9px; white-space:nowrap;" title="Retry the failed credential email"><i class="fas fa-paper-plane" aria-hidden="true"></i> Resend Email</button>`
-            : '';
-        const emailStatusColumn = `
-            <td>
-                <span style="font-weight:700; color:${emailStatusColors[emailStatus] || emailStatusColors.not_queued};" title="Sent means accepted by the mail provider; inbox placement is not guaranteed.">
-                    ${emailStatusLabels[emailStatus] || emailStatusLabels.not_queued}
-                </span>
-                ${resendButton}
-            </td>`;
-
         return `
             <tr data-user-id="${user.id}" class="${isMe ? 'self-row' : ''} ${user.is_archived ? 'archived-row' : ''}">
                 ${selectColumn}
@@ -3124,7 +3098,6 @@ function renderTable(data, currentRole = 'admin', targetBodyId = 'userTableBody'
                 <td>${user.full_name} ${isMe ? '<span class="you-badge">YOU</span>' : ''}</td>
                 ${infoColumn}
                 <td style="font-size: 0.85rem; color: #555;">${loginDisplay}</td>
-                ${emailStatusColumn}
                 <td>
                     <span class="status-pill ${(user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'status-active' : 'status-deactivated'}">
                         ${user.is_archived ? 'Archived / Disabled' : ((user.is_admin ? (user.permissions && user.permissions.length > 0) : user.is_student_active) ? 'Active' : 'Deactivated')}
