@@ -162,6 +162,52 @@ def format_user_display_name(user: models.User | None, fallback: str = "Unknown 
     return fallback
 
 
+def format_user_role_label(user: models.User | None, fallback: str = "Unknown") -> str:
+    """Return the portal role of the account that submitted a report."""
+    if not user:
+        return fallback
+    if bool(getattr(user, "is_admin", False)):
+        return "Admin"
+
+    category = str(getattr(user, "user_category", "") or "").strip().upper()
+    category = category.replace("-", "_").replace(" ", "_")
+    if category == "FACULTY":
+        return "Faculty"
+    if category == "STAFF":
+        return "Staff"
+    if category in {"COLLEGE_STUDENT", "SHS_STUDENT", "COLLEGE", "SHS", "TERTIARY"}:
+        return "Student"
+
+    personnel = str(getattr(user, "personnel", "") or "").strip().casefold()
+    if personnel in {"faculty", "teacher", "teaching"}:
+        return "Faculty"
+    if personnel == "staff":
+        return "Staff"
+
+    department = str(getattr(user, "department", "") or "").strip()
+    has_department = bool(department and department.casefold() != "n/a")
+    has_course = bool(str(getattr(user, "course", "") or "").strip())
+    has_section = bool(str(getattr(user, "section", "") or "").strip())
+    return "Faculty" if has_department and not has_course and not has_section else "Student"
+
+
+def format_report_owner_role_label(user: models.User | None, owner_group: str | None = None) -> str:
+    """Display faculty reporters as Teacher and student reporters as Student."""
+    account_role = format_user_role_label(user, "")
+    if account_role == "Faculty":
+        return "Teacher"
+    if account_role == "Student":
+        return "Student"
+
+    normalized_group = str(owner_group or "").strip().casefold()
+    if normalized_group in {"faculty", "teacher", "teaching"}:
+        return "Teacher"
+    if normalized_group:
+        # Legacy student reports stored a strand/course such as BSHM or 1Y2.
+        return "Student"
+    return "Unknown"
+
+
 def format_item_code(status: str | None, item_id: int | None, existing_code: str | None = None) -> str | None:
     if existing_code:
         return existing_code

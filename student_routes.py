@@ -22,6 +22,7 @@ from utils import (
     resolve_category_name,
     validate_upload_file_size,
     format_user_display_name,
+    format_user_role_label,
     format_item_code,
     item_display_id,
     item_display_code,
@@ -153,6 +154,13 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             "category_match": bool(match.get("category_match")),
             "category_similarity": clamp_similarity_score(match.get("category_similarity")),
             "cross_category": bool(match.get("cross_category")),
+            "visual_type_conflict": bool(match.get("visual_type_conflict")),
+            "query_visual_type": match.get("query_visual_type"),
+            "query_visual_type_confidence": match.get("query_visual_type_confidence"),
+            "query_visual_type_reliable": bool(match.get("query_visual_type_reliable")),
+            "candidate_visual_type": match.get("candidate_visual_type"),
+            "candidate_visual_type_confidence": match.get("candidate_visual_type_confidence"),
+            "candidate_visual_type_reliable": bool(match.get("candidate_visual_type_reliable")),
             "warning": match.get("warning"),
         })
 
@@ -296,6 +304,7 @@ def serialize_student_item(
         "user_id": item.user_id,
         "report_owner_user_id": getattr(item, "report_owner_user_id", None),
         "uploader_name": report_owner_name or format_user_display_name(owner, "Self"),
+        "uploader_role": format_user_role_label(owner),
         "report_owner_name": report_owner_name,
         "report_owner_group": report_owner_group,
     }
@@ -321,6 +330,7 @@ def serialize_student_pending_found(item: models.PendingItem, owner: models.User
         "date": item.date.isoformat() if item.date else None,
         "time_found": item.time_found,
         "uploader_name": format_user_display_name(owner, "Self"),
+        "uploader_role": format_user_role_label(owner),
     }
 
 

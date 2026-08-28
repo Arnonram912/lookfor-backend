@@ -9,6 +9,7 @@ from matching_metrics import MATCH_THRESHOLD
 from main import (
     actively_linked_found_candidate_ids,
     cached_found_candidate_ids,
+    classify_visual_item_type,
     compute_text_detail_matches,
 )
 
@@ -69,6 +70,83 @@ def candidate(item_id, **overrides):
 
 
 class MatchingScoreResponseTests(unittest.TestCase):
+    def setUp(self):
+        self.visual_classifier_patcher = patch(
+            "main.classify_visual_item_type", return_value=None
+        )
+        self.visual_classifier_patcher.start()
+        self.addCleanup(self.visual_classifier_patcher.stop)
+
+    @patch("main.get_text_embeddings")
+    def test_clip_visual_classifier_can_identify_wallet_over_alcohol(self, text_embeddings):
+        text_embeddings.side_effect = lambda prompts: np.asarray([
+            [1.0, 0.0] if "wallet" in prompt.lower() else [0.0, 1.0]
+            for prompt in prompts
+        ])
+
+        classification = classify_visual_item_type(np.array([1.0, 0.0]))
+
+        self.assertEqual(classification["label"], "wallet")
+        self.assertTrue(classification["reliable"])
+        self.assertGreater(classification["confidence"], 0.9)
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_confident_wallet_alcohol_visual_conflict_blocks_match(self, _text_embedding):
+        with patch(
+            "main.classify_visual_item_type",
+            side_effect=[
+                {"label": "wallet", "confidence": 0.91, "reliable": True},
+                {"label": "rubbing alcohol bottle", "confidence": 0.88, "reliable": True},
+            ],
+        ):
+            result = compute_text_detail_matches(
+                FakeSession([candidate(77)]),
+                category="Wallet",
+                item_name="Wallet",
+                location="Main Library",
+                description="Black wallet",
+                brand=None,
+                color="Black",
+                status="lost",
+                search_vec=np.array([1.0, 0.0]),
+                query_text_vec=np.array([1.0, 0.0]),
+            )
+
+        evaluated = result["ranked_candidates"][0]
+        self.assertTrue(evaluated["visual_type_conflict"])
+        self.assertEqual(evaluated["query_visual_type"], "wallet")
+        self.assertEqual(evaluated["candidate_visual_type"], "rubbing alcohol bottle")
+        self.assertLess(evaluated["score"], 0.45)
+        self.assertIn("different object types", evaluated["warning"])
+        self.assertIsNone(result["matched_item"])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_uncertain_visual_type_difference_does_not_force_rejection(self, _text_embedding):
+        with patch(
+            "main.classify_visual_item_type",
+            side_effect=[
+                {"label": "wallet", "confidence": 0.40, "reliable": False},
+                {"label": "rubbing alcohol bottle", "confidence": 0.39, "reliable": False},
+            ],
+        ):
+            result = compute_text_detail_matches(
+                FakeSession([candidate(78)]),
+                category="Wallet",
+                item_name="Wallet",
+                location="Main Library",
+                description="Black wallet",
+                brand=None,
+                color="Black",
+                status="lost",
+                search_vec=np.array([1.0, 0.0]),
+                query_text_vec=np.array([1.0, 0.0]),
+            )
+
+        evaluated = result["ranked_candidates"][0]
+        self.assertFalse(evaluated["visual_type_conflict"])
+        self.assertGreaterEqual(evaluated["score"], MATCH_THRESHOLD)
+        self.assertEqual(result["matched_item"]["id"], 78)
+
     def test_cached_approved_match_is_retained_for_reanalysis(self):
         item = SimpleNamespace(possible_matches=json.dumps([
             {"id": 1116, "source": "found", "score": 0.91},
@@ -82,7 +160,7 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(actively_linked_found_candidate_ids(db, 7162), {1116})
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_already_matched_candidate_is_analyzed_but_not_linked_again(self, _text_embedding):
+    def test_matched_candidate_is_analyzed_but_unavailable_for_second_claim(self, _text_embedding):
         result = compute_text_detail_matches(
             FakeSession([candidate(1116, is_matched=True)]),
             category="Wallet",
@@ -99,8 +177,26 @@ class MatchingScoreResponseTests(unittest.TestCase):
         analyzed = result["ranked_candidates"][0]
         self.assertTrue(analyzed["is_already_matched"])
         self.assertFalse(analyzed["available_for_match"])
-        self.assertIsNone(result["matched_item"])
         self.assertEqual(result["matched_items"][0]["id"], 1116)
+        self.assertIsNone(result["matched_item"])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_final_claim_excludes_candidate_even_if_match_flag_is_stale(self, _text_embedding):
+        result = compute_text_detail_matches(
+            FakeSession([candidate(1117, is_matched=False, found_item_id=1117)]),
+            category="Wallet",
+            item_name="Wallet 1117",
+            location="Main Library",
+            description="Black wallet",
+            brand="Acme",
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+        )
+
+        self.assertEqual(result["ranked_candidates"], [])
+        self.assertIsNone(result["matched_item"])
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_own_existing_match_remains_available_during_reanalysis(self, _text_embedding):
@@ -221,6 +317,49 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(result["matched_item"]["source"], "pending_found")
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_pending_found_reserved_for_another_lost_item_is_visible_but_unavailable(self, _text_embedding):
+        pending = candidate(100, matched_item_id=777)
+        result = compute_text_detail_matches(
+            ModelAwareFakeSession([], [pending]),
+            category="Wallet",
+            item_name="Wallet",
+            location="Room 201",
+            description="Black wallet",
+            brand=None,
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+            current_lost_item_id=888,
+        )
+
+        analyzed = result["ranked_candidates"][0]
+        self.assertEqual(analyzed["id"], 100)
+        self.assertTrue(analyzed["is_already_matched"])
+        self.assertFalse(analyzed["available_for_match"])
+        self.assertEqual(result["matched_items"][0]["id"], 100)
+        self.assertIsNone(result["matched_item"])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_pending_found_reserved_for_same_lost_item_remains_on_reanalysis(self, _text_embedding):
+        pending = candidate(101, matched_item_id=777)
+        result = compute_text_detail_matches(
+            ModelAwareFakeSession([], [pending]),
+            category="Wallet",
+            item_name="Wallet",
+            location="Room 201",
+            description="Black wallet",
+            brand=None,
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+            current_lost_item_id=777,
+        )
+
+        self.assertEqual(result["ranked_candidates"][0]["id"], 101)
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_unrelated_category_cannot_auto_match_even_with_high_clip_score(self, _text_embedding):
         alcohol = candidate(
             5,
@@ -310,6 +449,84 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertTrue(candidate_result["item_type_conflict"])
         self.assertLess(candidate_result["score"], 0.45)
         self.assertIsNone(result["matched_item"])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_alcohol_cannot_match_wallet_inside_same_broad_category(self, _text_embedding):
+        wallet = candidate(
+            13,
+            item_name="Wallet",
+            category="Personal Items (Wallets/Keys)",
+            category_relationship=None,
+            location="Canteen",
+            description=None,
+        )
+        result = compute_text_detail_matches(
+            FakeSession([wallet]),
+            category="Personal Items (Wallets/Keys)",
+            item_name="Alcohol",
+            location="Canteen",
+            description=None,
+            brand=None,
+            color="Green",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+        )
+
+        candidate_result = result["ranked_candidates"][0]
+        self.assertTrue(candidate_result["category_match"])
+        self.assertTrue(candidate_result["item_type_conflict"])
+        self.assertLess(candidate_result["score"], 0.45)
+        self.assertEqual(result["matched_items"], [])
+        self.assertIsNone(result["matched_item"])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_different_jewelry_types_do_not_match(self, _text_embedding):
+        ring = candidate(
+            14,
+            item_name="Gold ring",
+            category="Jewelry",
+            category_relationship=None,
+            location="Canteen",
+            description=None,
+        )
+        result = compute_text_detail_matches(
+            FakeSession([ring]),
+            category="Jewelry",
+            item_name="Bracelet",
+            location="Canteen",
+            description=None,
+            brand=None,
+            color="Gold",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+        )
+
+        candidate_result = result["ranked_candidates"][0]
+        self.assertTrue(candidate_result["item_type_conflict"])
+        self.assertLess(candidate_result["score"], 0.45)
+        self.assertEqual(result["matched_items"], [])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_observation_capture_retains_all_scored_candidates(self, _text_embedding):
+        candidates = [candidate(item_id) for item_id in range(200, 212)]
+        result = compute_text_detail_matches(
+            FakeSession(candidates),
+            category="Wallet",
+            item_name="Wallet",
+            location="Main Library",
+            description="Black wallet",
+            brand="Acme",
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+            include_observation_candidates=True,
+        )
+
+        self.assertEqual(len(result["ranked_candidates"]), 10)
+        self.assertEqual(len(result["_observation_candidates"]), 12)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_brand_conflict_does_not_change_score(self, _text_embedding):

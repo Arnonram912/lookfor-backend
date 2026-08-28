@@ -239,9 +239,10 @@
                         <p><strong>Location:</strong> <span id="modalLocation"></span></p>
                         <p><strong>Date:</strong> <span id="modalDate"></span></p>
                         <p><strong>Lost ID:</strong> <span id="modalItemCode"></span></p>
-                        <p><strong>Strand / Role:</strong> <span id="modalOwnerGroup"></span></p>
+                        <p><strong>Role:</strong> <span id="modalOwnerRole"></span></p>
                         
                         <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
+                        <p><strong>Uploader Role:</strong> <span id="modalUploaderRole"></span></p>
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
@@ -605,6 +606,12 @@ function showAccessDeniedPopup(permName) {
             return user?.section || user?.course || user?.department || '';
         }
 
+        function getOwnerRoleLabel(user) {
+            return String(user?.role_label || '').toLowerCase() === 'faculty'
+                ? 'Teacher'
+                : 'Student';
+        }
+
         function renderReportOwnerPreview(user) {
             const preview = document.getElementById('reportOwnerPreview');
             const nameInput = document.getElementById('reportOwnerName');
@@ -619,10 +626,11 @@ function showAccessDeniedPopup(permName) {
             }
 
             const group = getOwnerGroupLabel(user);
+            const ownerRole = getOwnerRoleLabel(user);
             preview.innerHTML = `
                 <strong>${escapeModalHtml(user.full_name || 'Unnamed user')}</strong><br>
                 Student/Employee ID: ${escapeModalHtml(user.student_no || 'Not available')}<br>
-                Strand / Role: ${escapeModalHtml(group || 'Not specified')}
+                Role: ${escapeModalHtml(ownerRole)}
             `;
             if (nameInput) nameInput.value = user.full_name || '';
             if (groupInput) groupInput.value = group || '';
@@ -1117,8 +1125,8 @@ async function analyzeLostItemMatches() {
     if (document.getElementById("modalItemCode")) {
         document.getElementById("modalItemCode").innerText = item.lost_id || item.item_code || 'N/A';
     }
-    if (document.getElementById("modalOwnerGroup")) {
-        document.getElementById("modalOwnerGroup").innerText = item.report_owner_group || 'Not specified';
+    if (document.getElementById("modalOwnerRole")) {
+        document.getElementById("modalOwnerRole").innerText = item.report_owner_role || 'Unknown';
     }
     
     // --- ADDED MISSING COLUMNS ---
@@ -1126,6 +1134,7 @@ async function analyzeLostItemMatches() {
     // 1. Uploader Info (Shows who reported it)
     if (document.getElementById("modalUploader")) {
         document.getElementById("modalUploader").innerText = item.uploader_name || 'Unknown User';
+        document.getElementById("modalUploaderRole").innerText = item.uploader_role || 'Unknown';
     }
 
     // 2. Physical Traits (Brand/Color)
@@ -1267,6 +1276,19 @@ async function analyzeLostItemMatches() {
         `;
     }
 
+    function formatVisualTypeBreakdown(match) {
+        if (!match?.query_visual_type || !match?.candidate_visual_type) return '';
+        const color = match.visual_type_conflict ? '#a63b23' : '#556678';
+        return `
+            <div style="margin-top:5px; font-size:12px; line-height:1.55; color:${color};">
+                CLIP sees — Lost: ${escapeModalHtml(match.query_visual_type)}
+                (${formatMatchScore(match.query_visual_type_confidence)}) &middot;
+                Found: ${escapeModalHtml(match.candidate_visual_type)}
+                (${formatMatchScore(match.candidate_visual_type_confidence)})
+            </div>
+        `;
+    }
+
     function getMatchImageUrl(match) {
         return getItemImageUrl(match?.image_path);
     }
@@ -1311,6 +1333,7 @@ async function analyzeLostItemMatches() {
                         <div style="margin-top: 4px; color: #41556b;">Location: ${escapeModalHtml(topMatch.location || 'Unknown')}</div>
                         <div style="margin-top: 6px; color: #1b5e20; font-weight: 600;">Adjusted confidence: ${formatMatchScore(topMatch.score)}</div>
                         ${formatMatchScoreBreakdown(topMatch)}
+                        ${formatVisualTypeBreakdown(topMatch)}
                     </div>
                 </div>
             `;
@@ -1330,6 +1353,7 @@ async function analyzeLostItemMatches() {
                             <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                         <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
                         ${formatMatchScoreBreakdown(match)}
+                        ${formatVisualTypeBreakdown(match)}
                         </div>
                     </div>
                     <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Confidence: ${formatMatchScore(match.score)}</div>

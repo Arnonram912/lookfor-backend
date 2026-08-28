@@ -159,6 +159,48 @@ class MatchScoreTests(unittest.TestCase):
             0.0,
         )
 
+    def test_controlled_item_types_recognize_aliases_and_reject_other_types(self):
+        same_type_score, same_components = calculate_detail_similarity(
+            {"item_name": "iPad"},
+            {"item_name": "Android tablet"},
+        )
+        different_type_score, different_components = calculate_detail_similarity(
+            {"item_name": "portable charger"},
+            {"item_name": "USB flash drive"},
+        )
+
+        self.assertEqual(same_components["item_type_similarity"], 1.0)
+        self.assertEqual(same_type_score, 1.0)
+        self.assertEqual(different_components["item_type_similarity"], 0.0)
+        self.assertEqual(different_type_score, 0.0)
+
+    def test_ring_name_does_not_misclassify_earrings(self):
+        score, components = calculate_detail_similarity(
+            {"item_name": "Gold earrings"},
+            {"item_name": "Gold ring"},
+        )
+
+        self.assertEqual(components["item_type_similarity"], 0.0)
+        self.assertEqual(score, 0.0)
+
+    def test_watch_aliases_share_the_same_item_type(self):
+        score, components = calculate_detail_similarity(
+            {"item_name": "Black smartwatch"},
+            {"item_name": "Black wrist watch"},
+        )
+
+        self.assertEqual(components["item_type_similarity"], 1.0)
+        self.assertEqual(score, 1.0)
+
+    def test_fan_aliases_share_the_same_item_type(self):
+        score, components = calculate_detail_similarity(
+            {"item_name": "White mini fan"},
+            {"item_name": "Portable electric fan"},
+        )
+
+        self.assertEqual(components["item_type_similarity"], 1.0)
+        self.assertEqual(score, 1.0)
+
 
 class MatchEvaluationTests(unittest.TestCase):
     def test_accuracy_precision_recall_and_f1(self):

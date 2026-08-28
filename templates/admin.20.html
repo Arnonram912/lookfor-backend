@@ -12,31 +12,6 @@
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
 
-    <style>
-        .evaluation-panel {
-            padding: 24px;
-            border: 1px solid #dbe5f0;
-            border-radius: 16px;
-            background: #f8fbff;
-        }
-        .evaluation-panel h2 { margin: 0 0 6px; color: #003b70; }
-        .evaluation-summary { margin: 0 0 18px; color: #64748b; line-height: 1.5; }
-        .evaluation-metric-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 12px;
-        }
-        .evaluation-metric {
-            padding: 16px;
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 4px 14px rgba(0, 59, 112, 0.08);
-        }
-        .evaluation-metric strong { display: block; color: #005bab; font-size: 1.45rem; }
-        .evaluation-metric span { color: #64748b; font-size: 0.82rem; }
-        .evaluation-ranking { margin: 16px 0 0; color: #334155; font-size: 0.9rem; }
-    </style>
-
 </head> 
 
 <body> 
@@ -222,17 +197,6 @@
                         </div> 
                     </div>
 
-                    <section class="evaluation-panel" aria-labelledby="evaluationMetricsTitle">
-                        <h2 id="evaluationMetricsTitle">Automatic AI Match Evaluation</h2>
-                        <p id="evaluationMetricsSummary" class="evaluation-summary">Loading confirmed match outcomes...</p>
-                        <div class="evaluation-metric-grid">
-                            <div class="evaluation-metric"><strong id="evaluationAccuracy">0.0%</strong><span>Accuracy</span></div>
-                            <div class="evaluation-metric"><strong id="evaluationPrecision">0.0%</strong><span>Precision</span></div>
-                            <div class="evaluation-metric"><strong id="evaluationRecall">0.0%</strong><span>Recall</span></div>
-                            <div class="evaluation-metric"><strong id="evaluationF1">0.0%</strong><span>F1 Score</span></div>
-                        </div>
-                        <p id="evaluationRanking" class="evaluation-ranking">Recall@1: 0.0% · Recall@5: 0.0% · Recall@10: 0.0% · MRR: 0.000</p>
-                    </section>
                 </div>
             </div>
         </section> 
@@ -589,37 +553,6 @@ async function handleNotifClick(notifId) {
             document.getElementById('claimedCount').innerText = Number(stats.claimed_count ?? stats.approved_claim_count ?? 0);
         } catch (err) {
             console.error("Stats sync failed");
-        }
-    }
-
-    function formatEvaluationPercent(value) {
-        const numeric = Number(value || 0);
-        return `${(Math.max(0, Math.min(1, numeric)) * 100).toFixed(1)}%`;
-    }
-
-    async function updateAutomaticEvaluationMetrics() {
-        const token = sessionStorage.getItem("admin_token");
-        const summary = document.getElementById("evaluationMetricsSummary");
-        try {
-            const response = await fetch('/admin/matching-evaluation-metrics', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) throw new Error("Evaluation request failed");
-            const metrics = await response.json();
-            document.getElementById("evaluationAccuracy").textContent = formatEvaluationPercent(metrics.accuracy);
-            document.getElementById("evaluationPrecision").textContent = formatEvaluationPercent(metrics.precision);
-            document.getElementById("evaluationRecall").textContent = formatEvaluationPercent(metrics.recall);
-            document.getElementById("evaluationF1").textContent = formatEvaluationPercent(metrics.f1_score);
-            document.getElementById("evaluationRanking").textContent =
-                `Recall@1: ${formatEvaluationPercent(metrics.recall_at_1)} · ` +
-                `Recall@5: ${formatEvaluationPercent(metrics.recall_at_5)} · ` +
-                `Recall@10: ${formatEvaluationPercent(metrics.recall_at_10)} · ` +
-                `MRR: ${Number(metrics.mrr || 0).toFixed(3)}`;
-            summary.textContent = metrics.scored_decisions
-                ? `Calculated automatically from ${metrics.scored_decisions} scored admin decision(s). ${metrics.unscored_decisions || 0} manual/unscored decision(s) are excluded.`
-                : 'Waiting for scored claims to be approved or rejected by an administrator.';
-        } catch (error) {
-            summary.textContent = 'Automatic evaluation metrics are temporarily unavailable.';
         }
     }
 
@@ -1067,10 +1000,8 @@ async function processAction(itemId, actionType) {
         if (!sessionStorage.getItem("admin_token")) window.location.href = "/";
         loadAnnouncements();
         updateDashboardStats();
-        updateAutomaticEvaluationMetrics();
         setInterval(() => {
             updateDashboardStats();
-            updateAutomaticEvaluationMetrics();
         }, 30000);
     });
 

@@ -214,17 +214,43 @@ _COLOR_FAMILIES = {
 
 _ITEM_TYPE_ALIASES = {
     "eyewear": ("eyeglasses", "eye glasses", "glasses", "spectacles"),
+    "power-bank": ("power bank", "powerbank", "portable charger", "battery pack"),
     "charger": ("charger", "charging cable", "power adapter", "power adaptor"),
     "sim-card": ("sim card", "simcard", "subscriber identity module"),
     "alcohol": ("alcohol", "rubbing alcohol", "isopropyl"),
+    "wallet": ("wallet", "wallets", "billfold", "card holder", "coin purse"),
+    "watch": ("watch", "watches", "wristwatch", "wrist watch", "smartwatch", "smart watch"),
+    "phone": ("phone", "mobile phone", "cellphone", "cell phone", "smartphone", "iphone"),
+    "tablet": ("tablet", "tablet computer", "ipad", "android tablet"),
+    "calculator": ("calculator", "scientific calculator"),
+    "fan": ("fan", "electric fan", "portable fan", "handheld fan", "hand fan", "mini fan", "folding fan"),
+    "usb-drive": ("usb", "usb drive", "flash drive", "thumb drive"),
+    "computer-mouse": ("computer mouse", "wireless mouse", "wired mouse", "mouse"),
+    "perfume": ("perfume", "cologne", "fragrance bottle"),
+    "sanitizer": ("hand sanitizer", "sanitizer"),
+    "medicine": ("medicine bottle", "medicine", "medication bottle", "pill bottle"),
+    "pencil-case": ("pencil case", "pen case", "pencil pouch"),
+    "lunch-box": ("lunch box", "lunchbox", "food container"),
+    "footwear": ("shoe", "shoes", "sneaker", "sneakers", "sandal", "sandals", "slipper", "slippers"),
+    "hat": ("hat", "cap", "baseball cap"),
+    "backpack": ("backpack", "rucksack", "knapsack", "school bag"),
+    "handbag": ("handbag", "hand bag", "purse", "shoulder bag"),
+    "tote-bag": ("tote", "tote bag", "canvas tote"),
+    "bracelet": ("bracelet", "bracelets", "bangle", "bangles", "wrist bracelet"),
+    "earrings": ("earring", "earrings", "ear studs", "stud earrings", "hoop earrings"),
+    "necklace": ("necklace", "necklaces", "neck chain", "pendant necklace"),
+    "ring": ("ring", "rings", "finger ring"),
 }
 
 
 def _canonical_item_type(value: Any) -> str | None:
-    normalized = _normalized_text(value)
+    normalized = re.sub(r"[^a-z0-9]+", " ", _normalized_text(value))
+    padded_value = f" {normalized.strip()} "
     for canonical, aliases in _ITEM_TYPE_ALIASES.items():
-        if any(alias in normalized for alias in aliases):
-            return canonical
+        for alias in aliases:
+            normalized_alias = re.sub(r"[^a-z0-9]+", " ", _normalized_text(alias)).strip()
+            if normalized_alias and f" {normalized_alias} " in padded_value:
+                return canonical
     return None
 
 

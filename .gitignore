@@ -9,6 +9,7 @@ __pycache__/
 uploads/
 static/uploads/
 static/profile_pics/
+matching_observations.csv
 
 .vscode/
 .idea/

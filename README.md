@@ -179,7 +179,30 @@ only the affected stored lists. Reads and item edits return the cache immediatel
 approving a pending found report converts its cached identifier without rerunning
 CLIP.
 
-Evaluate a labeled CSV dataset with:
+Finally claimed/completed reports are excluded before CLIP candidate scoring. Reports
+that are matched or pending remain visible as scored evidence, but are unavailable for
+a second automatic claim. During reanalysis, the current report's own active counterpart
+remains available so the existing legitimate match can be preserved.
+
+The production scorer also performs a cached, batched CLIP zero-shot visual-type
+check against common campus item types, including wallets and rubbing-alcohol bottles.
+When both images are classified confidently and the visual types disagree, the pair
+is capped below the possible-match threshold. Low-confidence guesses are displayed as
+diagnostic evidence but never force rejection. Match review shows what CLIP identified
+for the lost and found images and the confidence of each classification.
+
+The fixed `matching_dataset.csv` benchmark is retained for offline evaluation.
+Every saved match analysis is upserted into `matching_observations.csv` without
+treating the AI prediction as truth. These live observations never modify the
+fixed `matching_dataset.csv` benchmark and never use administrator claim
+decisions as CLIP accuracy labels. Configure alternate persistent paths with
+`MATCHING_OBSERVATIONS_DATASET` and `MATCHING_EVALUATION_DATASET` in hosted
+environments.
+It does not use live administrator decisions as labels. Verify or replace the
+four starter labels and add more match and non-match rows before relying on the
+offline results. No matching-metrics panel or metrics API is exposed in the app.
+
+Evaluate the same labeled CSV manually with:
 
 ```powershell
 python evaluate_matching.py matching_dataset.csv

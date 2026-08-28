@@ -32,6 +32,8 @@ from utils import (
     resolve_category_name,
     validate_upload_file_size,
     format_user_display_name,
+    format_report_owner_role_label,
+    format_user_role_label,
     format_item_code,
     item_display_id,
     item_display_code,
@@ -44,7 +46,6 @@ from account_email import (
     queue_item_event_email,
 )
 from matching_metrics import MATCH_THRESHOLD, calculate_match_score, clamp_similarity_score
-from automatic_match_evaluation import calculate_automatic_match_evaluation
 from item_match_lifecycle import (
     delete_item_claims_and_release_matches,
     release_pending_found_link,
@@ -384,6 +385,13 @@ def normalize_saved_possible_matches(raw_possible_matches: str | None) -> str | 
             "category_match": bool(match.get("category_match")),
             "category_similarity": clamp_similarity_score(match.get("category_similarity")),
             "cross_category": bool(match.get("cross_category")),
+            "visual_type_conflict": bool(match.get("visual_type_conflict")),
+            "query_visual_type": match.get("query_visual_type"),
+            "query_visual_type_confidence": match.get("query_visual_type_confidence"),
+            "query_visual_type_reliable": bool(match.get("query_visual_type_reliable")),
+            "candidate_visual_type": match.get("candidate_visual_type"),
+            "candidate_visual_type_confidence": match.get("candidate_visual_type_confidence"),
+            "candidate_visual_type_reliable": bool(match.get("candidate_visual_type_reliable")),
             "warning": match.get("warning"),
         })
 
@@ -422,6 +430,13 @@ def serialize_found_item_match(
         "event_time_similarity",
         "cross_category",
         "item_type_conflict",
+        "visual_type_conflict",
+        "query_visual_type",
+        "query_visual_type_confidence",
+        "query_visual_type_reliable",
+        "candidate_visual_type",
+        "candidate_visual_type_confidence",
+        "candidate_visual_type_reliable",
         "brand_conflict",
         "color_conflict",
         "warning",
@@ -480,6 +495,13 @@ def get_cached_found_match_evaluations(
                 "event_time_similarity",
                 "cross_category",
                 "item_type_conflict",
+                "visual_type_conflict",
+                "query_visual_type",
+                "query_visual_type_confidence",
+                "query_visual_type_reliable",
+                "candidate_visual_type",
+                "candidate_visual_type_confidence",
+                "candidate_visual_type_reliable",
                 "brand_conflict",
                 "color_conflict",
                 "warning",
@@ -515,6 +537,16 @@ def serialize_inventory_item(db: Session, item: models.Item) -> dict:
     reported_person_name = str(getattr(item, "report_owner_name", "") or "").strip()
     reported_person_group = str(getattr(item, "report_owner_group", "") or "").strip()
     uploader_name = reported_person_name or entered_by_name
+    reported_owner = item.owner
+    report_owner_user_id = getattr(item, "report_owner_user_id", None)
+    if report_owner_user_id:
+        reported_owner = db.query(models.User).filter(
+            models.User.id == report_owner_user_id
+        ).first()
+    report_owner_role = format_report_owner_role_label(
+        reported_owner,
+        reported_person_group,
+    )
 
     return {
         "id": item.id,
@@ -543,10 +575,12 @@ def serialize_inventory_item(db: Session, item: models.Item) -> dict:
         "time_found": item.time_found,
         "user_id": item.user_id,
         "uploader_name": uploader_name,
+        "uploader_role": format_user_role_label(item.owner),
         "entered_by_name": entered_by_name,
-        "report_owner_user_id": getattr(item, "report_owner_user_id", None),
+        "report_owner_user_id": report_owner_user_id,
         "report_owner_name": reported_person_name,
         "report_owner_group": reported_person_group,
+        "report_owner_role": report_owner_role,
         "is_claimed": item_has_approved_claim(db, item),
     }
 
@@ -579,6 +613,7 @@ def serialize_pending_item(db: Session, item: models.PendingItem) -> dict:
             submitter,
             "Unknown User"
         ),
+        "uploader_role": format_user_role_label(submitter),
     }
 
 
@@ -5479,30 +5514,6 @@ def resend_user_credential_email(
         "message": f"Credential email resend queued for {recipient_email}.",
         "email_delivery_status": "pending",
     }
-
-
-@router.get("/matching-evaluation-metrics")
-def get_automatic_matching_evaluation(
-    db: Session = Depends(get_db),
-    current_admin: models.User = Depends(check_permission("dashboard.view")),
-):
-    decided_claims = db.query(models.Claim).filter(
-        models.Claim.status.in_((*models.CLAIMED_CLAIM_STATUSES, "rejected"))
-    ).all()
-    approved_lost_ids = {
-        int(claim.lost_item_id)
-        for claim in decided_claims
-        if claim.lost_item_id is not None
-        and str(claim.status or "").strip().lower() in models.CLAIMED_CLAIM_STATUSES
-    }
-    lost_items = (
-        db.query(models.Item).filter(models.Item.id.in_(approved_lost_ids)).all()
-        if approved_lost_ids
-        else []
-    )
-    result = calculate_automatic_match_evaluation(decided_claims, lost_items)
-    result["evaluated_at"] = datetime.utcnow().isoformat()
-    return result
 
 
 # --- 8. AI & UPLOAD ROUTES ---

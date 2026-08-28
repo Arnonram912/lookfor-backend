@@ -33,6 +33,7 @@ from utils import (
     validate_upload_file_size,
     format_item_code,
     format_user_display_name,
+    format_user_role_label,
 )
 from sqlalchemy import and_, or_, func
 from sqlalchemy import text
@@ -41,6 +42,7 @@ from clip_test import (
     get_similarity_score,
     find_matches_in_dataset,
     get_text_embedding,
+    get_text_embeddings,
     get_image_embedding,
     get_multi_image_embedding,
     get_clip_components
@@ -85,6 +87,7 @@ from matching_metrics import (
     clamp_similarity_score,
     is_automatic_match_candidate,
 )
+from matching_observation_dataset import record_match_observations
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -1641,28 +1644,7 @@ def get_user_display_name(user: models.User) -> str:
 
 
 def get_user_role_label(user: models.User) -> str:
-    if user.is_admin:
-        return "Admin"
-
-    category = normalize_user_category(getattr(user, "user_category", None))
-    if category == "FACULTY":
-        return "Faculty"
-    if category == "STAFF":
-        return "Staff"
-    if category in {"COLLEGE_STUDENT", "SHS_STUDENT"}:
-        return "Student"
-
-    personnel = str(getattr(user, "personnel", None) or "").strip().casefold()
-    if personnel in {"faculty", "teacher", "teaching"}:
-        return "Faculty"
-    if personnel == "staff":
-        return "Staff"
-
-    has_department = bool((user.department or "").strip()) and (user.department or "").strip() != "N/A"
-    has_course = bool((user.course or "").strip())
-    has_section = bool((user.section or "").strip())
-
-    return "Faculty" if has_department and not has_course and not has_section else "Student"
+    return format_user_role_label(user)
 
 
 def deployed_static_path(path: str | None, fallback: str = DEFAULT_PROFILE_PIC) -> str:
@@ -1877,6 +1859,99 @@ def build_item_dataset_text(item):
     return ". ".join(part for part in parts if part)
 
 
+VISUAL_ITEM_TYPE_LABELS = (
+    "wallet",
+    "rubbing alcohol bottle",
+    "keys",
+    "identification card",
+    "mobile phone",
+    "tablet computer",
+    "laptop computer",
+    "phone charger",
+    "power bank",
+    "USB flash drive",
+    "computer mouse",
+    "calculator",
+    "portable fan",
+    "umbrella",
+    "backpack",
+    "handbag or purse",
+    "tote bag",
+    "eyeglasses",
+    "wristwatch",
+    "water bottle",
+    "earphones or headphones",
+    "book or notebook",
+    "pencil case",
+    "lunch box",
+    "clothing",
+    "shoes",
+    "hat or cap",
+    "bracelet",
+    "earrings",
+    "necklace",
+    "ring",
+    "perfume bottle",
+    "hand sanitizer bottle",
+    "medicine bottle",
+)
+VISUAL_TYPE_TEMPERATURE = 0.04
+VISUAL_TYPE_CONFIDENCE_THRESHOLD = 0.55
+VISUAL_TYPE_MARGIN_THRESHOLD = 0.03
+
+
+def classify_visual_item_type(
+    image_embedding: np.ndarray | None,
+    labels: tuple[str, ...] = VISUAL_ITEM_TYPE_LABELS,
+) -> dict | None:
+    """Use CLIP image-to-text evidence to cautiously identify an object type."""
+    if not isinstance(image_embedding, np.ndarray) or not image_embedding.size or not labels:
+        return None
+    image_vector = np.asarray(image_embedding, dtype=np.float32).flatten()
+    image_norm = float(np.linalg.norm(image_vector))
+    if not image_norm:
+        return None
+    image_vector = image_vector / image_norm
+
+    prompts = tuple(f"a clear photo of a {label}" for label in labels)
+    text_vectors = get_text_embeddings(prompts)
+    scored_labels = []
+    for label, text_vector in zip(labels, text_vectors):
+        text_vector = np.asarray(text_vector, dtype=np.float32).flatten()
+        if text_vector.shape != image_vector.shape:
+            continue
+        text_norm = float(np.linalg.norm(text_vector))
+        if not text_norm:
+            continue
+        score = float(np.dot(image_vector, text_vector / text_norm))
+        scored_labels.append((label, score))
+    if not scored_labels:
+        return None
+
+    scored_labels.sort(key=lambda entry: entry[1], reverse=True)
+    best_label, best_score = scored_labels[0]
+    second_score = scored_labels[1][1] if len(scored_labels) > 1 else -1.0
+    logits = np.asarray(
+        [entry[1] for entry in scored_labels], dtype=np.float64
+    ) / VISUAL_TYPE_TEMPERATURE
+    logits -= np.max(logits)
+    probabilities = np.exp(logits)
+    probabilities /= max(float(np.sum(probabilities)), 1e-12)
+    confidence = float(probabilities[0])
+    margin = float(best_score - second_score)
+    reliable = (
+        confidence >= VISUAL_TYPE_CONFIDENCE_THRESHOLD
+        and margin >= VISUAL_TYPE_MARGIN_THRESHOLD
+    )
+    return {
+        "label": best_label,
+        "confidence": round(clamp_similarity_score(confidence), 4),
+        "similarity": round(clamp_similarity_score((best_score + 1.0) / 2.0), 4),
+        "margin": round(max(0.0, margin), 4),
+        "reliable": reliable,
+    }
+
+
 def compute_text_detail_matches(
     db: Session,
     *,
@@ -1893,6 +1968,8 @@ def compute_text_detail_matches(
     time_found: str | None = None,
     exclude_item_id: int | None = None,
     include_candidate_ids: set[int] | None = None,
+    current_lost_item_id: int | None = None,
+    include_observation_candidates: bool = False,
 ):
     normalized_status = " ".join(str(status or "").strip().lower().split())
     normalized_category = (category or "").strip()
@@ -1924,10 +2001,50 @@ def compute_text_detail_matches(
     def item_category_name(item: models.Item) -> str:
         return item.category_relationship.name if getattr(item, "category_relationship", None) else item.category
 
+    included_ids = {int(value) for value in (include_candidate_ids or set())}
+    claimed_candidate_ids = set()
+    try:
+        claim_id_column = (
+            models.Claim.found_item_id if target_status == "found"
+            else models.Claim.lost_item_id
+        )
+        claimed_rows = db.query(claim_id_column).filter(
+            models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
+            claim_id_column.isnot(None),
+        ).all()
+        for row in claimed_rows:
+            value = row[0] if isinstance(row, (tuple, list)) else getattr(
+                row, claim_id_column.key, None
+            )
+            if value is not None:
+                claimed_candidate_ids.add(int(value))
+    except (AttributeError, TypeError, ValueError):
+        # Lightweight test/dummy sessions may not implement column queries.
+        # Lightweight sessions may not implement column-level claim queries.
+        claimed_candidate_ids = set()
+
+    query_visual_type = classify_visual_item_type(search_vec)
+
     def score_items(items, source: str = "found") -> list[dict]:
         candidates = []
         for item in items:
             try:
+                item_id = int(item.id)
+                reserved_lost_id = (
+                    getattr(item, "matched_item_id", None)
+                    if source == "pending_found"
+                    else None
+                )
+                reserved_for_current_lost = bool(
+                    reserved_lost_id is not None
+                    and int(reserved_lost_id) == int(current_lost_item_id or -1)
+                )
+                is_already_matched = bool(
+                    getattr(item, "is_matched", False)
+                    or reserved_lost_id is not None
+                )
+                if item_id in claimed_candidate_ids:
+                    continue
                 if not item.image_embedding:
                     continue
 
@@ -1980,15 +2097,32 @@ def compute_text_detail_matches(
                 item_type_conflict = item_type_similarity is not None and item_type_similarity < 0.35
                 brand_conflict = brand_similarity is not None and brand_similarity < 0.35
                 color_conflict = color_similarity is not None and color_similarity < 0.35
-                is_already_matched = bool(getattr(item, "is_matched", False))
-                available_for_match = not is_already_matched or item.id in included_ids
+                candidate_visual_type = classify_visual_item_type(stored_vec)
+                visual_type_conflict = bool(
+                    query_visual_type
+                    and candidate_visual_type
+                    and query_visual_type.get("reliable")
+                    and candidate_visual_type.get("reliable")
+                    and query_visual_type.get("label") != candidate_visual_type.get("label")
+                )
+                available_for_match = (
+                    not is_already_matched
+                    or item.id in included_ids
+                    or reserved_for_current_lost
+                )
 
                 warning_parts = []
                 strong_item_type_agreement = (
                     item_type_similarity is not None
                     and item_type_similarity >= ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD
                 )
-                if item_type_conflict:
+                if visual_type_conflict:
+                    score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
+                    warning_parts.append(
+                        "CLIP confidently sees different object types "
+                        f"({query_visual_type['label']} vs {candidate_visual_type['label']})."
+                    )
+                elif item_type_conflict:
                     score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
                     warning_parts.append("Item type differs too much for matching.")
                 elif cross_category:
@@ -2009,6 +2143,13 @@ def compute_text_detail_matches(
                     "cross_category": cross_category,
                     "category_match": category_match,
                     "item_type_conflict": item_type_conflict,
+                    "visual_type_conflict": visual_type_conflict,
+                    "query_visual_type": query_visual_type.get("label") if query_visual_type else None,
+                    "query_visual_type_confidence": query_visual_type.get("confidence") if query_visual_type else None,
+                    "query_visual_type_reliable": query_visual_type.get("reliable") if query_visual_type else False,
+                    "candidate_visual_type": candidate_visual_type.get("label") if candidate_visual_type else None,
+                    "candidate_visual_type_confidence": candidate_visual_type.get("confidence") if candidate_visual_type else None,
+                    "candidate_visual_type_reliable": candidate_visual_type.get("reliable") if candidate_visual_type else False,
                     "category_overridden_by_item_type": bool(
                         cross_category and strong_item_type_agreement
                     ),
@@ -2031,9 +2172,8 @@ def compute_text_detail_matches(
                 continue
         return candidates
 
-    included_ids = {int(value) for value in (include_candidate_ids or set())}
-    # Analyze every active opposite-side report. Already-linked records remain
-    # visible as scored evidence but are marked unavailable for a second claim.
+    # Analyze unclaimed opposite-side reports, including pending/matched records
+    # as unavailable evidence. Finally claimed records were removed above.
     candidate_items = db.query(models.Item).outerjoin(models.Category).filter(
         models.Item.status.ilike(target_status),
         models.Item.archived == False
@@ -2077,6 +2217,7 @@ def compute_text_detail_matches(
         candidate["score"] = confidence
         candidate["competition_decay"] = round(raw_score - confidence, 4)
 
+    observation_candidates = list(ranked_candidates)
     ranked_candidates = ranked_candidates[:10]
 
     # Review eligibility uses the unmodified evidence score. A true candidate
@@ -2094,7 +2235,7 @@ def compute_text_detail_matches(
         threshold=strict_match_threshold,
     ) else None
 
-    return {
+    response = {
         "highest_score": round(highest_score, 4),
         "highest_raw_score": round(highest_raw_score, 4),
         "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else [],
@@ -2104,6 +2245,9 @@ def compute_text_detail_matches(
         "action": "show_match" if all_matches else "no_match",
         "warning": None,
     }
+    if include_observation_candidates:
+        response["_observation_candidates"] = observation_candidates
+    return response
 
 
 class ItemDetailUpdate(BaseModel):
@@ -2193,6 +2337,13 @@ def build_saved_match_payload(
         "category_match",
         "cross_category",
         "item_type_conflict",
+        "visual_type_conflict",
+        "query_visual_type",
+        "query_visual_type_confidence",
+        "query_visual_type_reliable",
+        "candidate_visual_type",
+        "candidate_visual_type_confidence",
+        "candidate_visual_type_reliable",
         "brand_conflict",
         "color_conflict",
         "is_already_matched",
@@ -2303,7 +2454,6 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
 
     included_candidate_ids = set()
     if record_type == "item" and str(getattr(item, "status", "") or "").strip().lower() == "lost":
-        included_candidate_ids.update(cached_found_candidate_ids(item))
         included_candidate_ids.update(actively_linked_found_candidate_ids(db, item.id))
     elif record_type in {"pending-found", "found"} and getattr(item, "matched_item_id", None):
         included_candidate_ids.add(int(item.matched_item_id))
@@ -2323,7 +2473,61 @@ def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
         time_found=getattr(item, "time_found", None),
         exclude_item_id=item.id if record_type == "item" else None,
         include_candidate_ids=included_candidate_ids,
+        current_lost_item_id=(
+            item.id
+            if record_type == "item"
+            and str(getattr(item, "status", "") or "").strip().lower() == "lost"
+            else None
+        ),
+        include_observation_candidates=True,
     )
+
+    # Store AI output as unlabeled observations only. These live predictions
+    # never become the fixed benchmark's correctness labels.
+    try:
+        observation_rows = []
+        automatic_match = result.get("matched_item") or {}
+        automatic_key = (
+            str(automatic_match.get("source", "")),
+            automatic_match.get("id"),
+        )
+        scored_candidates = result.pop(
+            "_observation_candidates",
+            result.get("ranked_candidates", []),
+        )
+        if record_type == "item" and item.status == "lost":
+            for candidate in scored_candidates:
+                observation_rows.append({
+                    **candidate,
+                    "lost_item_id": item.id,
+                    "found_item_id": candidate.get("id"),
+                    "candidate_source": candidate.get("source", "found"),
+                    "predicted_match": automatic_key == (
+                        str(candidate.get("source", "")), candidate.get("id")
+                    ),
+                })
+        elif record_type in {"pending-found", "found"}:
+            source = "pending_found" if record_type == "pending-found" else "found"
+            for candidate in scored_candidates:
+                observation_rows.append({
+                    **candidate,
+                    "lost_item_id": candidate.get("id"),
+                    "found_item_id": item.id,
+                    "candidate_source": source,
+                    "predicted_match": automatic_key == (
+                        str(candidate.get("source", "")), candidate.get("id")
+                    ),
+                })
+        if observation_rows:
+            record_match_observations(
+                lost_item_id=int(observation_rows[0]["lost_item_id"]),
+                found_item_id=int(observation_rows[0]["found_item_id"]),
+                candidate_source=str(observation_rows[0]["candidate_source"]),
+                candidates=observation_rows,
+            )
+    except (OSError, TypeError, ValueError) as exc:
+        # Dataset collection must never prevent a lost/found report upload.
+        print(f"Matching observation dataset warning: {exc}")
 
     if record_type == "item" and item.status == "lost":
         item.possible_matches = json.dumps(result["matched_items"]) if result["matched_items"] else None

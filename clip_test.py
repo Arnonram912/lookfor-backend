@@ -224,6 +224,29 @@ def get_text_embedding(text):
         _get_text_embedding_cached(str(text)), dtype=np.float32
     ).copy()
 
+
+@lru_cache(maxsize=16)
+def _get_text_embeddings_cached(texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
+    model_obj, processor_obj = get_clip_components()
+    inputs = processor_obj(text=list(texts), return_tensors="pt", padding=True)
+    with _INFERENCE_LOCK, torch.inference_mode():
+        text_features = model_obj.get_text_features(**inputs)
+        if hasattr(text_features, "text_embeds"):
+            text_features = text_features.text_embeds
+        elif hasattr(text_features, "pooler_output"):
+            text_features = text_features.pooler_output
+        text_features = text_features / text_features.norm(
+            p=2, dim=-1, keepdim=True
+        ).clamp_min(1e-12)
+    return tuple(tuple(row) for row in text_features.cpu().numpy())
+
+
+def get_text_embeddings(texts) -> np.ndarray:
+    normalized = tuple(str(text) for text in texts)
+    if not normalized:
+        return np.empty((0, 0), dtype=np.float32)
+    return np.asarray(_get_text_embeddings_cached(normalized), dtype=np.float32).copy()
+
 def find_matches_by_text_details(category, location, date, db_items):
     text_query = f"A {category} found at {location} on {date}"
     

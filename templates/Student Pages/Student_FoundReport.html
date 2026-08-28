@@ -199,6 +199,7 @@
                         <p><strong>When was the item found?</strong> <span id="modalDate"></span></p>
                         <p><strong>Found ID:</strong> <span id="modalItemCode"></span></p>
                         <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
+                        <p><strong>Uploader Role:</strong> <span id="modalUploaderRole"></span></p>
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
@@ -771,6 +772,7 @@ window.onclick = function(event) {
                 document.getElementById("modalItemCode").innerText = item.found_id || item.item_code || 'N/A';
             }
             document.getElementById("modalUploader").innerText = item.uploader_name || 'Self';
+            document.getElementById("modalUploaderRole").innerText = item.uploader_role || 'Unknown';
             document.getElementById("modalDescription").innerText = item.description || 'No description provided.';
 
             const statusEl = document.getElementById("modalStatus");

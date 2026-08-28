@@ -257,6 +257,7 @@
                         <p><strong>Found ID:</strong> <span id="modalItemCode"></span></p>
                         
                         <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
+                        <p><strong>Uploader Role:</strong> <span id="modalUploaderRole"></span></p>
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
@@ -600,6 +601,14 @@ function showAccessDeniedPopup(permName) {
                                     : ''}
                             </div>
                         ` : '<div style="margin-top:6px; font-size:12px; color:#7b8794;">Component scores were not recorded for this older result.</div>'}
+                        ${match.query_visual_type && match.candidate_visual_type ? `
+                            <div style="margin-top:6px; font-size:12px; color:${match.visual_type_conflict ? '#a63b23' : '#556678'};">
+                                CLIP sees — Lost: ${escapeFoundListHtml(match.query_visual_type)}
+                                (${formatEvaluationScore(match.query_visual_type_confidence)}) &middot;
+                                Found: ${escapeFoundListHtml(match.candidate_visual_type)}
+                                (${formatEvaluationScore(match.candidate_visual_type_confidence)})
+                            </div>
+                        ` : ''}
                         <div style="margin-top:6px; font-size:12px; color:#556678;">
                             ${escapeFoundListHtml(match.location || 'Location not specified')}
                         </div>
@@ -1057,6 +1066,7 @@ function showAccessDeniedPopup(permName) {
     // 1. Uploader Info (Shows who reported it)
     if (document.getElementById("modalUploader")) {
         document.getElementById("modalUploader").innerText = item.uploader_name || 'Unknown User';
+        document.getElementById("modalUploaderRole").innerText = item.uploader_role || 'Unknown';
     }
 
     // 2. Physical Traits (Brand/Color)

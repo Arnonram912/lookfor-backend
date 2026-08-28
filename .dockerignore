@@ -11,6 +11,7 @@ __pycache__
 .vscode
 .idea
 uploads
+matching_observations.csv
 # Include the versioned legacy pictures so Azure can seed them into its
 # persistent upload volume. New runtime uploads are written to /home/data.
 !static/uploads/
