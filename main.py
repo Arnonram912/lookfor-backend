@@ -1900,6 +1900,27 @@ VISUAL_TYPE_TEMPERATURE = 0.04
 VISUAL_TYPE_CONFIDENCE_THRESHOLD = 0.55
 VISUAL_TYPE_MARGIN_THRESHOLD = 0.03
 
+VISUAL_COLOR_LABELS = (
+    "black",
+    "white",
+    "gray",
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "cyan",
+    "blue",
+    "purple",
+    "pink",
+    "brown",
+    "beige",
+    "gold",
+    "silver",
+)
+VISUAL_COLOR_TEMPERATURE = 0.04
+VISUAL_COLOR_CONFIDENCE_THRESHOLD = 0.60
+VISUAL_COLOR_MARGIN_THRESHOLD = 0.03
+
 
 def classify_visual_item_type(
     image_embedding: np.ndarray | None,
@@ -1943,6 +1964,58 @@ def classify_visual_item_type(
     reliable = (
         confidence >= VISUAL_TYPE_CONFIDENCE_THRESHOLD
         and margin >= VISUAL_TYPE_MARGIN_THRESHOLD
+    )
+    return {
+        "label": best_label,
+        "confidence": round(clamp_similarity_score(confidence), 4),
+        "similarity": round(clamp_similarity_score((best_score + 1.0) / 2.0), 4),
+        "margin": round(max(0.0, margin), 4),
+        "reliable": reliable,
+    }
+
+
+def classify_visual_color(
+    image_embedding: np.ndarray | None,
+    labels: tuple[str, ...] = VISUAL_COLOR_LABELS,
+) -> dict | None:
+    """Cautiously classify the main object's broad color with CLIP evidence."""
+    if not isinstance(image_embedding, np.ndarray) or not image_embedding.size or not labels:
+        return None
+    image_vector = np.asarray(image_embedding, dtype=np.float32).flatten()
+    image_norm = float(np.linalg.norm(image_vector))
+    if not image_norm:
+        return None
+    image_vector = image_vector / image_norm
+
+    prompts = tuple(f"a photo where the main object is {label}" for label in labels)
+    text_vectors = get_text_embeddings(prompts)
+    scored_labels = []
+    for label, text_vector in zip(labels, text_vectors):
+        text_vector = np.asarray(text_vector, dtype=np.float32).flatten()
+        if text_vector.shape != image_vector.shape:
+            continue
+        text_norm = float(np.linalg.norm(text_vector))
+        if not text_norm:
+            continue
+        score = float(np.dot(image_vector, text_vector / text_norm))
+        scored_labels.append((label, score))
+    if not scored_labels:
+        return None
+
+    scored_labels.sort(key=lambda entry: entry[1], reverse=True)
+    best_label, best_score = scored_labels[0]
+    second_score = scored_labels[1][1] if len(scored_labels) > 1 else -1.0
+    logits = np.asarray(
+        [entry[1] for entry in scored_labels], dtype=np.float64
+    ) / VISUAL_COLOR_TEMPERATURE
+    logits -= np.max(logits)
+    probabilities = np.exp(logits)
+    probabilities /= max(float(np.sum(probabilities)), 1e-12)
+    confidence = float(probabilities[0])
+    margin = float(best_score - second_score)
+    reliable = (
+        confidence >= VISUAL_COLOR_CONFIDENCE_THRESHOLD
+        and margin >= VISUAL_COLOR_MARGIN_THRESHOLD
     )
     return {
         "label": best_label,
@@ -2025,6 +2098,7 @@ def compute_text_detail_matches(
         claimed_candidate_ids = set()
 
     query_visual_type = classify_visual_item_type(search_vec)
+    query_visual_color = classify_visual_color(search_vec)
 
     def score_items(items, source: str = "found") -> list[dict]:
         candidates = []
@@ -2099,12 +2173,43 @@ def compute_text_detail_matches(
                 brand_conflict = brand_similarity is not None and brand_similarity < 0.35
                 color_conflict = color_similarity is not None and color_similarity < 0.35
                 candidate_visual_type = classify_visual_item_type(stored_vec)
+                candidate_visual_color = classify_visual_color(stored_vec)
                 visual_type_conflict = bool(
                     query_visual_type
                     and candidate_visual_type
                     and query_visual_type.get("reliable")
                     and candidate_visual_type.get("reliable")
                     and query_visual_type.get("label") != candidate_visual_type.get("label")
+                )
+                visual_type_agreement_confirmed = bool(
+                    query_visual_type
+                    and candidate_visual_type
+                    and query_visual_type.get("reliable")
+                    and candidate_visual_type.get("reliable")
+                    and query_visual_type.get("label") == candidate_visual_type.get("label")
+                )
+                visual_type_review_required = not visual_type_agreement_confirmed
+                visual_color_similarity = None
+                visual_color_conflict = False
+                if (
+                    query_visual_color
+                    and candidate_visual_color
+                    and query_visual_color.get("reliable")
+                    and candidate_visual_color.get("reliable")
+                ):
+                    _, visual_color_components = calculate_detail_similarity(
+                        {"color": query_visual_color.get("label")},
+                        {"color": candidate_visual_color.get("label")},
+                    )
+                    visual_color_similarity = visual_color_components.get("color_similarity")
+                    visual_color_conflict = bool(
+                        visual_color_similarity is not None
+                        and visual_color_similarity < 0.35
+                    )
+                confirmed_color_conflict = bool(color_conflict and visual_color_conflict)
+                color_review_required = bool(
+                    (color_conflict or visual_color_conflict)
+                    and not confirmed_color_conflict
                 )
                 available_for_match = (
                     not is_already_matched
@@ -2117,19 +2222,30 @@ def compute_text_detail_matches(
                     item_type_similarity is not None
                     and item_type_similarity >= ITEM_TYPE_CATEGORY_OVERRIDE_THRESHOLD
                 )
-                if visual_type_conflict:
-                    score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
-                    warning_parts.append(
-                        "CLIP confidently sees different object types "
-                        f"({query_visual_type['label']} vs {candidate_visual_type['label']})."
-                    )
-                elif item_type_conflict:
+                if item_type_conflict:
                     score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
                     warning_parts.append("Item type differs too much for matching.")
-                elif color_conflict:
+                elif confirmed_color_conflict:
                     score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
                     warning_parts.append(
-                        "Reported colors conflict; this candidate cannot be matched."
+                        "Reported colors and CLIP image colors both conflict; "
+                        "this candidate cannot be matched."
+                    )
+                elif visual_type_review_required:
+                    if visual_type_conflict:
+                        warning_parts.append(
+                            "CLIP visual types disagree "
+                            f"({query_visual_type['label']} vs {candidate_visual_type['label']}); "
+                            "admin review is required."
+                        )
+                    else:
+                        warning_parts.append(
+                            "CLIP could not reliably confirm the same visual item type "
+                            "in both images; admin review is required."
+                        )
+                elif color_review_required:
+                    warning_parts.append(
+                        "Color evidence is inconsistent or uncertain; admin review is required."
                     )
                 elif cross_category:
                     warning_parts.append(
@@ -2150,12 +2266,24 @@ def compute_text_detail_matches(
                     "category_match": category_match,
                     "item_type_conflict": item_type_conflict,
                     "visual_type_conflict": visual_type_conflict,
+                    "visual_type_agreement_confirmed": visual_type_agreement_confirmed,
+                    "visual_type_review_required": visual_type_review_required,
                     "query_visual_type": query_visual_type.get("label") if query_visual_type else None,
                     "query_visual_type_confidence": query_visual_type.get("confidence") if query_visual_type else None,
                     "query_visual_type_reliable": query_visual_type.get("reliable") if query_visual_type else False,
                     "candidate_visual_type": candidate_visual_type.get("label") if candidate_visual_type else None,
                     "candidate_visual_type_confidence": candidate_visual_type.get("confidence") if candidate_visual_type else None,
                     "candidate_visual_type_reliable": candidate_visual_type.get("reliable") if candidate_visual_type else False,
+                    "query_visual_color": query_visual_color.get("label") if query_visual_color else None,
+                    "query_visual_color_confidence": query_visual_color.get("confidence") if query_visual_color else None,
+                    "query_visual_color_reliable": query_visual_color.get("reliable") if query_visual_color else False,
+                    "candidate_visual_color": candidate_visual_color.get("label") if candidate_visual_color else None,
+                    "candidate_visual_color_confidence": candidate_visual_color.get("confidence") if candidate_visual_color else None,
+                    "candidate_visual_color_reliable": candidate_visual_color.get("reliable") if candidate_visual_color else False,
+                    "visual_color_similarity": visual_color_similarity,
+                    "visual_color_conflict": visual_color_conflict,
+                    "confirmed_color_conflict": confirmed_color_conflict,
+                    "color_review_required": color_review_required,
                     "category_overridden_by_item_type": bool(
                         cross_category and strong_item_type_agreement
                     ),
@@ -2232,7 +2360,7 @@ def compute_text_detail_matches(
         candidate for candidate in ranked_candidates[:5]
         if (
             candidate["raw_score"] >= possible_match_threshold
-            and not candidate.get("color_conflict", False)
+            and not candidate.get("confirmed_color_conflict", False)
         )
     ]
 
@@ -2347,12 +2475,24 @@ def build_saved_match_payload(
         "cross_category",
         "item_type_conflict",
         "visual_type_conflict",
+        "visual_type_agreement_confirmed",
+        "visual_type_review_required",
         "query_visual_type",
         "query_visual_type_confidence",
         "query_visual_type_reliable",
         "candidate_visual_type",
         "candidate_visual_type_confidence",
         "candidate_visual_type_reliable",
+        "query_visual_color",
+        "query_visual_color_confidence",
+        "query_visual_color_reliable",
+        "candidate_visual_color",
+        "candidate_visual_color_confidence",
+        "candidate_visual_color_reliable",
+        "visual_color_similarity",
+        "visual_color_conflict",
+        "confirmed_color_conflict",
+        "color_review_required",
         "brand_conflict",
         "color_conflict",
         "is_already_matched",

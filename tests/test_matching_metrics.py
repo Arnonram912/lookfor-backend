@@ -53,6 +53,26 @@ class MatchScoreTests(unittest.TestCase):
             "color_conflict": True,
         }))
 
+    def test_current_color_review_candidate_cannot_automatic_match(self):
+        self.assertFalse(is_automatic_match_candidate({
+            "score": 0.94,
+            "raw_score": 0.94,
+            "competition_decay": 0.0,
+            "available_for_match": True,
+            "color_conflict": True,
+            "confirmed_color_conflict": False,
+            "color_review_required": True,
+        }))
+
+    def test_uncertain_visual_type_candidate_cannot_automatic_match(self):
+        self.assertFalse(is_automatic_match_candidate({
+            "score": 0.92,
+            "raw_score": 0.92,
+            "competition_decay": 0.0,
+            "available_for_match": True,
+            "visual_type_review_required": True,
+        }))
+
     def test_decay_never_pushes_qualifying_candidate_below_seventy_five_percent(self):
         confidences = calculate_competition_confidences([0.91, 0.90, 0.89])
         self.assertTrue(all(confidence >= 0.75 for confidence in confidences))

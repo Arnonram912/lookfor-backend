@@ -51,10 +51,19 @@ def is_automatic_match_candidate(
     threshold: float = MATCH_THRESHOLD,
 ) -> bool:
     """Reject an ambiguity-floor score while preserving a genuine raw 75%."""
+    legacy_color_conflict = bool(
+        candidate
+        and candidate.get("color_conflict", False)
+        and "color_review_required" not in candidate
+        and "confirmed_color_conflict" not in candidate
+    )
     if (
         not candidate
         or not candidate.get("available_for_match", True)
-        or candidate.get("color_conflict", False)
+        or candidate.get("confirmed_color_conflict", False)
+        or candidate.get("color_review_required", False)
+        or candidate.get("visual_type_review_required", False)
+        or legacy_color_conflict
     ):
         return False
     score = clamp_similarity_score(candidate.get("score"))

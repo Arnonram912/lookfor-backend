@@ -9,6 +9,7 @@ from matching_metrics import MATCH_THRESHOLD
 from main import (
     actively_linked_found_candidate_ids,
     cached_found_candidate_ids,
+    classify_visual_color,
     classify_visual_item_type,
     compute_text_detail_matches,
 )
@@ -72,10 +73,20 @@ def candidate(item_id, **overrides):
 class MatchingScoreResponseTests(unittest.TestCase):
     def setUp(self):
         self.visual_classifier_patcher = patch(
-            "main.classify_visual_item_type", return_value=None
+            "main.classify_visual_item_type",
+            return_value={
+                "label": "wallet",
+                "confidence": 0.90,
+                "reliable": True,
+            },
         )
         self.visual_classifier_patcher.start()
         self.addCleanup(self.visual_classifier_patcher.stop)
+        self.visual_color_patcher = patch(
+            "main.classify_visual_color", return_value=None
+        )
+        self.visual_color_patcher.start()
+        self.addCleanup(self.visual_color_patcher.stop)
 
     @patch("main.get_text_embeddings")
     def test_clip_visual_classifier_can_identify_wallet_over_alcohol(self, text_embeddings):
@@ -90,8 +101,21 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertTrue(classification["reliable"])
         self.assertGreater(classification["confidence"], 0.9)
 
+    @patch("main.get_text_embeddings")
+    def test_clip_visual_color_classifier_can_identify_red(self, text_embeddings):
+        text_embeddings.side_effect = lambda prompts: np.asarray([
+            [1.0, 0.0] if " red" in prompt.lower() else [0.0, 1.0]
+            for prompt in prompts
+        ])
+
+        classification = classify_visual_color(np.array([1.0, 0.0]))
+
+        self.assertEqual(classification["label"], "red")
+        self.assertTrue(classification["reliable"])
+        self.assertGreater(classification["confidence"], 0.9)
+
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_confident_wallet_alcohol_visual_conflict_blocks_match(self, _text_embedding):
+    def test_confident_visual_type_disagreement_requires_review(self, _text_embedding):
         with patch(
             "main.classify_visual_item_type",
             side_effect=[
@@ -114,14 +138,17 @@ class MatchingScoreResponseTests(unittest.TestCase):
 
         evaluated = result["ranked_candidates"][0]
         self.assertTrue(evaluated["visual_type_conflict"])
+        self.assertFalse(evaluated["visual_type_agreement_confirmed"])
+        self.assertTrue(evaluated["visual_type_review_required"])
         self.assertEqual(evaluated["query_visual_type"], "wallet")
         self.assertEqual(evaluated["candidate_visual_type"], "rubbing alcohol bottle")
-        self.assertLess(evaluated["score"], 0.45)
-        self.assertIn("different object types", evaluated["warning"])
+        self.assertGreaterEqual(evaluated["score"], 0.45)
+        self.assertIn("admin review is required", evaluated["warning"])
         self.assertIsNone(result["matched_item"])
+        self.assertEqual(result["matched_items"][0]["id"], 77)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_uncertain_visual_type_difference_does_not_force_rejection(self, _text_embedding):
+    def test_uncertain_visual_type_difference_requires_review(self, _text_embedding):
         with patch(
             "main.classify_visual_item_type",
             side_effect=[
@@ -144,8 +171,31 @@ class MatchingScoreResponseTests(unittest.TestCase):
 
         evaluated = result["ranked_candidates"][0]
         self.assertFalse(evaluated["visual_type_conflict"])
+        self.assertFalse(evaluated["visual_type_agreement_confirmed"])
+        self.assertTrue(evaluated["visual_type_review_required"])
         self.assertGreaterEqual(evaluated["score"], MATCH_THRESHOLD)
-        self.assertEqual(result["matched_item"]["id"], 78)
+        self.assertIsNone(result["matched_item"])
+        self.assertEqual(result["matched_items"][0]["id"], 78)
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_reliable_same_visual_type_can_automatic_match(self, _text_embedding):
+        result = compute_text_detail_matches(
+            FakeSession([candidate(79)]),
+            category="Wallet",
+            item_name="Wallet",
+            location="Main Library",
+            description="Black wallet",
+            brand=None,
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+        )
+
+        evaluated = result["ranked_candidates"][0]
+        self.assertTrue(evaluated["visual_type_agreement_confirmed"])
+        self.assertFalse(evaluated["visual_type_review_required"])
+        self.assertEqual(result["matched_item"]["id"], 79)
 
     def test_cached_approved_match_is_retained_for_reanalysis(self):
         item = SimpleNamespace(possible_matches=json.dumps([
@@ -562,7 +612,7 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(result["matched_items"][0]["id"], 7)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_color_conflict_blocks_possible_and_automatic_match(self, _text_embedding):
+    def test_unconfirmed_reported_color_conflict_requires_review(self, _text_embedding):
         result = compute_text_detail_matches(
             FakeSession([candidate(8, color="Red")]),
             category="Wallet",
@@ -577,13 +627,15 @@ class MatchingScoreResponseTests(unittest.TestCase):
         )
         candidate_result = result["ranked_candidates"][0]
         self.assertTrue(candidate_result["color_conflict"])
-        self.assertLess(candidate_result["raw_score"], 0.45)
+        self.assertFalse(candidate_result["confirmed_color_conflict"])
+        self.assertTrue(candidate_result["color_review_required"])
+        self.assertGreaterEqual(candidate_result["raw_score"], 0.45)
         self.assertIsNone(result["matched_item"])
-        self.assertEqual(result["matched_items"], [])
-        self.assertIn("Reported colors conflict", candidate_result["warning"])
+        self.assertEqual(result["matched_items"][0]["id"], 8)
+        self.assertIn("admin review is required", candidate_result["warning"])
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_brand_and_color_conflicts_block_match_because_of_color(self, _text_embedding):
+    def test_brand_and_unconfirmed_color_conflicts_remain_reviewable(self, _text_embedding):
         result = compute_text_detail_matches(
             FakeSession([candidate(9, brand="Other Brand", color="Brown")]),
             category="Wallet",
@@ -600,9 +652,71 @@ class MatchingScoreResponseTests(unittest.TestCase):
         candidate_result = result["ranked_candidates"][0]
         self.assertTrue(candidate_result["brand_conflict"])
         self.assertTrue(candidate_result["color_conflict"])
-        self.assertLess(candidate_result["score"], 0.45)
+        self.assertTrue(candidate_result["color_review_required"])
+        self.assertGreaterEqual(candidate_result["score"], 0.45)
+        self.assertIsNone(result["matched_item"])
+        self.assertEqual(result["matched_items"][0]["id"], 9)
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_written_and_reliable_visual_color_conflict_blocks_match(self, _text_embedding):
+        with patch(
+            "main.classify_visual_color",
+            side_effect=[
+                {"label": "black", "confidence": 0.91, "reliable": True},
+                {"label": "red", "confidence": 0.89, "reliable": True},
+            ],
+        ):
+            result = compute_text_detail_matches(
+                FakeSession([candidate(18, color="Red")]),
+                category="Wallet",
+                item_name="Wallet 18",
+                location="Main Library",
+                description="Black wallet",
+                brand="Acme",
+                color="Black",
+                status="lost",
+                search_vec=np.array([1.0, 0.0]),
+                query_text_vec=np.array([1.0, 0.0]),
+            )
+
+        candidate_result = result["ranked_candidates"][0]
+        self.assertTrue(candidate_result["color_conflict"])
+        self.assertTrue(candidate_result["visual_color_conflict"])
+        self.assertTrue(candidate_result["confirmed_color_conflict"])
+        self.assertFalse(candidate_result["color_review_required"])
+        self.assertLess(candidate_result["raw_score"], 0.45)
         self.assertIsNone(result["matched_item"])
         self.assertEqual(result["matched_items"], [])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_incorrect_entered_color_does_not_hide_visual_match(self, _text_embedding):
+        with patch(
+            "main.classify_visual_color",
+            side_effect=[
+                {"label": "black", "confidence": 0.92, "reliable": True},
+                {"label": "black", "confidence": 0.90, "reliable": True},
+            ],
+        ):
+            result = compute_text_detail_matches(
+                FakeSession([candidate(19, color="Black")]),
+                category="Wallet",
+                item_name="Wallet 19",
+                location="Main Library",
+                description="Wallet entered as red but photographed as black",
+                brand="Acme",
+                color="Red",
+                status="lost",
+                search_vec=np.array([1.0, 0.0]),
+                query_text_vec=np.array([1.0, 0.0]),
+            )
+
+        candidate_result = result["ranked_candidates"][0]
+        self.assertTrue(candidate_result["color_conflict"])
+        self.assertFalse(candidate_result["visual_color_conflict"])
+        self.assertFalse(candidate_result["confirmed_color_conflict"])
+        self.assertTrue(candidate_result["color_review_required"])
+        self.assertEqual(result["matched_items"][0]["id"], 19)
+        self.assertIsNone(result["matched_item"])
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_purple_and_violet_wallets_remain_match_eligible(self, _text_embedding):
