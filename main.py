@@ -2125,6 +2125,11 @@ def compute_text_detail_matches(
                 elif item_type_conflict:
                     score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
                     warning_parts.append("Item type differs too much for matching.")
+                elif color_conflict:
+                    score = min(score, POSSIBLE_MATCH_THRESHOLD - 0.0001)
+                    warning_parts.append(
+                        "Reported colors conflict; this candidate cannot be matched."
+                    )
                 elif cross_category:
                     warning_parts.append(
                         "Category differs; matching remains enabled because category does not block a strong match."
@@ -2224,7 +2229,10 @@ def compute_text_detail_matches(
     # is therefore not hidden merely because another candidate ranked above it.
     all_matches = [
         candidate for candidate in ranked_candidates[:5]
-        if candidate["raw_score"] >= possible_match_threshold
+        if (
+            candidate["raw_score"] >= possible_match_threshold
+            and not candidate.get("color_conflict", False)
+        )
     ]
 
     best_match = ranked_candidates[0] if ranked_candidates else None

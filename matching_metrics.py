@@ -51,7 +51,11 @@ def is_automatic_match_candidate(
     threshold: float = MATCH_THRESHOLD,
 ) -> bool:
     """Reject an ambiguity-floor score while preserving a genuine raw 75%."""
-    if not candidate or not candidate.get("available_for_match", True):
+    if (
+        not candidate
+        or not candidate.get("available_for_match", True)
+        or candidate.get("color_conflict", False)
+    ):
         return False
     score = clamp_similarity_score(candidate.get("score"))
     decay = clamp_similarity_score(candidate.get("competition_decay"))
@@ -212,6 +216,36 @@ _COLOR_FAMILIES = {
     "blue": "blue",
 }
 
+# Approximate hue positions in degrees. Circular distance makes neighboring
+# colors degrade gradually instead of treating every non-identical color as an
+# equal mismatch. Neutral colors remain outside the wheel and are handled by
+# their lightness families above.
+_COLOR_HUES = {
+    "red": 0,
+    "maroon": 0,
+    "burgundy": 0,
+    "orange": 30,
+    "brown": 30,
+    "gold": 45,
+    "yellow": 60,
+    "lime": 90,
+    "green": 120,
+    "teal": 165,
+    "turquoise": 175,
+    "cyan": 180,
+    "aqua": 180,
+    "light blue": 200,
+    "blue": 240,
+    "navy": 240,
+    "dark blue": 240,
+    "indigo": 255,
+    "violet": 270,
+    "lavender": 275,
+    "purple": 285,
+    "magenta": 300,
+    "pink": 330,
+}
+
 _ITEM_TYPE_ALIASES = {
     "eyewear": ("eyeglasses", "eye glasses", "glasses", "spectacles"),
     "power-bank": ("power bank", "powerbank", "portable charger", "battery pack"),
@@ -277,6 +311,19 @@ def _color_similarity(left: Any, right: Any) -> float | None:
         return 0.85
     if {left_family, right_family} == {"dark-neutral", "dark-blue"}:
         return 0.55
+    left_hue = _COLOR_HUES.get(normalized_left)
+    right_hue = _COLOR_HUES.get(normalized_right)
+    if left_hue is not None and right_hue is not None:
+        direct_distance = abs(left_hue - right_hue)
+        wheel_distance = min(direct_distance, 360 - direct_distance)
+        similarity = 1.0 - (wheel_distance / 180.0)
+        # Different names at the same hue usually represent different shades,
+        # so they remain very similar without being treated as exact.
+        if wheel_distance == 0:
+            similarity = 0.90
+        return round(similarity, 4)
+    if (left_family and right_hue is not None) or (right_family and left_hue is not None):
+        return 0.0
     return lexical_score
 
 
@@ -304,11 +351,11 @@ def calculate_detail_similarity(query: Mapping[str, Any], candidate: Mapping[str
     weights = {
         "category_similarity": 0.20,
         "item_type_similarity": 0.20,
-        "location_similarity": 0.15,
-        # Brand and color remain visible comparison details, but they do not
-        # raise or lower the match score.
+        "location_similarity": 0.10,
+        # Brand remains informational. Color uses gradual color-wheel distance
+        # and therefore contributes to ranking when both reports provide it.
         "brand_similarity": 0.00,
-        "color_similarity": 0.00,
+        "color_similarity": 0.15,
         "description_similarity": 0.10,
         "event_time_similarity": 0.15,
     }

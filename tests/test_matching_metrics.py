@@ -44,6 +44,15 @@ class MatchScoreTests(unittest.TestCase):
             "available_for_match": True,
         }))
 
+    def test_explicit_color_conflict_cannot_automatic_match(self):
+        self.assertFalse(is_automatic_match_candidate({
+            "score": 0.98,
+            "raw_score": 0.98,
+            "competition_decay": 0.0,
+            "available_for_match": True,
+            "color_conflict": True,
+        }))
+
     def test_decay_never_pushes_qualifying_candidate_below_seventy_five_percent(self):
         confidences = calculate_competition_confidences([0.91, 0.90, 0.89])
         self.assertTrue(all(confidence >= 0.75 for confidence in confidences))
@@ -141,6 +150,33 @@ class MatchScoreTests(unittest.TestCase):
         self.assertEqual(components["color_similarity"], 0.85)
         self.assertEqual(components["event_time_similarity"], 1.0)
         self.assertGreater(score, 0.95)
+
+    def test_purple_and_violet_are_compatible_colors(self):
+        _score, components = calculate_detail_similarity(
+            {"color": "Purple"},
+            {"color": "Violet"},
+        )
+
+        self.assertEqual(components["color_similarity"], 0.9167)
+
+    def test_color_wheel_similarity_decreases_with_hue_distance(self):
+        similarities = []
+        for candidate_color in ("Red", "Orange", "Yellow", "Green", "Cyan"):
+            _score, components = calculate_detail_similarity(
+                {"color": "Red"},
+                {"color": candidate_color},
+            )
+            similarities.append(components["color_similarity"])
+
+        self.assertEqual(similarities, [1.0, 0.8333, 0.6667, 0.3333, 0.0])
+
+    def test_colored_and_neutral_values_are_a_hard_color_conflict(self):
+        _score, components = calculate_detail_similarity(
+            {"color": "Red"},
+            {"color": "Black"},
+        )
+
+        self.assertEqual(components["color_similarity"], 0.0)
 
     def test_category_is_a_separate_exact_signal(self):
         self.assertEqual(

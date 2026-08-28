@@ -562,9 +562,9 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(result["matched_items"][0]["id"], 7)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_color_conflict_does_not_change_score(self, _text_embedding):
+    def test_color_conflict_blocks_possible_and_automatic_match(self, _text_embedding):
         result = compute_text_detail_matches(
-            FakeSession([candidate(8, color="Brown")]),
+            FakeSession([candidate(8, color="Red")]),
             category="Wallet",
             item_name="Wallet 8",
             location="Main Library",
@@ -575,27 +575,15 @@ class MatchingScoreResponseTests(unittest.TestCase):
             search_vec=np.array([1.0, 0.0]),
             query_text_vec=np.array([1.0, 0.0]),
         )
-        control = compute_text_detail_matches(
-            FakeSession([candidate(8)]),
-            category="Wallet",
-            item_name="Wallet 8",
-            location="Main Library",
-            description="Black wallet",
-            brand="Acme",
-            color="Black",
-            status="lost",
-            search_vec=np.array([1.0, 0.0]),
-            query_text_vec=np.array([1.0, 0.0]),
-        )
-
         candidate_result = result["ranked_candidates"][0]
         self.assertTrue(candidate_result["color_conflict"])
-        self.assertEqual(candidate_result["score"], control["ranked_candidates"][0]["score"])
-        self.assertEqual(result["matched_item"]["id"], 8)
-        self.assertEqual(result["matched_items"][0]["id"], 8)
+        self.assertLess(candidate_result["raw_score"], 0.45)
+        self.assertIsNone(result["matched_item"])
+        self.assertEqual(result["matched_items"], [])
+        self.assertIn("Reported colors conflict", candidate_result["warning"])
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_brand_and_color_conflicts_do_not_block_match(self, _text_embedding):
+    def test_brand_and_color_conflicts_block_match_because_of_color(self, _text_embedding):
         result = compute_text_detail_matches(
             FakeSession([candidate(9, brand="Other Brand", color="Brown")]),
             category="Wallet",
@@ -612,7 +600,28 @@ class MatchingScoreResponseTests(unittest.TestCase):
         candidate_result = result["ranked_candidates"][0]
         self.assertTrue(candidate_result["brand_conflict"])
         self.assertTrue(candidate_result["color_conflict"])
-        self.assertGreaterEqual(candidate_result["score"], 0.75)
+        self.assertLess(candidate_result["score"], 0.45)
+        self.assertIsNone(result["matched_item"])
+        self.assertEqual(result["matched_items"], [])
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_purple_and_violet_wallets_remain_match_eligible(self, _text_embedding):
+        result = compute_text_detail_matches(
+            FakeSession([candidate(9, color="Violet")]),
+            category="Wallet",
+            item_name="Wallet 9",
+            location="Main Library",
+            description="Purple wallet",
+            brand="Acme",
+            color="Purple",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+        )
+
+        candidate_result = result["ranked_candidates"][0]
+        self.assertFalse(candidate_result["color_conflict"])
+        self.assertEqual(candidate_result["color_similarity"], 0.9167)
         self.assertEqual(result["matched_item"]["id"], 9)
         self.assertEqual(result["matched_items"][0]["id"], 9)
 
