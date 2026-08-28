@@ -1896,6 +1896,21 @@ VISUAL_ITEM_TYPE_LABELS = (
     "hand sanitizer bottle",
     "medicine bottle",
 )
+# CLIP's generic "portable fan" concept mostly represents an open desk fan.
+# Foldable pocket fans can look like power banks when their blades are closed,
+# so give those two easily-confused labels concrete, distinguishing views.
+VISUAL_ITEM_TYPE_PROMPTS = {
+    "portable fan": (
+        "a clear photo of a portable fan",
+        "a photo of a mini fan",
+        "a photo of a folding pocket fan with a wrist strap",
+        "a photo of a handheld electric fan with a circular fan head",
+    ),
+    "power bank": (
+        "a photo of a rectangular portable battery power bank with visible USB charging ports",
+        "a photo of a portable charger with USB charging ports and battery indicator lights",
+    ),
+}
 VISUAL_TYPE_TEMPERATURE = 0.04
 VISUAL_TYPE_CONFIDENCE_THRESHOLD = 0.55
 VISUAL_TYPE_MARGIN_THRESHOLD = 0.03
@@ -1935,10 +1950,16 @@ def classify_visual_item_type(
         return None
     image_vector = image_vector / image_norm
 
-    prompts = tuple(f"a clear photo of a {label}" for label in labels)
-    text_vectors = get_text_embeddings(prompts)
-    scored_labels = []
-    for label, text_vector in zip(labels, text_vectors):
+    prompt_entries = tuple(
+        (label, prompt)
+        for label in labels
+        for prompt in VISUAL_ITEM_TYPE_PROMPTS.get(
+            label, (f"a clear photo of a {label}",)
+        )
+    )
+    text_vectors = get_text_embeddings(tuple(prompt for _, prompt in prompt_entries))
+    scores_by_label: dict[str, float] = {}
+    for (label, _), text_vector in zip(prompt_entries, text_vectors):
         text_vector = np.asarray(text_vector, dtype=np.float32).flatten()
         if text_vector.shape != image_vector.shape:
             continue
@@ -1946,7 +1967,8 @@ def classify_visual_item_type(
         if not text_norm:
             continue
         score = float(np.dot(image_vector, text_vector / text_norm))
-        scored_labels.append((label, score))
+        scores_by_label[label] = max(scores_by_label.get(label, -1.0), score)
+    scored_labels = list(scores_by_label.items())
     if not scored_labels:
         return None
 
@@ -2188,7 +2210,10 @@ def compute_text_detail_matches(
                     and candidate_visual_type.get("reliable")
                     and query_visual_type.get("label") == candidate_visual_type.get("label")
                 )
-                visual_type_review_required = not visual_type_agreement_confirmed
+                # Low-confidence zero-shot labels are neutral. They must not
+                # veto otherwise strong image, text, and detail evidence.
+                # Only two reliable, contradictory labels require review.
+                visual_type_review_required = visual_type_conflict
                 visual_color_similarity = None
                 visual_color_conflict = False
                 if (
@@ -2232,20 +2257,19 @@ def compute_text_detail_matches(
                         "this candidate cannot be matched."
                     )
                 elif visual_type_review_required:
-                    if visual_type_conflict:
-                        warning_parts.append(
-                            "CLIP visual types disagree "
-                            f"({query_visual_type['label']} vs {candidate_visual_type['label']}); "
-                            "admin review is required."
-                        )
-                    else:
-                        warning_parts.append(
-                            "CLIP could not reliably confirm the same visual item type "
-                            "in both images; admin review is required."
-                        )
-                elif color_review_required:
+                    # A reliable visual contradiction remains a hard guard.
+                    score = min(score, MATCH_THRESHOLD - 0.0001)
                     warning_parts.append(
-                        "Color evidence is inconsistent or uncertain; admin review is required."
+                        "CLIP visual types reliably disagree "
+                        f"({query_visual_type['label']} vs {candidate_visual_type['label']}); "
+                        "this pair is not treated as a match."
+                    )
+                elif color_review_required:
+                    # Keep every review-only result below the same clear 75%
+                    # automatic-match boundary shown to users.
+                    score = min(score, MATCH_THRESHOLD - 0.0001)
+                    warning_parts.append(
+                        "Color evidence is inconsistent or uncertain; this pair is not treated as a match."
                     )
                 elif cross_category:
                     warning_parts.append(
@@ -2332,7 +2356,7 @@ def compute_text_detail_matches(
     # Rank by evidence first. Decay is applied only after the order is fixed so
     # it cannot promote a weaker candidate over a stronger one.
     ranked_candidates.sort(key=lambda x: x["score"], reverse=True)
-    # Retain ten for Recall@10 audits, expose five for review, and use the
+    # Retain ten for Recall@10 audits, expose five as possibilities, and use the
     # first candidate as the single automatic-match decision.
     competition_confidences = calculate_competition_confidences(
         [candidate.get("score", 0) for candidate in ranked_candidates],
@@ -2354,9 +2378,10 @@ def compute_text_detail_matches(
     observation_candidates = list(ranked_candidates)
     ranked_candidates = ranked_candidates[:10]
 
-    # Review eligibility uses the unmodified evidence score. A true candidate
-    # is therefore not hidden merely because another candidate ranked above it.
-    all_matches = [
+    # Keep up to five plausible candidates for Recall@5 visibility. These are
+    # suggestions only; they do not require a manual approval workflow and do
+    # not become matches unless the best candidate passes the automatic rule.
+    recall_candidates = [
         candidate for candidate in ranked_candidates[:5]
         if (
             candidate["raw_score"] >= possible_match_threshold
@@ -2377,9 +2402,9 @@ def compute_text_detail_matches(
         "highest_raw_score": round(highest_raw_score, 4),
         "generated_embedding": search_vec.tolist() if isinstance(search_vec, np.ndarray) else [],
         "matched_item": automatic_match,
-        "matched_items": all_matches,
+        "matched_items": recall_candidates,
         "ranked_candidates": ranked_candidates,
-        "action": "show_match" if all_matches else "no_match",
+        "action": "show_match" if recall_candidates else "no_match",
         "warning": None,
     }
     if include_observation_candidates:

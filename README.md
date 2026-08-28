@@ -159,18 +159,20 @@ detail comparison favors item type/name, location, brand, color, description, an
 date/time; missing fields are ignored rather than counted as mismatches. Date
 and time are evaluated as one timestamp when both are present. Clearly unrelated
 item types are capped below the possible-match threshold. A different category cannot
-become an automatic match. If the specific item names strongly agree, it remains visible
-for admin review; otherwise it is excluded. An explicit brand
-or color conflict requires admin review and cannot become an automatic match; if both brand
+become an automatic match. If the specific item names strongly agree, it can remain visible
+in the Recall@5 possibilities; otherwise it is excluded. An explicit brand
+or color conflict prevents automatic matching and is capped below 75%; if both brand
 and color conflict, the candidate is capped below the possible-match threshold. Related color
 shades such as black and charcoal remain close rather than becoming hard rejections. Location
-remains a ranking signal rather than a hard conflict because found items may be moved. A score
-of 0.75 or higher is an automatic match.
-Scores from 0.45 through 0.7499 remain unmatched but are shown as possible-match
-candidates. All similarity values are clamped to the 0–1 range, so displayed
+remains a ranking signal rather than a hard conflict because found items may be moved. For an
+available candidate without blocking conflicts, a final score of exactly 0.75 or
+higher is an automatic match.
+Scores from 0.45 through 0.7499 remain unmatched but can appear as possibilities
+in the top-five recall list; they do not enter a manual-approval workflow. All
+similarity values are clamped to the 0–1 range, so displayed
 percentages cannot exceed 100%. Matching retains the closest ten
-candidates for Recall@10 auditing, exposes five possible matches for review, and
-uses the first candidate for the automatic match decision.
+candidates for Recall@10 auditing, exposes up to five plausible Recall@5 suggestions,
+and uses the first candidate for the automatic match decision.
 
 Matching is event-driven rather than recalculated when a possible-match page is
 opened. A lost upload gets one initial calculation and stores up to five possible
@@ -186,10 +188,9 @@ remains available so the existing legitimate match can be preserved.
 
 The production scorer also performs a cached, batched CLIP zero-shot visual-type
 check against common campus item types, including wallets and rubbing-alcohol bottles.
-When both images are classified confidently and the visual types disagree, the pair
-is capped below the possible-match threshold. Low-confidence guesses are displayed as
-diagnostic evidence but never force rejection. Match review shows what CLIP identified
-for the lost and found images and the confidence of each classification.
+Low-confidence visual labels are diagnostic only and do not veto stronger image, text,
+or detail evidence. When both images have reliable but contradictory visual labels, the
+pair's final confidence is capped at 74.99% and it cannot become an automatic match.
 
 The fixed `matching_dataset.csv` benchmark is retained for offline evaluation.
 Every saved match analysis is upserted into `matching_observations.csv` without

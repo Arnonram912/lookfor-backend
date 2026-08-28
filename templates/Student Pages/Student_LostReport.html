@@ -402,13 +402,18 @@ function formatMatchScore(score) {
 
 function formatVisualTypeBreakdown(match) {
     if (!match?.query_visual_type || !match?.candidate_visual_type) return '';
+    const lostReliable = match.query_visual_type_reliable === true;
+    const foundReliable = match.candidate_visual_type_reliable === true;
     const color = match.visual_type_conflict ? '#a63b23' : '#556678';
+    const lostResult = lostReliable
+        ? `${escapeModalHtml(match.query_visual_type)} (${formatMatchScore(match.query_visual_type_confidence)})`
+        : `uncertain (top guess: ${escapeModalHtml(match.query_visual_type)}, ${formatMatchScore(match.query_visual_type_confidence)})`;
+    const foundResult = foundReliable
+        ? `${escapeModalHtml(match.candidate_visual_type)} (${formatMatchScore(match.candidate_visual_type_confidence)})`
+        : `uncertain (top guess: ${escapeModalHtml(match.candidate_visual_type)}, ${formatMatchScore(match.candidate_visual_type_confidence)})`;
     return `
         <div style="margin-top:5px; font-size:12px; line-height:1.55; color:${color};">
-            CLIP sees — Lost: ${escapeModalHtml(match.query_visual_type)}
-            (${formatMatchScore(match.query_visual_type_confidence)}) &middot;
-            Found: ${escapeModalHtml(match.candidate_visual_type)}
-            (${formatMatchScore(match.candidate_visual_type_confidence)})
+            Visual type — Lost: ${lostResult} &middot; Found: ${foundResult}
         </div>
     `;
 }
@@ -910,7 +915,7 @@ async function executeSubmit() {
                 title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
                     ? 'The AI found a strong match and also listed the other possible matches below.'
-                    : 'The AI found possible matches for review.',
+                    : 'The AI found possible matches in the Recall@5 list.',
                 topMatch: hasConfirmedMatch ? {
                     id: aiResult.matched_item.id,
                     category: aiResult.matched_item.category || catName,
@@ -1107,7 +1112,7 @@ async function executeSubmit() {
                 title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
                     ? 'The AI found a strong match and also listed the other possible matches below.'
-                    : 'The AI found possible matches for review.',
+                    : 'The AI found possible matches in the Recall@5 list.',
                 topMatch: hasConfirmedMatch ? {
                     id: aiResult.matched_item.id,
                     category: aiResult.matched_item.category || catName,

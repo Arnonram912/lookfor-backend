@@ -102,6 +102,25 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertGreater(classification["confidence"], 0.9)
 
     @patch("main.get_text_embeddings")
+    def test_folded_mini_fan_prompt_can_beat_power_bank_shape(self, text_embeddings):
+        def embeddings(prompts):
+            self.assertTrue(any("folding pocket fan" in prompt for prompt in prompts))
+            self.assertTrue(any("visible USB charging ports" in prompt for prompt in prompts))
+            return np.asarray([
+                [1.0, 0.0] if "folding pocket fan" in prompt
+                else [0.7, 0.3] if "power bank" in prompt or "portable charger" in prompt
+                else [0.0, 1.0]
+                for prompt in prompts
+            ])
+
+        text_embeddings.side_effect = embeddings
+
+        classification = classify_visual_item_type(np.array([1.0, 0.0]))
+
+        self.assertEqual(classification["label"], "portable fan")
+        self.assertTrue(classification["reliable"])
+
+    @patch("main.get_text_embeddings")
     def test_clip_visual_color_classifier_can_identify_red(self, text_embeddings):
         text_embeddings.side_effect = lambda prompts: np.asarray([
             [1.0, 0.0] if " red" in prompt.lower() else [0.0, 1.0]
@@ -143,12 +162,12 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(evaluated["query_visual_type"], "wallet")
         self.assertEqual(evaluated["candidate_visual_type"], "rubbing alcohol bottle")
         self.assertGreaterEqual(evaluated["score"], 0.45)
-        self.assertIn("admin review is required", evaluated["warning"])
+        self.assertIn("not treated as a match", evaluated["warning"])
         self.assertIsNone(result["matched_item"])
         self.assertEqual(result["matched_items"][0]["id"], 77)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_uncertain_visual_type_difference_requires_review(self, _text_embedding):
+    def test_uncertain_visual_type_difference_is_neutral(self, _text_embedding):
         with patch(
             "main.classify_visual_item_type",
             side_effect=[
@@ -172,9 +191,9 @@ class MatchingScoreResponseTests(unittest.TestCase):
         evaluated = result["ranked_candidates"][0]
         self.assertFalse(evaluated["visual_type_conflict"])
         self.assertFalse(evaluated["visual_type_agreement_confirmed"])
-        self.assertTrue(evaluated["visual_type_review_required"])
+        self.assertFalse(evaluated["visual_type_review_required"])
         self.assertGreaterEqual(evaluated["score"], MATCH_THRESHOLD)
-        self.assertIsNone(result["matched_item"])
+        self.assertIsNotNone(result["matched_item"])
         self.assertEqual(result["matched_items"][0]["id"], 78)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
@@ -288,7 +307,7 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(result["matched_items"][0]["id"], 1)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
-    def test_response_exposes_component_scores_top_ten_and_review_top_five(self, _text_embedding):
+    def test_response_exposes_component_scores_top_ten_and_recall_top_five(self, _text_embedding):
         result = compute_text_detail_matches(
             FakeSession([candidate(index) for index in range(1, 12)]),
             category="Wallet",
@@ -630,9 +649,10 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertFalse(candidate_result["confirmed_color_conflict"])
         self.assertTrue(candidate_result["color_review_required"])
         self.assertGreaterEqual(candidate_result["raw_score"], 0.45)
+        self.assertLess(candidate_result["score"], MATCH_THRESHOLD)
         self.assertIsNone(result["matched_item"])
         self.assertEqual(result["matched_items"][0]["id"], 8)
-        self.assertIn("admin review is required", candidate_result["warning"])
+        self.assertIn("not treated as a match", candidate_result["warning"])
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_brand_and_unconfirmed_color_conflicts_remain_reviewable(self, _text_embedding):
@@ -654,6 +674,7 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertTrue(candidate_result["color_conflict"])
         self.assertTrue(candidate_result["color_review_required"])
         self.assertGreaterEqual(candidate_result["score"], 0.45)
+        self.assertLess(candidate_result["score"], MATCH_THRESHOLD)
         self.assertIsNone(result["matched_item"])
         self.assertEqual(result["matched_items"][0]["id"], 9)
 
@@ -738,6 +759,26 @@ class MatchingScoreResponseTests(unittest.TestCase):
         self.assertEqual(candidate_result["color_similarity"], 0.9167)
         self.assertEqual(result["matched_item"]["id"], 9)
         self.assertEqual(result["matched_items"][0]["id"], 9)
+
+    @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
+    def test_black_and_gray_items_remain_match_eligible(self, _text_embedding):
+        result = compute_text_detail_matches(
+            FakeSession([candidate(20, color="Gray")]),
+            category="Wallet",
+            item_name="Wallet 20",
+            location="Main Library",
+            description="Dark wallet",
+            brand="Acme",
+            color="Black",
+            status="lost",
+            search_vec=np.array([1.0, 0.0]),
+            query_text_vec=np.array([1.0, 0.0]),
+        )
+
+        candidate_result = result["ranked_candidates"][0]
+        self.assertFalse(candidate_result["color_conflict"])
+        self.assertEqual(candidate_result["color_similarity"], 0.65)
+        self.assertEqual(result["matched_item"]["id"], 20)
 
     @patch("main.get_text_embedding", return_value=np.array([1.0, 0.0]))
     def test_location_difference_remains_passable(self, _text_embedding):

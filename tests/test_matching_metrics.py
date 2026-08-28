@@ -30,8 +30,8 @@ class MatchScoreTests(unittest.TestCase):
         self.assertEqual(competition_decay_for_count(100), 0.06)
         self.assertEqual(calculate_competition_confidences([0.90] * 5), [0.84] * 5)
 
-    def test_ambiguity_floor_requires_review_instead_of_automatic_match(self):
-        self.assertFalse(is_automatic_match_candidate({
+    def test_exactly_seventy_five_percent_is_an_automatic_match(self):
+        self.assertTrue(is_automatic_match_candidate({
             "score": 0.75,
             "raw_score": 0.90,
             "competition_decay": 0.15,
@@ -40,6 +40,12 @@ class MatchScoreTests(unittest.TestCase):
         self.assertTrue(is_automatic_match_candidate({
             "score": 0.75,
             "raw_score": 0.75,
+            "competition_decay": 0.0,
+            "available_for_match": True,
+        }))
+        self.assertFalse(is_automatic_match_candidate({
+            "score": 0.7499,
+            "raw_score": 0.7499,
             "competition_decay": 0.0,
             "available_for_match": True,
         }))
@@ -64,7 +70,7 @@ class MatchScoreTests(unittest.TestCase):
             "color_review_required": True,
         }))
 
-    def test_uncertain_visual_type_candidate_cannot_automatic_match(self):
+    def test_reliable_visual_type_conflict_cannot_automatic_match(self):
         self.assertFalse(is_automatic_match_candidate({
             "score": 0.92,
             "raw_score": 0.92,
@@ -178,6 +184,16 @@ class MatchScoreTests(unittest.TestCase):
         )
 
         self.assertEqual(components["color_similarity"], 0.9167)
+
+    def test_black_and_gray_are_compatible_neutral_shades(self):
+        for gray_spelling in ("Gray", "Grey"):
+            _score, components = calculate_detail_similarity(
+                {"color": "Black"},
+                {"color": gray_spelling},
+            )
+
+            with self.subTest(gray=gray_spelling):
+                self.assertEqual(components["color_similarity"], 0.65)
 
     def test_color_wheel_similarity_decreases_with_hue_distance(self):
         similarities = []

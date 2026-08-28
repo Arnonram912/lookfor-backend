@@ -50,7 +50,7 @@ def is_automatic_match_candidate(
     *,
     threshold: float = MATCH_THRESHOLD,
 ) -> bool:
-    """Reject an ambiguity-floor score while preserving a genuine raw 75%."""
+    """Return whether an available, review-safe candidate reached the threshold."""
     legacy_color_conflict = bool(
         candidate
         and candidate.get("color_conflict", False)
@@ -67,9 +67,7 @@ def is_automatic_match_candidate(
     ):
         return False
     score = clamp_similarity_score(candidate.get("score"))
-    decay = clamp_similarity_score(candidate.get("competition_decay"))
-    reached_ambiguity_floor = decay > 0 and score <= COMPETITION_CONFIDENCE_FLOOR
-    return score >= float(threshold) and not reached_ambiguity_floor
+    return score >= float(threshold)
 
 
 def clamp_similarity_score(value: Any) -> float:
@@ -318,6 +316,11 @@ def _color_similarity(left: Any, right: Any) -> float | None:
     right_family = _COLOR_FAMILIES.get(normalized_right)
     if left_family and left_family == right_family:
         return 0.85
+    # Black and ordinary gray are adjacent neutral shades. Keep a modest
+    # distinction for ranking, but do not treat lighting-dependent reports as
+    # a hard color contradiction.
+    if {left_family, right_family} == {"dark-neutral", "neutral"}:
+        return 0.65
     if {left_family, right_family} == {"dark-neutral", "dark-blue"}:
         return 0.55
     left_hue = _COLOR_HUES.get(normalized_left)

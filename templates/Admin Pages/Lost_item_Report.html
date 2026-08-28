@@ -269,7 +269,7 @@
             <div class="modal-content" style="max-width:760px; width:min(92vw, 760px); padding:28px;">
                 <span class="close-btn" onclick="closeModal('detailPossibleMatchesModal')">&times;</span>
                 <h2 style="margin-bottom:8px;">Possible <span style="color:#114b7a;">Matches</span></h2>
-                <p style="color:#5b6574; margin-bottom:18px;">Review the scored found-item candidates for this lost report.</p>
+                <p style="color:#5b6574; margin-bottom:18px;">View the scored Recall@5 possibilities for this lost report.</p>
                 <div id="modalPossibleMatches" style="display:grid; gap:12px; max-height:440px; overflow-y:auto; padding-right:4px;">Loading possible matches...</div>
                 <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                     <button type="button" class="btn-upload-img" onclick="closeModal('detailPossibleMatchesModal')" style="margin:0;">Close</button>
@@ -982,11 +982,9 @@ function renderDetailPossibleMatches(result, categoryFallback = '', isMatched = 
             viewBtn.disabled = false;
             viewBtn.textContent = `View Possible Matches (${matchedItems.length})`;
         }
-        const firstApprovedIndex = matchedItems.findIndex(match => match.source !== 'pending_found');
         container.innerHTML = matchedItems.map((match, index) => `
-            <label style="display:block; border:1px solid #d9e4f2; border-radius:12px; padding:12px 14px; margin-bottom:10px; background:${index === 0 ? '#f7fbff' : '#fff'}; cursor:pointer;">
+            <div style="display:block; border:1px solid #d9e4f2; border-radius:12px; padding:12px 14px; margin-bottom:10px; background:${index === 0 ? '#f7fbff' : '#fff'};">
                 <div style="display:flex; gap:12px; align-items:flex-start;">
-                    <input type="radio" name="detailPossibleMatch" value="${match.id}" data-source="${match.source || 'found'}" ${index === firstApprovedIndex ? 'checked' : ''} ${match.source === 'pending_found' ? 'disabled' : ''} style="margin-top:4px;">
                     ${renderMatchThumbnail(match, match.category || 'Possible match image')}
                     <div style="flex:1;">
                         <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.item_name || match.category || categoryFallback || 'Item')}</div>
@@ -997,13 +995,12 @@ function renderDetailPossibleMatches(result, categoryFallback = '', isMatched = 
                     </div>
                     <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Confidence: ${formatMatchScore(match.score)}</div>
                 </div>
-            </label>
+            </div>
         `).join('');
 
-        if (applyBtn && !isArchived && firstApprovedIndex >= 0) {
-            applyBtn.style.display = "inline-flex";
-            applyBtn.disabled = false;
-            applyBtn.textContent = isMatched ? "Add Selected Match Review" : "Use Selected Match";
+        if (applyBtn) {
+            applyBtn.style.display = "none";
+            applyBtn.disabled = true;
         }
 }
 
@@ -1096,7 +1093,7 @@ async function analyzeLostItemMatches() {
             statusEl.style.color = "#28a745";
         }
 
-        await showLostUploadAlert('success', 'Match saved', result.message || 'The selected match was saved for admin review.');
+        await showLostUploadAlert('success', 'Match saved', result.message || 'The selected match was saved.');
         closeModal('detailPossibleMatchesModal');
         closeModal('itemDetailModal');
         await loadLostItems();
@@ -1276,13 +1273,18 @@ async function analyzeLostItemMatches() {
 
     function formatVisualTypeBreakdown(match) {
         if (!match?.query_visual_type || !match?.candidate_visual_type) return '';
+        const lostReliable = match.query_visual_type_reliable === true;
+        const foundReliable = match.candidate_visual_type_reliable === true;
         const color = match.visual_type_conflict ? '#a63b23' : '#556678';
+        const lostResult = lostReliable
+            ? `${escapeModalHtml(match.query_visual_type)} (${formatMatchScore(match.query_visual_type_confidence)})`
+            : `uncertain (top guess: ${escapeModalHtml(match.query_visual_type)}, ${formatMatchScore(match.query_visual_type_confidence)})`;
+        const foundResult = foundReliable
+            ? `${escapeModalHtml(match.candidate_visual_type)} (${formatMatchScore(match.candidate_visual_type_confidence)})`
+            : `uncertain (top guess: ${escapeModalHtml(match.candidate_visual_type)}, ${formatMatchScore(match.candidate_visual_type_confidence)})`;
         return `
             <div style="margin-top:5px; font-size:12px; line-height:1.55; color:${color};">
-                CLIP sees — Lost: ${escapeModalHtml(match.query_visual_type)}
-                (${formatMatchScore(match.query_visual_type_confidence)}) &middot;
-                Found: ${escapeModalHtml(match.candidate_visual_type)}
-                (${formatMatchScore(match.candidate_visual_type_confidence)})
+                Visual type — Lost: ${lostResult} &middot; Found: ${foundResult}
             </div>
         `;
     }
@@ -1839,7 +1841,7 @@ async function executeSubmitLegacy() {
                 title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
                     ? 'The AI found a strong match and also listed the other possible matches below.'
-                    : 'The AI found possible matches for review.',
+                    : 'The AI found possible matches in the Recall@5 list.',
                 topMatch: hasConfirmedMatch ? {
                     id: aiResult.matched_item.id,
                     category: aiResult.matched_item.category || catName,
@@ -1973,8 +1975,8 @@ async function executeSubmit() {
             selectedMatch = await showMatchResultsModal({
                 title: hasConfirmedMatch ? 'Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
-                    ? 'A strong match was found. Review the score and candidate before the report is saved.'
-                    : 'Review the possible matches found before the report is saved.',
+                    ? 'A strong match reached the automatic threshold.'
+                    : 'Possible Recall@5 candidates were found for reference.',
                 topMatch: hasConfirmedMatch
                     ? {
                         ...aiResult.matched_item,

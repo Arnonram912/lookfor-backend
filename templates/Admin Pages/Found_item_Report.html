@@ -565,7 +565,7 @@ function showAccessDeniedPopup(permName) {
             if (!container) return;
             matches = parseFoundPossibleMatches(matches).slice(0, 5);
             if (!matches.length) {
-                container.textContent = 'No lost-report candidates reached the 45% review threshold.';
+                container.textContent = 'No lost-report candidates reached the 45% possibility threshold.';
                 return;
             }
             container.innerHTML = matches.map((match, index) => {
@@ -582,7 +582,7 @@ function showAccessDeniedPopup(permName) {
                         : 'Automatic match linked — pending claim created')
                     : (finalScore >= 0.75
                         ? 'Eligible for automatic match — not linked'
-                        : 'Possible match — admin review required');
+                        : 'Possible match — Recall@5 suggestion');
                 return `
                     <div style="padding:10px 12px; border:1px solid #dce6f0; border-radius:10px; background:#fff;">
                         <div style="display:flex; justify-content:space-between; gap:12px; font-weight:700; color:#114b7a;">
@@ -601,14 +601,20 @@ function showAccessDeniedPopup(permName) {
                                     : ''}
                             </div>
                         ` : '<div style="margin-top:6px; font-size:12px; color:#7b8794;">Component scores were not recorded for this older result.</div>'}
-                        ${match.query_visual_type && match.candidate_visual_type ? `
+                        ${match.query_visual_type && match.candidate_visual_type ? (() => {
+                            const lostReliable = match.query_visual_type_reliable === true;
+                            const foundReliable = match.candidate_visual_type_reliable === true;
+                            const lostResult = lostReliable
+                                ? `${escapeFoundListHtml(match.query_visual_type)} (${formatEvaluationScore(match.query_visual_type_confidence)})`
+                                : `uncertain (top guess: ${escapeFoundListHtml(match.query_visual_type)}, ${formatEvaluationScore(match.query_visual_type_confidence)})`;
+                            const foundResult = foundReliable
+                                ? `${escapeFoundListHtml(match.candidate_visual_type)} (${formatEvaluationScore(match.candidate_visual_type_confidence)})`
+                                : `uncertain (top guess: ${escapeFoundListHtml(match.candidate_visual_type)}, ${formatEvaluationScore(match.candidate_visual_type_confidence)})`;
+                            return `
                             <div style="margin-top:6px; font-size:12px; color:${match.visual_type_conflict ? '#a63b23' : '#556678'};">
-                                CLIP sees — Lost: ${escapeFoundListHtml(match.query_visual_type)}
-                                (${formatEvaluationScore(match.query_visual_type_confidence)}) &middot;
-                                Found: ${escapeFoundListHtml(match.candidate_visual_type)}
-                                (${formatEvaluationScore(match.candidate_visual_type_confidence)})
+                                Visual type — Lost: ${lostResult} &middot; Found: ${foundResult}
                             </div>
-                        ` : ''}
+                        `; })() : ''}
                         <div style="margin-top:6px; font-size:12px; color:#556678;">
                             ${escapeFoundListHtml(match.location || 'Location not specified')}
                         </div>
