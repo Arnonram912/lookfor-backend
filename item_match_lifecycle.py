@@ -6,6 +6,26 @@ from sqlalchemy import or_
 import models
 
 
+def _stored_match_score(value) -> float | None:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text.endswith("%"):
+        try:
+            return max(0.0, min(1.0, float(text[:-1].strip()) / 100.0))
+        except ValueError:
+            return None
+    try:
+        return max(0.0, min(1.0, float(text)))
+    except ValueError:
+        return None
+
+
+def _is_replaceable_ai_claim(claim) -> bool:
+    label = str(getattr(claim, "similarity_score", "") or "").strip().lower()
+    return label == "auto match" or _stored_match_score(label) is not None
+
+
 def remove_cached_possible_match(
     lost_item: models.Item,
     candidate_id: int,
@@ -131,6 +151,91 @@ def release_stale_ai_match_after_reanalysis(db, lost_item: models.Item) -> int:
         or _has_active_pending_found_link(db, lost_item.id)
     )
     return released_count
+
+
+def replace_weaker_ai_match_after_reanalysis(
+    db,
+    lost_item: models.Item,
+    strongest_match: dict | None,
+    *,
+    ranked_candidates: list[dict] | None = None,
+    previous_matches: list[dict] | None = None,
+) -> int:
+    """Release a proofless AI link only when a different candidate scores higher.
+
+    Final claims, manual claims, and pending claims with submitted proof are
+    protected. The caller can then create the new highest-scoring link in the
+    same transaction.
+    """
+    if not strongest_match or str(getattr(lost_item, "status", "") or "").lower() != "lost":
+        return 0
+
+    new_id = strongest_match.get("id")
+    new_source = strongest_match.get("source", "found")
+    new_score = _stored_match_score(strongest_match.get("score"))
+    if new_id is None or new_score is None:
+        return 0
+
+    protected_claim = db.query(models.Claim.id).filter(
+        models.Claim.lost_item_id == lost_item.id,
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
+    ).first()
+    if protected_claim:
+        return 0
+
+    pending_claims = db.query(models.Claim).filter(
+        models.Claim.lost_item_id == lost_item.id,
+        models.Claim.status == "pending",
+    ).all()
+    reservations = db.query(models.PendingItem).filter(
+        models.PendingItem.matched_item_id == lost_item.id,
+        models.PendingItem.archived == False,
+        models.PendingItem.deleted == False,
+    ).all()
+    if not pending_claims and not reservations:
+        return 0
+
+    current_links = [
+        ("found", int(claim.found_item_id), claim)
+        for claim in pending_claims
+        if claim.found_item_id is not None
+    ] + [
+        ("pending_found", int(item.id), item)
+        for item in reservations
+    ]
+    if any(source == new_source and item_id == int(new_id) for source, item_id, _ in current_links):
+        return 0
+
+    for claim in pending_claims:
+        if not _is_replaceable_ai_claim(claim):
+            return 0
+        has_proof = db.query(models.ClaimProof.id).filter(
+            models.ClaimProof.claim_id == claim.id,
+        ).first() is not None
+        if has_proof:
+            return 0
+
+    candidate_scores = {}
+    for candidate in [*(previous_matches or []), *(ranked_candidates or [])]:
+        if not isinstance(candidate, dict) or candidate.get("id") is None:
+            continue
+        score = _stored_match_score(candidate.get("score"))
+        if score is not None:
+            candidate_scores[(candidate.get("source", "found"), int(candidate["id"]))] = score
+
+    old_scores = []
+    for source, item_id, link in current_links:
+        score = candidate_scores.get((source, item_id))
+        if score is None and source == "found":
+            score = _stored_match_score(getattr(link, "similarity_score", None))
+        if score is None:
+            # A replacement must be demonstrably stronger, never assumed so.
+            return 0
+        old_scores.append(score)
+
+    if not old_scores or new_score <= max(old_scores):
+        return 0
+    return release_stale_ai_match_after_reanalysis(db, lost_item)
 
 
 def delete_item_claims_and_release_matches(db, item: models.Item) -> None:

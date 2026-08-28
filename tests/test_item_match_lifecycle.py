@@ -1,11 +1,13 @@
 import json
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from item_match_lifecycle import (
     delete_item_claims_and_release_matches,
     release_pending_found_link,
     release_stale_ai_match_after_reanalysis,
+    replace_weaker_ai_match_after_reanalysis,
     remove_cached_possible_match,
 )
 
@@ -165,6 +167,90 @@ class ItemMatchLifecycleTests(unittest.TestCase):
         self.assertEqual(claim.status, "pending")
         self.assertTrue(lost.is_matched)
         self.assertEqual(db.flush_count, 0)
+
+    @patch("item_match_lifecycle.release_stale_ai_match_after_reanalysis", return_value=1)
+    def test_stronger_candidate_replaces_proofless_ai_claim(self, release_match):
+        lost = SimpleNamespace(id=18, status="lost", is_matched=True)
+        old_claim = SimpleNamespace(
+            id=31,
+            found_item_id=16,
+            similarity_score="78.0%",
+        )
+        db = ScriptedDB([
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(all_value=[old_claim]),
+            ScriptedQuery(all_value=[]),
+            ScriptedQuery(first_value=None),
+        ])
+
+        released = replace_weaker_ai_match_after_reanalysis(
+            db,
+            lost,
+            {"id": 22, "source": "found", "score": 0.86},
+            ranked_candidates=[
+                {"id": 22, "source": "found", "score": 0.86},
+                {"id": 16, "source": "found", "score": 0.78},
+            ],
+        )
+
+        self.assertEqual(released, 1)
+        release_match.assert_called_once_with(db, lost)
+
+    @patch("item_match_lifecycle.release_stale_ai_match_after_reanalysis")
+    def test_weaker_candidate_does_not_replace_current_ai_claim(self, release_match):
+        lost = SimpleNamespace(id=18, status="lost", is_matched=True)
+        old_claim = SimpleNamespace(
+            id=31,
+            found_item_id=16,
+            similarity_score="86.0%",
+        )
+        db = ScriptedDB([
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(all_value=[old_claim]),
+            ScriptedQuery(all_value=[]),
+            ScriptedQuery(first_value=None),
+        ])
+
+        released = replace_weaker_ai_match_after_reanalysis(
+            db,
+            lost,
+            {"id": 22, "source": "found", "score": 0.82},
+            ranked_candidates=[
+                {"id": 16, "source": "found", "score": 0.86},
+                {"id": 22, "source": "found", "score": 0.82},
+            ],
+        )
+
+        self.assertEqual(released, 0)
+        release_match.assert_not_called()
+
+    @patch("item_match_lifecycle.release_stale_ai_match_after_reanalysis")
+    def test_stronger_candidate_does_not_replace_claim_with_proof(self, release_match):
+        lost = SimpleNamespace(id=18, status="lost", is_matched=True)
+        old_claim = SimpleNamespace(
+            id=31,
+            found_item_id=16,
+            similarity_score="78.0%",
+        )
+        db = ScriptedDB([
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(all_value=[old_claim]),
+            ScriptedQuery(all_value=[]),
+            ScriptedQuery(first_value=(99,)),
+        ])
+
+        released = replace_weaker_ai_match_after_reanalysis(
+            db,
+            lost,
+            {"id": 22, "source": "found", "score": 0.90},
+            ranked_candidates=[
+                {"id": 22, "source": "found", "score": 0.90},
+                {"id": 16, "source": "found", "score": 0.78},
+            ],
+        )
+
+        self.assertEqual(released, 0)
+        release_match.assert_not_called()
 
 
 if __name__ == "__main__":

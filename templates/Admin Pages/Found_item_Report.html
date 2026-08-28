@@ -601,20 +601,6 @@ function showAccessDeniedPopup(permName) {
                                     : ''}
                             </div>
                         ` : '<div style="margin-top:6px; font-size:12px; color:#7b8794;">Component scores were not recorded for this older result.</div>'}
-                        ${match.query_visual_type && match.candidate_visual_type ? (() => {
-                            const lostReliable = match.query_visual_type_reliable === true;
-                            const foundReliable = match.candidate_visual_type_reliable === true;
-                            const lostResult = lostReliable
-                                ? `${escapeFoundListHtml(match.query_visual_type)} (${formatEvaluationScore(match.query_visual_type_confidence)})`
-                                : `uncertain (top guess: ${escapeFoundListHtml(match.query_visual_type)}, ${formatEvaluationScore(match.query_visual_type_confidence)})`;
-                            const foundResult = foundReliable
-                                ? `${escapeFoundListHtml(match.candidate_visual_type)} (${formatEvaluationScore(match.candidate_visual_type_confidence)})`
-                                : `uncertain (top guess: ${escapeFoundListHtml(match.candidate_visual_type)}, ${formatEvaluationScore(match.candidate_visual_type_confidence)})`;
-                            return `
-                            <div style="margin-top:6px; font-size:12px; color:${match.visual_type_conflict ? '#a63b23' : '#556678'};">
-                                Visual type — Lost: ${lostResult} &middot; Found: ${foundResult}
-                            </div>
-                        `; })() : ''}
                         <div style="margin-top:6px; font-size:12px; color:#556678;">
                             ${escapeFoundListHtml(match.location || 'Location not specified')}
                         </div>

@@ -144,8 +144,9 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertEqual(claims[0].similarity_score, "82.0%")
         self.assertTrue(db.committed)
 
+    @patch("main.replace_weaker_ai_match_after_reanalysis", return_value=0)
     @patch("main.analyze_saved_item_details")
-    def test_reanalysis_repairs_stale_matched_flags_when_no_active_claim_exists(self, analyzer):
+    def test_reanalysis_repairs_stale_matched_flags_when_no_active_claim_exists(self, analyzer, _replace):
         lost = lost_item()
         lost.is_matched = True
         found = SimpleNamespace(id=7194, is_matched=True)
@@ -164,6 +165,32 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertEqual(len(claims), 1)
         self.assertTrue(lost.is_matched)
         self.assertTrue(found.is_matched)
+
+    @patch("main.replace_weaker_ai_match_after_reanalysis", return_value=1)
+    @patch("main.analyze_saved_item_details")
+    def test_stronger_match_replaces_previous_ai_link(self, analyzer, replace_match):
+        lost = lost_item()
+        lost.is_matched = True
+        found = SimpleNamespace(id=7194, is_matched=False)
+        db = SequencedFakeSession([lost, found, None, None])
+        analyzer.return_value = {
+            "highest_score": 0.86,
+            "matched_item": {"id": 7194, "source": "found", "score": 0.86},
+            "matched_items": [{"id": 7194, "source": "found", "score": 0.86}],
+            "ranked_candidates": [
+                {"id": 7194, "source": "found", "score": 0.86},
+                {"id": 20, "source": "found", "score": 0.81},
+            ],
+            "action": "show_match",
+        }
+
+        result = analyze_lost_item_matches(7162, db=db, current_user=user())
+
+        self.assertTrue(result["auto_linked"])
+        self.assertTrue(result["match_replaced"])
+        self.assertEqual(result["released_ai_links"], 1)
+        self.assertEqual(result["claim_id"], 91)
+        replace_match.assert_called_once()
 
     @patch("main.analyze_saved_item_details")
     def test_pending_found_match_is_reserved_without_creating_claim(self, analyzer):

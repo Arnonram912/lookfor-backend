@@ -88,7 +88,10 @@ from matching_metrics import (
     is_automatic_match_candidate,
 )
 from matching_observation_dataset import record_match_observations
-from item_match_lifecycle import release_stale_ai_match_after_reanalysis
+from item_match_lifecycle import (
+    release_stale_ai_match_after_reanalysis,
+    replace_weaker_ai_match_after_reanalysis,
+)
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -3018,6 +3021,12 @@ def analyze_lost_item_matches(
     if bool(getattr(item, "archived", False)) or bool(getattr(item, "deleted", False)):
         raise HTTPException(status_code=409, detail="Archived or deleted reports cannot be analyzed")
 
+    try:
+        parsed_previous_matches = json.loads(item.possible_matches or "[]")
+        previous_matches = parsed_previous_matches if isinstance(parsed_previous_matches, list) else []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        previous_matches = []
+
     result = analyze_saved_item_details(db, item, record_type="item")
     strongest_match = result.get("matched_item")
     auto_linked = False
@@ -3027,6 +3036,14 @@ def analyze_lost_item_matches(
 
     if not strongest_match and bool(getattr(item, "is_matched", False)):
         released_ai_links = release_stale_ai_match_after_reanalysis(db, item)
+    elif strongest_match and bool(getattr(item, "is_matched", False)):
+        released_ai_links = replace_weaker_ai_match_after_reanalysis(
+            db,
+            item,
+            strongest_match,
+            ranked_candidates=result.get("ranked_candidates", []),
+            previous_matches=previous_matches,
+        )
 
     if strongest_match and strongest_match.get("source", "found") == "found":
         found_item = db.query(models.Item).filter(
@@ -3124,6 +3141,7 @@ def analyze_lost_item_matches(
     result["claim_id"] = claim_id
     result["pending_approval"] = pending_approval
     result["match_released"] = released_ai_links > 0
+    result["match_replaced"] = bool(released_ai_links and auto_linked)
     result["released_ai_links"] = released_ai_links
     return result
 
