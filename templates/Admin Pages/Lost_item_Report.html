@@ -242,7 +242,6 @@
                         <p><strong>Role:</strong> <span id="modalOwnerRole"></span></p>
                         
                         <p><strong>Reported By:</strong> <span id="modalUploader"></span></p>
-                        <p><strong>Uploader Role:</strong> <span id="modalUploaderRole"></span></p>
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
@@ -1134,7 +1133,6 @@ async function analyzeLostItemMatches() {
     // 1. Uploader Info (Shows who reported it)
     if (document.getElementById("modalUploader")) {
         document.getElementById("modalUploader").innerText = item.uploader_name || 'Unknown User';
-        document.getElementById("modalUploaderRole").innerText = item.uploader_role || 'Unknown';
     }
 
     // 2. Physical Traits (Brand/Color)

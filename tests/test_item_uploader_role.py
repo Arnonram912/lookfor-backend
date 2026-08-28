@@ -30,7 +30,7 @@ class ItemUploaderRoleTests(unittest.TestCase):
         self.assertEqual(format_user_role_label(faculty), "Faculty")
         self.assertEqual(format_user_role_label(student), "Student")
 
-    def test_all_active_item_detail_modals_show_uploader_role(self):
+    def test_all_active_item_detail_modals_show_one_role_label(self):
         templates = (
             ROOT / "templates" / "Admin Pages" / "Lost_item_Report.html",
             ROOT / "templates" / "Admin Pages" / "Found_item_Report.html",
@@ -40,6 +40,17 @@ class ItemUploaderRoleTests(unittest.TestCase):
         for template in templates:
             content = template.read_text(encoding="utf-8")
             with self.subTest(template=template.name):
+                self.assertIn("<strong>Role:</strong>", content)
+                self.assertNotIn("<strong>Uploader Role:</strong>", content)
+
+        admin_lost = templates[0].read_text(encoding="utf-8")
+        self.assertEqual(admin_lost.count("<strong>Role:</strong>"), 1)
+        self.assertNotIn('id="modalUploaderRole"', admin_lost)
+        self.assertIn("item.report_owner_role || 'Unknown'", admin_lost)
+
+        for template in templates[1:]:
+            content = template.read_text(encoding="utf-8")
+            with self.subTest(role_source=template.name):
                 self.assertIn('id="modalUploaderRole"', content)
                 self.assertIn("item.uploader_role || 'Unknown'", content)
 
