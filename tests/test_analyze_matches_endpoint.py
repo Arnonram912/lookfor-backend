@@ -92,6 +92,27 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertTrue(db.committed)
         analyzer.assert_called_once_with(db, db.item, record_type="item")
 
+    @patch("main.release_stale_ai_match_after_reanalysis", return_value=1)
+    @patch("main.analyze_saved_item_details")
+    def test_no_new_match_releases_previous_unverified_ai_link(self, analyzer, release_match):
+        lost = lost_item()
+        lost.is_matched = True
+        db = FakeSession(lost)
+        analyzer.return_value = {
+            "highest_score": 0.0,
+            "matched_item": None,
+            "matched_items": [],
+            "action": "no_match",
+        }
+
+        result = analyze_lost_item_matches(7162, db=db, current_user=user())
+
+        release_match.assert_called_once_with(db, lost)
+        self.assertTrue(result["match_released"])
+        self.assertEqual(result["released_ai_links"], 1)
+        self.assertFalse(result["auto_linked"])
+        self.assertTrue(db.committed)
+
     def test_unrelated_student_cannot_reanalyze(self):
         db = FakeSession(lost_item(owner_id=7))
 

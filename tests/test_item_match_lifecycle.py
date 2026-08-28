@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from item_match_lifecycle import (
     delete_item_claims_and_release_matches,
     release_pending_found_link,
+    release_stale_ai_match_after_reanalysis,
     remove_cached_possible_match,
 )
 
@@ -111,6 +112,59 @@ class ItemMatchLifecycleTests(unittest.TestCase):
         self.assertFalse(lost.is_matched)
         self.assertIsNone(lost.possible_matches)
         self.assertIsNone(pending.matched_item_id)
+
+    def test_reanalysis_releases_proofless_ai_match_to_normal_statuses(self):
+        lost = SimpleNamespace(id=18, status="lost", is_matched=True)
+        found = SimpleNamespace(id=16, status="found", is_matched=True)
+        claim = SimpleNamespace(
+            id=30,
+            lost_item_id=18,
+            found_item_id=16,
+            status="pending",
+            admin_decision_date=None,
+        )
+        db = ScriptedDB([
+            ScriptedQuery(all_value=[claim]),
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(all_value=[]),
+            ScriptedQuery(all_value=[found]),
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(first_value=None),
+        ])
+
+        released = release_stale_ai_match_after_reanalysis(db, lost)
+
+        self.assertEqual(released, 1)
+        self.assertEqual(claim.status, "rejected")
+        self.assertIsNotNone(claim.admin_decision_date)
+        self.assertFalse(found.is_matched)
+        self.assertFalse(lost.is_matched)
+        self.assertEqual(db.flush_count, 1)
+
+    def test_reanalysis_preserves_pending_human_claim_with_proof(self):
+        lost = SimpleNamespace(id=18, status="lost", is_matched=True)
+        claim = SimpleNamespace(
+            id=31,
+            lost_item_id=18,
+            found_item_id=16,
+            status="pending",
+            admin_decision_date=None,
+        )
+        db = ScriptedDB([
+            ScriptedQuery(all_value=[claim]),
+            ScriptedQuery(first_value=(44,)),
+            ScriptedQuery(all_value=[]),
+            ScriptedQuery(first_value=(31,)),
+            ScriptedQuery(first_value=None),
+        ])
+
+        released = release_stale_ai_match_after_reanalysis(db, lost)
+
+        self.assertEqual(released, 0)
+        self.assertEqual(claim.status, "pending")
+        self.assertTrue(lost.is_matched)
+        self.assertEqual(db.flush_count, 0)
 
 
 if __name__ == "__main__":

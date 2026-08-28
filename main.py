@@ -88,6 +88,7 @@ from matching_metrics import (
     is_automatic_match_candidate,
 )
 from matching_observation_dataset import record_match_observations
+from item_match_lifecycle import release_stale_ai_match_after_reanalysis
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -2857,6 +2858,10 @@ def analyze_lost_item_matches(
     auto_linked = False
     claim_id = None
     pending_approval = False
+    released_ai_links = 0
+
+    if not strongest_match and bool(getattr(item, "is_matched", False)):
+        released_ai_links = release_stale_ai_match_after_reanalysis(db, item)
 
     if strongest_match and strongest_match.get("source", "found") == "found":
         found_item = db.query(models.Item).filter(
@@ -2953,6 +2958,8 @@ def analyze_lost_item_matches(
     result["auto_linked"] = auto_linked
     result["claim_id"] = claim_id
     result["pending_approval"] = pending_approval
+    result["match_released"] = released_ai_links > 0
+    result["released_ai_links"] = released_ai_links
     return result
 
 
