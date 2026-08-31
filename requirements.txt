@@ -14,6 +14,6 @@ email-validator
 pillow
 numpy
 torch
-transformers
+transformers==5.1.0
 cloudinary
 cryptography

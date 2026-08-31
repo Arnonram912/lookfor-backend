@@ -276,28 +276,31 @@ def find_matches_by_text_details(category, location, date, db_items):
 def get_clip_components():
     """Lazy-loads the model and processor only when needed."""
     global model, processor, _model, _processor, torch, CLIPModel, CLIPProcessor
-    if torch is None:
-        import torch as torch_module
-        torch = torch_module
-    if CLIPModel is None or CLIPProcessor is None:
-        from transformers import CLIPModel as clip_model_cls, CLIPProcessor as clip_processor_cls
-        CLIPModel = clip_model_cls
-        CLIPProcessor = clip_processor_cls
-    if _model is None or _processor is None:
-        with _MODEL_LOAD_LOCK:
-            if _model is None or _processor is None:
-                thread_count = int(os.getenv(
-                    "CLIP_TORCH_THREADS", min(4, os.cpu_count() or 1)
-                ))
-                torch.set_num_threads(max(1, thread_count))
-                try:
-                    torch.set_num_interop_threads(1)
-                except RuntimeError:
-                    pass
-                print(f"Loading CLIP model {_MODEL_NAME}...")
-                _model = CLIPModel.from_pretrained(_MODEL_NAME)
-                _model.eval()
-                _processor = CLIPProcessor.from_pretrained(_MODEL_NAME)
-                model = _model
-                processor = _processor
+    # Protect imports as well as weight loading. Transformers exposes models
+    # through a lazy module; two first-use requests can otherwise race while
+    # that module is still being populated and one may see a transient
+    # ``cannot import name 'CLIPModel'`` error.
+    with _MODEL_LOAD_LOCK:
+        if torch is None:
+            import torch as torch_module
+            torch = torch_module
+        if CLIPModel is None or CLIPProcessor is None:
+            from transformers import CLIPModel as clip_model_cls, CLIPProcessor as clip_processor_cls
+            CLIPModel = clip_model_cls
+            CLIPProcessor = clip_processor_cls
+        if _model is None or _processor is None:
+            thread_count = int(os.getenv(
+                "CLIP_TORCH_THREADS", min(4, os.cpu_count() or 1)
+            ))
+            torch.set_num_threads(max(1, thread_count))
+            try:
+                torch.set_num_interop_threads(1)
+            except RuntimeError:
+                pass
+            print(f"Loading CLIP model {_MODEL_NAME}...")
+            _model = CLIPModel.from_pretrained(_MODEL_NAME)
+            _model.eval()
+            _processor = CLIPProcessor.from_pretrained(_MODEL_NAME)
+            model = _model
+            processor = _processor
     return _model, _processor
