@@ -2,6 +2,7 @@
     const ADMIN_NOTIFICATION_POLL_MS = 30000;
     let notifications = [];
     let unreadCount = 0;
+    let observedUnreadCount = null;
     let pollHandle = null;
 
     function getAdminToken() {
@@ -332,7 +333,17 @@
 
             const data = await response.json();
             notifications = Array.isArray(data) ? data : [];
-            unreadCount = Number(unread || 0);
+            const nextUnreadCount = Number(unread || 0);
+            if (observedUnreadCount !== null && nextUnreadCount > observedUnreadCount) {
+                window.dispatchEvent(new CustomEvent("lookfor:new-notifications", {
+                    detail: {
+                        increase: nextUnreadCount - observedUnreadCount,
+                        latest: notifications.find(item => !item.is_read) || notifications[0] || null
+                    }
+                }));
+            }
+            observedUnreadCount = nextUnreadCount;
+            unreadCount = nextUnreadCount;
             updateNotificationUI();
             return notifications;
         } catch (error) {

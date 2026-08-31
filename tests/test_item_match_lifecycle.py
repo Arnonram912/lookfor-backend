@@ -4,11 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from item_match_lifecycle import (
+    authorize_single_ai_link,
     delete_item_claims_and_release_matches,
     release_pending_found_link,
     release_stale_ai_match_after_reanalysis,
     replace_weaker_ai_match_after_reanalysis,
     remove_cached_possible_match,
+    strongest_upload_match,
 )
 
 
@@ -44,6 +46,62 @@ class ScriptedDB:
 
 
 class ItemMatchLifecycleTests(unittest.TestCase):
+    def test_upload_can_consider_unavailable_candidate_for_safe_replacement(self):
+        candidate = {
+            "id": 18,
+            "source": "found",
+            "score": 0.89,
+            "available_for_match": False,
+        }
+
+        selected = strongest_upload_match({"matched_item": None, "ranked_candidates": [candidate]})
+
+        self.assertEqual(selected["id"], 18)
+        self.assertTrue(selected["available_for_match"])
+
+    @patch("item_match_lifecycle.replace_weaker_ai_match_after_reanalysis", return_value=2)
+    def test_higher_upload_replaces_existing_ai_links(self, replace_match):
+        lost = SimpleNamespace(
+            id=18,
+            status="lost",
+            is_matched=True,
+            possible_matches='[{"id": 22, "source": "pending_found", "score": 0.89}]',
+        )
+        old_claim = SimpleNamespace(found_item_id=16)
+        db = ScriptedDB([
+            ScriptedQuery(all_value=[old_claim]),
+            ScriptedQuery(all_value=[]),
+        ])
+
+        authorized, released = authorize_single_ai_link(
+            db,
+            lost,
+            {"id": 22, "source": "pending_found", "score": 0.89},
+        )
+
+        self.assertTrue(authorized)
+        self.assertEqual(released, 2)
+        replace_match.assert_called_once()
+
+    @patch("item_match_lifecycle.replace_weaker_ai_match_after_reanalysis", return_value=0)
+    def test_lower_upload_cannot_create_second_link(self, replace_match):
+        lost = SimpleNamespace(id=18, status="lost", is_matched=True, possible_matches=None)
+        old_claim = SimpleNamespace(found_item_id=16)
+        db = ScriptedDB([
+            ScriptedQuery(all_value=[old_claim]),
+            ScriptedQuery(all_value=[]),
+        ])
+
+        authorized, released = authorize_single_ai_link(
+            db,
+            lost,
+            {"id": 22, "source": "pending_found", "score": 0.79},
+        )
+
+        self.assertFalse(authorized)
+        self.assertEqual(released, 0)
+        replace_match.assert_called_once()
+
     def test_remove_cached_possible_match_preserves_other_candidates(self):
         lost = SimpleNamespace(possible_matches=json.dumps([
             {"id": 11, "source": "found", "score": 0.9},

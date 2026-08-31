@@ -139,7 +139,7 @@
         </div>
         <div class="setting-item">
             <p>Session Management</p>
-            <button class="btn-outline">Logout all other devices</button>
+            <button class="btn-outline" type="button" onclick="logoutOtherSessions(this)">Logout all other devices</button>
         </div>
     </section>
 
@@ -161,8 +161,12 @@
     <section class="settings-card">
         <h3>Display & Layout</h3>
         <div class="setting-item">
-            <p>Theme Mode</p>
-            <button class="btn-outline" id="theme-toggle" onclick="toggleTheme()">Toggle Dark/Light</button>
+            <p>Theme</p>
+            <select id="theme-select">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="system">Use device setting</option>
+            </select>
         </div>
         <div class="setting-item">
             <p>Font Size</p>
@@ -174,7 +178,7 @@
 
 <div class="settings-footer">
     <button class="upload-btn" onclick="saveSettings()">Save All Changes</button>
-    <button class="btn-reset">Reset to Default</button>
+    <button class="btn-reset" type="button" onclick="resetSettings()">Reset to Default</button>
 </div>
 
 
@@ -222,11 +226,6 @@ function updateFontSize(size) {
     localStorage.setItem('admin-font-size', size);
 }
 
-function toggleTheme() {
-    const isDark = document.body.classList.toggle('dark-theme');
-    localStorage.setItem('admin-theme', isDark ? 'dark' : 'light');
-}
-
 function saveSettings() {
     saveSettingsToDB();
 }
@@ -242,25 +241,68 @@ async function saveSettingsToDB() {
     const settings = {
         two_factor: document.getElementById('2fa-toggle').checked,
         notifications: document.getElementById('push-toggle').checked,
-        theme: localStorage.getItem('admin-theme') || 'light',
+        theme: document.getElementById('theme-select').value,
         font_size: parseInt(localStorage.getItem('admin-font-size')) || 16,
+        notification_sound: document.getElementById('notif-sound').value,
     };
 
-    const response = await fetch(getSettingsEndpoint(), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify(settings)
-    });
-
-    if (response.ok) {
-        alert("Settings synchronized with account!");
-        return;
+    if (settings.notifications && window.Notification?.permission === 'default') {
+        await Notification.requestPermission();
     }
 
-    alert("Failed to save settings.");
+    try {
+        const response = await fetch(getSettingsEndpoint(), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify(settings)
+        });
+
+        if (response.ok) {
+            window.applyLookForPreferences?.(settings);
+            alert("Settings synchronized with account!");
+            return true;
+        }
+
+        alert("Failed to save settings.");
+        return false;
+    } catch (error) {
+        alert(error.message || "Failed to save settings.");
+        return false;
+    }
+}
+
+async function resetSettings() {
+    document.getElementById('2fa-toggle').checked = false;
+    document.getElementById('push-toggle').checked = true;
+    document.getElementById('theme-select').value = 'light';
+    document.getElementById('notif-sound').value = 'default';
+    document.getElementById('font-slider').value = 16;
+    updateFontSize(16);
+    await saveSettingsToDB();
+}
+
+async function logoutOtherSessions(button) {
+    const authToken = getAuthToken();
+    if (!authToken) return;
+    button.disabled = true;
+    try {
+        const response = await fetch('/auth/logout-other-sessions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Unable to sign out other sessions.');
+        localStorage.setItem('token', result.access_token);
+        document.cookie = `admin_access_token=${result.access_token}; max-age=900; path=/; SameSite=Lax`;
+        alert(result.message);
+    } catch (error) {
+        alert(error.message);
+    } finally {
+        button.disabled = false;
+    }
 }
 
 async function loadSettings() {
@@ -275,7 +317,8 @@ async function loadSettings() {
     const settings = await response.json();
     document.getElementById('2fa-toggle').checked = !!settings.two_factor;
     document.getElementById('push-toggle').checked = !!settings.notifications;
-    localStorage.setItem('admin-theme', settings.theme || 'light');
+    document.getElementById('theme-select').value = settings.theme || 'light';
+    document.getElementById('notif-sound').value = settings.notification_sound || 'default';
     localStorage.setItem('admin-font-size', settings.font_size || 16);
     updateFontSize(settings.font_size || 16);
     document.getElementById('font-slider').value = settings.font_size || 16;
@@ -284,13 +327,20 @@ async function loadSettings() {
 document.getElementById('font-slider').addEventListener('input', (event) => {
     updateFontSize(event.target.value);
 });
+document.getElementById('theme-select').addEventListener('change', event => {
+    window.applyLookForPreferences?.({
+        ...(window.lookforUserPreferences || {}),
+        theme: event.target.value,
+        font_size: Number(document.getElementById('font-slider').value)
+    });
+});
 
 loadSettings();
 </script>
 
-<script src="/static/session-keepalive.js?v=8"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js?v=3"></script>
-<script src="/static/student-notifications.js?v=6"></script>
+<script src="/static/student-notifications.js?v=7"></script>
 </body>
 </html>

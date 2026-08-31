@@ -4,9 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from account_email import (
+    POSSIBLE_MATCH_EMAIL_TEXT,
     _finish_account_email,
     build_account_access_messages,
     send_account_access_email_stage,
+    send_item_event_email,
 )
 
 
@@ -40,6 +42,34 @@ class FakeOutboxSession:
 
 
 class AccountEmailTests(unittest.TestCase):
+    @patch.dict(
+        "os.environ",
+        {"GMAIL_SENDER_EMAIL": "lookfor@example.com", "GMAIL_APP_PASSWORD": "app-password"},
+    )
+    @patch("account_email.smtplib.SMTP_SSL")
+    def test_possible_match_disclaimer_is_italicized_in_html_only(self, smtp_ssl):
+        smtp = MagicMock()
+        smtp_ssl.return_value.__enter__.return_value = smtp
+
+        send_item_event_email(
+            "student@example.com",
+            "Alex Student",
+            subject="A possible match was found for your lost item",
+            message_text=POSSIBLE_MATCH_EMAIL_TEXT,
+        )
+
+        message = smtp.send_message.call_args.args[0]
+        plain_body = message.get_body(preferencelist=("plain",)).get_content()
+        html_body = message.get_body(preferencelist=("html",)).get_content()
+
+        self.assertIn("Disclaimer: This system is using an AI.", plain_body)
+        self.assertIn(
+            "<p><em>Disclaimer: This system is using an AI.",
+            html_body,
+        )
+        self.assertIn("before completing a claim.</em></p>", html_body)
+        self.assertNotIn("<em>Good news!", html_body)
+
     def test_account_credentials_are_split_between_two_messages(self):
         username_message, password_message = build_account_access_messages(
             "student@example.com",

@@ -73,6 +73,10 @@ def resolve_authenticated_user(token: str, db: Session) -> models.User:
         user = db.query(models.User).filter(models.User.email.in_(login_candidates)).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials")
+    token_session_version = int(payload.get("session_version", 0) or 0)
+    user_session_version = int(getattr(user, "session_version", 0) or 0)
+    if token_session_version != user_session_version:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session was signed out")
     if bool(getattr(user, "is_archived", False)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="This account is archived and disabled.")
     return user

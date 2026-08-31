@@ -73,7 +73,11 @@ from security import (
     get_login_email_candidates,
     resolve_authenticated_user,
 )
-from account_email import ensure_account_email_outbox_worker, queue_item_event_email
+from account_email import (
+    POSSIBLE_MATCH_EMAIL_TEXT,
+    ensure_account_email_outbox_worker,
+    queue_item_event_email,
+)
 from lookfor_permissions import normalize_permissions
 from lookfor_constants import normalize_user_category
 from matching_metrics import (
@@ -89,8 +93,10 @@ from matching_metrics import (
 )
 from matching_observation_dataset import record_match_observations
 from item_match_lifecycle import (
+    authorize_single_ai_link,
     release_stale_ai_match_after_reanalysis,
     replace_weaker_ai_match_after_reanalysis,
+    strongest_upload_match,
 )
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
@@ -499,6 +505,7 @@ class MFASettingsUpdate(BaseModel):
     notifications: bool = True
     theme: str = "light"
     font_size: int = 16
+    notification_sound: str = "default"
 
 
 class MFAVerifyRequest(BaseModel):
@@ -557,6 +564,18 @@ def ensure_user_settings_columns():
         IF COL_LENGTH('users', 'font_size') IS NULL
         BEGIN
             ALTER TABLE users ADD font_size INT NOT NULL CONSTRAINT DF_users_font_size DEFAULT 16
+        END
+        """,
+        """
+        IF COL_LENGTH('users', 'notification_sound') IS NULL
+        BEGIN
+            ALTER TABLE users ADD notification_sound NVARCHAR(20) NOT NULL CONSTRAINT DF_users_notification_sound DEFAULT 'default'
+        END
+        """,
+        """
+        IF COL_LENGTH('users', 'session_version') IS NULL
+        BEGIN
+            ALTER TABLE users ADD session_version INT NOT NULL CONSTRAINT DF_users_session_version DEFAULT 0
         END
         """,
         """
@@ -1166,6 +1185,7 @@ def build_auth_response(user: models.User):
             "user_category": user_category,
             "role_label": role_label,
             "must_change": bool(user.must_change_password),
+            "session_version": int(getattr(user, "session_version", 0) or 0),
         }
     )
 
@@ -1477,6 +1497,7 @@ def get_auth_settings(
         "notifications": bool(getattr(current_user, "push_notifications", True)),
         "theme": getattr(current_user, "theme_mode", "light") or "light",
         "font_size": int(getattr(current_user, "font_size", 16) or 16),
+        "notification_sound": getattr(current_user, "notification_sound", "default") or "default",
     }
 
 
@@ -1492,14 +1513,60 @@ def update_auth_settings(
 
     user.two_factor_enabled = bool(payload.two_factor)
     user.push_notifications = bool(payload.notifications)
-    user.theme_mode = (payload.theme or "light")[:20]
+    user.theme_mode = payload.theme if payload.theme in {"light", "dark", "system"} else "light"
     user.font_size = max(12, min(24, int(payload.font_size)))
+    user.notification_sound = (
+        payload.notification_sound
+        if payload.notification_sound in {"default", "mute"}
+        else "default"
+    )
     db.commit()
 
     return {
         "status": "success",
         "message": "Settings updated successfully",
     }
+
+
+@app.post("/auth/logout-other-sessions")
+def logout_other_sessions(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.session_version = int(getattr(user, "session_version", 0) or 0) + 1
+    db.commit()
+    db.refresh(user)
+
+    user_category = normalize_user_category(getattr(user, "user_category", None))
+    role_label = get_user_role_label(user)
+    access_token = create_access_token(data={
+        "sub": user.email,
+        "id": user.id,
+        "is_admin": user.is_admin,
+        "user_category": user_category,
+        "role_label": role_label,
+        "must_change": bool(user.must_change_password),
+        "session_version": user.session_version,
+    })
+    response = JSONResponse({
+        "status": "success",
+        "message": "All other sessions were signed out.",
+        "access_token": access_token,
+    })
+    response.set_cookie(
+        "admin_access_token",
+        access_token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=False,
+        secure=os.getenv("COOKIE_SECURE", "false").strip().lower() in {"1", "true", "yes"},
+        samesite="lax",
+        path="/",
+    )
+    return response
 
 
 @app.post("/auth/refresh")
@@ -1516,6 +1583,7 @@ def refresh_access_token(
             "user_category": user_category,
             "role_label": role_label,
             "must_change": bool(current_user.must_change_password),
+            "session_version": int(getattr(current_user, "session_version", 0) or 0),
         }
     )
 
@@ -3399,10 +3467,12 @@ async def save_found_item(
     match_result = await run_in_threadpool(
         lambda: analyze_saved_item_details(db, new_pending, record_type="pending-found")
     )
-    strongest_match = match_result.get("matched_item")
+    strongest_match = strongest_upload_match(match_result)
     matched_item_id = strongest_match.get("id") if strongest_match else None
     match_score = float(match_result.get("highest_score", 0.0) or 0.0)
-    new_pending.matched_item_id = matched_item_id
+    # Keep the new report unreserved until the single-link lifecycle authorizes
+    # it. This makes an unlink-and-relink happen in the final transaction.
+    new_pending.matched_item_id = None
 
     db.commit()
     db.refresh(new_pending)
@@ -3438,6 +3508,19 @@ async def save_found_item(
         ).first()
 
         if matched_lost_item:
+            link_authorized, _ = authorize_single_ai_link(
+                db,
+                matched_lost_item,
+                {
+                    "id": new_pending.id,
+                    "source": "pending_found",
+                    "score": float(strongest_match.get("score", match_score) or 0),
+                },
+            )
+        else:
+            link_authorized = False
+
+        if matched_lost_item and link_authorized:
             new_pending.matched_item_id = matched_lost_item.id
             matched_lost_item.is_matched = True
             possible_match_count = prepend_lost_possible_match(
@@ -3463,9 +3546,15 @@ async def save_found_item(
                         lost_owner.email,
                         format_user_display_name(lost_owner),
                         subject="A possible match was found for your lost item",
-                        message_text=f"A found {category} may match your lost item. The report is waiting for admin approval.",
+                        message_text=POSSIBLE_MATCH_EMAIL_TEXT,
                         action_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
                     )
+        else:
+            # It remains a possible match for display, but it is not the linked
+            # match when an equal/stronger or protected link already exists.
+            matched_item_id = None
+            admin_notif.message = f"New {category} reported at {location}."
+            admin_notif.type = "new_report"
 
     db.commit()
     
@@ -3634,7 +3723,7 @@ async def lost_report_upload(
             if ai_match_found else "Your lost-item report was created"
         ),
         message_text=(
-            f"We created your lost {category} report and found a possible match ({final_score * 100:.1f}%)."
+            POSSIBLE_MATCH_EMAIL_TEXT
             if ai_match_found
             else f"We created your lost {category} report successfully."
         ),

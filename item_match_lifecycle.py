@@ -1,9 +1,10 @@
 import json
 from datetime import datetime
 
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 
 import models
+from matching_metrics import is_automatic_match_candidate
 
 
 def _stored_match_score(value) -> float | None:
@@ -236,6 +237,105 @@ def replace_weaker_ai_match_after_reanalysis(
     if not old_scores or new_score <= max(old_scores):
         return 0
     return release_stale_ai_match_after_reanalysis(db, lost_item)
+
+
+def strongest_upload_match(match_result: dict | None) -> dict | None:
+    """Return the one threshold-qualified candidate an upload may try to link.
+
+    A newly uploaded found item still needs to see a lost item that is currently
+    reserved by a weaker AI match. The scorer correctly marks that lost item as
+    unavailable for an ordinary second link, so we ignore only that availability
+    flag here. ``authorize_single_ai_link`` performs the ownership/replacement
+    check before anything is actually linked.
+    """
+    if not isinstance(match_result, dict):
+        return None
+
+    candidate = match_result.get("matched_item")
+    if not isinstance(candidate, dict):
+        ranked = match_result.get("ranked_candidates")
+        candidate = ranked[0] if isinstance(ranked, list) and ranked else None
+    if not isinstance(candidate, dict):
+        return None
+
+    candidate = {**candidate, "available_for_match": True}
+    return candidate if is_automatic_match_candidate(candidate) else None
+
+
+def authorize_single_ai_link(
+    db,
+    lost_item: models.Item,
+    new_match: dict | None,
+    *,
+    ranked_candidates: list[dict] | None = None,
+) -> tuple[bool, int]:
+    """Authorize one AI link, replacing a strictly weaker AI link if safe.
+
+    Returns ``(authorized, released_link_count)``. Human-reviewed/final claims,
+    manual pending claims, and pending claims with proof are never replaced.
+    """
+    if not new_match or str(getattr(lost_item, "status", "") or "").lower() != "lost":
+        return False, 0
+
+    # Serialize competing uploads for the same lost report. SQL Server does not
+    # emit a row lock for SQLAlchemy's generic ``with_for_update()``, so use its
+    # explicit update/range-lock hints there. Lightweight unit-test sessions do
+    # not expose a bind and intentionally skip this database-only guard.
+    try:
+        dialect_name = db.get_bind().dialect.name
+    except (AttributeError, TypeError):
+        dialect_name = None
+    if dialect_name == "mssql":
+        db.execute(
+            text("SELECT id FROM items WITH (UPDLOCK, HOLDLOCK) WHERE id = :lost_item_id"),
+            {"lost_item_id": lost_item.id},
+        ).first()
+    elif dialect_name and dialect_name != "sqlite":
+        db.query(models.Item.id).filter(
+            models.Item.id == lost_item.id
+        ).with_for_update().first()
+
+    active_claims = db.query(models.Claim).filter(
+        models.Claim.lost_item_id == lost_item.id,
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+    ).all()
+    reservations = db.query(models.PendingItem).filter(
+        models.PendingItem.matched_item_id == lost_item.id,
+        models.PendingItem.archived == False,
+        models.PendingItem.deleted == False,
+    ).all()
+
+    new_source = new_match.get("source", "found")
+    new_id = new_match.get("id")
+    already_linked = any(
+        new_source == "found" and claim.found_item_id == new_id
+        for claim in active_claims
+    ) or any(
+        new_source == "pending_found" and pending.id == new_id
+        for pending in reservations
+    )
+    if already_linked:
+        return True, 0
+
+    if not active_claims and not reservations:
+        # Repair a stale display flag while establishing the authoritative link.
+        lost_item.is_matched = False
+        return True, 0
+
+    try:
+        cached_matches = json.loads(getattr(lost_item, "possible_matches", None) or "[]")
+        cached_matches = cached_matches if isinstance(cached_matches, list) else []
+    except (TypeError, ValueError):
+        cached_matches = []
+
+    released = replace_weaker_ai_match_after_reanalysis(
+        db,
+        lost_item,
+        new_match,
+        ranked_candidates=ranked_candidates or cached_matches,
+        previous_matches=cached_matches,
+    )
+    return released > 0, released
 
 
 def delete_item_claims_and_release_matches(db, item: models.Item) -> None:

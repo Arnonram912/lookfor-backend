@@ -15,8 +15,9 @@ from pydantic import BaseModel
 class SettingsUpdate(BaseModel):
     two_factor: bool
     notifications: bool
-    theme: str
+    theme: str = "light"
     font_size: int
+    notification_sound: str = "default"
 
 
 class Notification(Base):
@@ -206,6 +207,8 @@ class User(Base):
     push_notifications = Column(Boolean, default=True, nullable=False)
     theme_mode = Column(String(20), default="light", nullable=False)
     font_size = Column(Integer, default=16, nullable=False)
+    notification_sound = Column(String(20), default="default", nullable=False)
+    session_version = Column(Integer, default=0, nullable=False)
 
     items = relationship("Item", back_populates="owner")
     pending_items = relationship("PendingItem", back_populates="submitter")

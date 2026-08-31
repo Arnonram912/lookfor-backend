@@ -915,7 +915,7 @@ async function executeSubmit() {
                 title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
                     ? 'The AI found a strong match and also listed the other possible matches below.'
-                    : 'The AI found possible matches in the Recall@5 list.',
+                    : 'The AI found possible matches.',
                 topMatch: hasConfirmedMatch ? {
                     id: aiResult.matched_item.id,
                     category: aiResult.matched_item.category || catName,
@@ -1112,7 +1112,7 @@ async function executeSubmit() {
                 title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
                     ? 'The AI found a strong match and also listed the other possible matches below.'
-                    : 'The AI found possible matches in the Recall@5 list.',
+                    : 'The AI found possible matches.',
                 topMatch: hasConfirmedMatch ? {
                     id: aiResult.matched_item.id,
                     category: aiResult.matched_item.category || catName,
@@ -1567,8 +1567,8 @@ async function studentLostLifecycleAction(action, itemId, personalOnly = false) 
         };
     </script>
 <script src="/static/item-detail-editor.js?v=7" data-item-type="item" data-reload="loadLostItems"></script>
-<script src="/static/session-keepalive.js?v=8"></script>
-<script src="/static/student-notifications.js?v=6"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
+<script src="/static/student-notifications.js?v=7"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js?v=3"></script>
 </body>

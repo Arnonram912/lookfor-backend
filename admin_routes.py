@@ -47,8 +47,10 @@ from account_email import (
 )
 from matching_metrics import MATCH_THRESHOLD, calculate_match_score, clamp_similarity_score
 from item_match_lifecycle import (
+    authorize_single_ai_link,
     delete_item_claims_and_release_matches,
     release_pending_found_link,
+    strongest_upload_match,
 )
 from lookfor_constants import (
     ACADEMIC_CLASSIFICATIONS,
@@ -5269,7 +5271,7 @@ async def finalize_found_upload(
         match_result = await run_in_threadpool(
             lambda: analyze_saved_item_details(db, new_item, record_type="found")
         )
-        strongest_match = match_result.get("matched_item")
+        strongest_match = strongest_upload_match(match_result)
         matched_item_id = strongest_match.get("id") if strongest_match else None
         ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
         is_auto_match = matched_item_id is not None and ai_score >= MATCH_THRESHOLD
@@ -5278,6 +5280,19 @@ async def finalize_found_upload(
         if is_auto_match:
             lost_item = db.query(models.Item).filter(models.Item.id == matched_item_id).first()
             if lost_item and lost_item.status == "lost" and not lost_item.archived:
+                is_auto_match, _ = authorize_single_ai_link(
+                    db,
+                    lost_item,
+                    {
+                        "id": new_item.id,
+                        "source": "found",
+                        "score": float(strongest_match.get("score", ai_score) or 0),
+                    },
+                )
+            else:
+                is_auto_match = False
+
+            if is_auto_match:
                 new_item.is_matched = True
                 lost_item.is_matched = True
                 prepend_lost_possible_match(
@@ -5631,8 +5646,9 @@ async def update_settings(
 
     user.two_factor_enabled = bool(data.two_factor)
     user.push_notifications = bool(data.notifications)
-    user.theme_mode = (data.theme or "light")[:20]
+    user.theme_mode = data.theme if data.theme in {"light", "dark", "system"} else "light"
     user.font_size = max(12, min(24, int(data.font_size)))
+    user.notification_sound = data.notification_sound if data.notification_sound in {"default", "mute"} else "default"
 
     db.commit()
     create_admin_notification(

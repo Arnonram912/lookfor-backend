@@ -269,7 +269,7 @@
             <div class="modal-content" style="max-width:760px; width:min(92vw, 760px); padding:28px;">
                 <span class="close-btn" onclick="closeModal('detailPossibleMatchesModal')">&times;</span>
                 <h2 style="margin-bottom:8px;">Possible <span style="color:#114b7a;">Matches</span></h2>
-                <p style="color:#5b6574; margin-bottom:18px;">View the scored Recall@5 possibilities for this lost report.</p>
+                <p style="color:#5b6574; margin-bottom:18px;">View the scored possible matches for this lost report.</p>
                 <div id="modalPossibleMatches" style="display:grid; gap:12px; max-height:440px; overflow-y:auto; padding-right:4px;">Loading possible matches...</div>
                 <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                     <button type="button" class="btn-upload-img" onclick="closeModal('detailPossibleMatchesModal')" style="margin:0;">Close</button>
@@ -1841,7 +1841,7 @@ async function executeSubmitLegacy() {
                 title: hasConfirmedMatch ? 'Strong Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
                     ? 'The AI found a strong match and also listed the other possible matches below.'
-                    : 'The AI found possible matches in the Recall@5 list.',
+                    : 'The AI found possible matches.',
                 topMatch: hasConfirmedMatch ? {
                     id: aiResult.matched_item.id,
                     category: aiResult.matched_item.category || catName,
@@ -1976,7 +1976,7 @@ async function executeSubmit() {
                 title: hasConfirmedMatch ? 'Match Found' : 'Possible Matches Found',
                 summary: hasConfirmedMatch
                     ? 'A strong match reached the automatic threshold.'
-                    : 'Possible Recall@5 candidates were found for reference.',
+                    : 'Possible matches were found for reference.',
                 topMatch: hasConfirmedMatch
                     ? {
                         ...aiResult.matched_item,
@@ -2195,6 +2195,6 @@ async function disposeItem(itemId) {
 <script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=5"></script>
+<script src="/static/admin-notifications.js?v=6"></script>
 </body>
 </html>

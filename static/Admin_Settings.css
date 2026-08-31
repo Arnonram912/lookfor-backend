@@ -110,7 +110,8 @@ body {
   box-shadow: 3px 3px 0px #000;
 }
 
-#notif-sound {
+#notif-sound,
+#theme-select {
   padding: 8px 12px;
   font-size: 14px;
   border: 1px solid #ccc;
@@ -121,12 +122,14 @@ body {
   cursor: pointer;
 }
 
-#notif-sound:hover {
+#notif-sound:hover,
+#theme-select:hover {
   border-color: #0078d7;
   background-color: #eef6ff;
 }
 
-#notif-sound:focus {
+#notif-sound:focus,
+#theme-select:focus {
   outline: none;
   border-color: #0078d7;
   box-shadow: 0 0 4px rgba(0, 120, 215, 0.6);

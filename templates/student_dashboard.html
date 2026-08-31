@@ -123,9 +123,6 @@
 
         <section class="settings-section">
             <h4><i class="fas fa-paint-roller"></i> Display Layout</h4>
-            <label class="switch">
-                Dark Mode: <input type="checkbox" id="darkModeToggle" onchange="toggleTheme()">
-            </label>
             <label>Font Size:</label>
             <input type="range" id="fontSizeSlider" min="12" max="24" oninput="adjustFontSize(this.value)">
         </section>
@@ -675,6 +672,6 @@ function logout() {
     window.location.replace("/"); 
 }
 </script>
-<script src="/static/session-keepalive.js?v=8"></script>
+<script src="/static/session-keepalive.js?v=16"></script>
 </body>
 </html>

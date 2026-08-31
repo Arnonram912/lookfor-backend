@@ -29,11 +29,13 @@ from utils import (
 )
 from clip_test import combine_embeddings, get_text_embedding, get_image_embedding, get_multi_image_embedding
 from models import SettingsUpdate
-from account_email import queue_item_event_email
+from account_email import POSSIBLE_MATCH_EMAIL_TEXT, queue_item_event_email
 from matching_metrics import MATCH_THRESHOLD, clamp_similarity_score, is_automatic_match_candidate
 from item_match_lifecycle import (
+    authorize_single_ai_link,
     delete_item_claims_and_release_matches,
     release_pending_found_link,
+    strongest_upload_match,
 )
 
 
@@ -116,7 +118,7 @@ def queue_lost_item_match_email(
         subject=subject,
         message_text=(
             message_text
-            or f"A found {lost_item.category} may match your lost-item report."
+            or POSSIBLE_MATCH_EMAIL_TEXT
         ),
         action_url=target_url,
     )
@@ -612,10 +614,13 @@ async def report_found_item(
     match_result = await run_in_threadpool(
         lambda: analyze_saved_item_details(db, pending_item, record_type="pending-found")
     )
-    strongest_match = match_result.get("matched_item")
+    strongest_match = strongest_upload_match(match_result)
     matched_item_id = strongest_match.get("id") if strongest_match else None
     ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
     is_auto_match = matched_item_id is not None and ai_score >= MATCH_THRESHOLD
+    # The analyzer may tentatively fill this field. Linking is authorized below
+    # only after checking/replacing the lost report's existing AI link.
+    pending_item.matched_item_id = None
 
     matched_lost_item = None
     matched_lost_owner = None
@@ -627,6 +632,17 @@ async def report_found_item(
             models.Item.archived == False
         ).first()
         if matched_lost_item:
+            is_auto_match, _ = authorize_single_ai_link(
+                db,
+                matched_lost_item,
+                {
+                    "id": pending_item.id,
+                    "source": "pending_found",
+                    "score": float(strongest_match.get("score", ai_score) or 0),
+                },
+            )
+
+        if matched_lost_item and is_auto_match:
             admin_match_score = f"{ai_score * 100:.1f}%"
             pending_item.matched_item_id = matched_lost_item.id
             matched_lost_item.is_matched = True
@@ -671,10 +687,6 @@ async def report_found_item(
         queue_lost_item_match_email(
             matched_lost_owner,
             matched_lost_item,
-            message_text=(
-                f"A found {category} may match your lost item. "
-                "The report is waiting for admin approval."
-            ),
         )
 
     return {
@@ -821,8 +833,9 @@ def update_student_settings(
 
     user.two_factor_enabled = bool(data.two_factor)
     user.push_notifications = bool(data.notifications)
-    user.theme_mode = (data.theme or "light")[:20]
+    user.theme_mode = data.theme if data.theme in {"light", "dark", "system"} else "light"
     user.font_size = max(12, min(24, int(data.font_size)))
+    user.notification_sound = data.notification_sound if data.notification_sound in {"default", "mute"} else "default"
     db.commit()
     create_student_notification(
         db,
@@ -1359,7 +1372,6 @@ async def submit_user_lost_report(
                 current_user,
                 new_report,
                 subject="A match was found for your lost item",
-                message_text=f"A found {category} was matched with your lost-item report.",
             )
         
         return {

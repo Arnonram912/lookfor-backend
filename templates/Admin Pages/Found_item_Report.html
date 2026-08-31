@@ -582,7 +582,7 @@ function showAccessDeniedPopup(permName) {
                         : 'Automatic match linked — pending claim created')
                     : (finalScore >= 0.75
                         ? 'Eligible for automatic match — not linked'
-                        : 'Possible match — Recall@5 suggestion');
+                        : 'Possible match');
                 return `
                     <div style="padding:10px 12px; border:1px solid #dce6f0; border-radius:10px; background:#fff;">
                         <div style="display:flex; justify-content:space-between; gap:12px; font-weight:700; color:#114b7a;">
@@ -1991,6 +1991,6 @@ async function disposeItem(itemId, isPending = false) {
 <script src="/static/session-keepalive.js?v=16"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=5"></script>
+<script src="/static/admin-notifications.js?v=6"></script>
 </body>
 </html>

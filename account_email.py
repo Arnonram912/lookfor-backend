@@ -26,6 +26,14 @@ _OUTBOX_WORKER: threading.Thread | None = None
 _OUTBOX_SEND_INTERVAL_SECONDS = max(0.0, float(os.getenv("ACCOUNT_EMAIL_SEND_INTERVAL_SECONDS", "2")))
 _PASSWORD_EMAIL_DELAY_MINUTES = max(0.0, float(os.getenv("ACCOUNT_PASSWORD_EMAIL_DELAY_MINUTES", "2")))
 
+POSSIBLE_MATCH_EMAIL_TEXT = (
+    "Good news! We have found a possible match on your reported lost item on our database.\n\n"
+    "You may contact our LookFor Admin or proceed to the Discipline Office to verify and claim the item.\n\n"
+    "Kindly bring an ID and proof of ownership for verification.\n\n"
+    "Disclaimer: This system is using an AI. Matching suggestions are automated and not 100% accurate; "
+    "please manually verify your item details before completing a claim."
+)
+
 
 def send_account_access_email(
     recipient_email: str,
@@ -229,10 +237,19 @@ def send_item_event_email(
         f'<p><a href="{html.escape(action_url, quote=True)}">View it in LookFor</a></p>'
         if action_url else ""
     )
+    message_html = "\n".join(
+        (
+            f"<p><em>{html.escape(paragraph)}</em></p>"
+            if paragraph.casefold().startswith("disclaimer:")
+            else f"<p>{html.escape(paragraph)}</p>"
+        )
+        for paragraph in safe_text.split("\n\n")
+        if paragraph
+    )
     message.add_alternative(
         f"""<html><body>
         <p>Hello {html.escape(display_name)},</p>
-        <p>{html.escape(safe_text)}</p>
+        {message_html}
         {action_html}
         <p>- LookFor Team</p>
         </body></html>""",

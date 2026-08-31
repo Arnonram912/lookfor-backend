@@ -5,6 +5,7 @@
     const ACTIVITY_CHECK_MS = 60 * 1000;
     const ACTIVE_WINDOW_MS = 2 * 60 * 1000;
     const LAST_ACTIVITY_KEY = "lookfor_last_activity_at";
+    const PREFERENCES_KEY = "lookfor_user_preferences";
 
     let lastRefreshAt = 0;
     let lastActivityAt = Date.now();
@@ -49,6 +50,126 @@
 
         return adminToken || studentToken;
     }
+
+    function normalizePreferences(value) {
+        const preferences = value && typeof value === "object" ? value : {};
+        return {
+            two_factor: !!preferences.two_factor,
+            notifications: preferences.notifications !== false,
+            theme: ["light", "dark", "system"].includes(preferences.theme) ? preferences.theme : "light",
+            font_size: Math.max(12, Math.min(24, Number(preferences.font_size) || 16)),
+            notification_sound: preferences.notification_sound === "mute" ? "mute" : "default"
+        };
+    }
+
+    function applyUserPreferences(value) {
+        const preferences = normalizePreferences(value);
+        if (!document.getElementById("lookfor-preference-styles")) {
+            const style = document.createElement("style");
+            style.id = "lookfor-preference-styles";
+            style.textContent = `
+                html { font-size: var(--base-font-size, 16px); }
+                body, button, input, select, textarea { font-size: inherit; }
+                html.lookfor-dark-theme { color-scheme: dark; }
+                html.lookfor-dark-theme body,
+                html.lookfor-dark-theme .main-content,
+                html.lookfor-dark-theme .content,
+                html.lookfor-dark-theme .page-scroll-area { background-color: #111827 !important; color: #e5e7eb !important; }
+                html.lookfor-dark-theme .settings-card,
+                html.lookfor-dark-theme .profile-card,
+                html.lookfor-dark-theme .modal-content,
+                html.lookfor-dark-theme .detail-card,
+                html.lookfor-dark-theme .table-container { background-color: #1f2937 !important; color: #e5e7eb !important; }
+                html.lookfor-dark-theme h1,
+                html.lookfor-dark-theme h2,
+                html.lookfor-dark-theme h3,
+                html.lookfor-dark-theme h4,
+                html.lookfor-dark-theme p,
+                html.lookfor-dark-theme label { color: inherit; }
+                html.lookfor-dark-theme input,
+                html.lookfor-dark-theme select,
+                html.lookfor-dark-theme textarea { background-color: #111827; color: #f9fafb; border-color: #4b5563; }
+            `;
+            document.head.appendChild(style);
+        }
+        const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+        const useDark = preferences.theme === "dark" || (preferences.theme === "system" && prefersDark);
+        document.documentElement.classList.toggle("lookfor-dark-theme", !!useDark);
+        document.documentElement.style.setProperty("--base-font-size", `${preferences.font_size}px`);
+        document.documentElement.style.fontSize = `${preferences.font_size}px`;
+        if (document.body) {
+            document.body.classList.toggle("dark-theme", !!useDark);
+            document.body.style.fontSize = `${preferences.font_size}px`;
+        }
+        window.lookforUserPreferences = preferences;
+        localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+        localStorage.setItem("admin-font-size", String(preferences.font_size));
+        return preferences;
+    }
+
+    function loadCachedPreferences() {
+        try {
+            return applyUserPreferences(JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}"));
+        } catch (_) {
+            return applyUserPreferences({});
+        }
+    }
+
+    async function syncUserPreferences() {
+        const token = getStoredToken();
+        if (!token) return loadCachedPreferences();
+        try {
+            const response = await fetch("/auth/settings", {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!response.ok) throw new Error("Unable to load account preferences");
+            return applyUserPreferences(await response.json());
+        } catch (error) {
+            console.error("Preference sync failed:", error);
+            return loadCachedPreferences();
+        }
+    }
+
+    function playNotificationTone() {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        const context = new AudioContextClass();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.frequency.value = 740;
+        gain.gain.setValueAtTime(0.0001, context.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.22);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + 0.23);
+        oscillator.addEventListener("ended", () => context.close());
+    }
+
+    window.addEventListener("lookfor:new-notifications", event => {
+        const preferences = window.lookforUserPreferences || loadCachedPreferences();
+        if (!preferences.notifications) return;
+        const detail = event.detail || {};
+        const latest = detail.latest || {};
+        if (preferences.notification_sound !== "mute") {
+            try { playNotificationTone(); } catch (_) { /* Browser audio may require interaction. */ }
+            navigator.vibrate?.([100, 60, 100]);
+        }
+        if (window.Notification?.permission === "granted") {
+            const notification = new Notification("LookFor notification", {
+                body: latest.message || `${detail.increase || 1} new notification(s)`,
+                tag: latest.id ? `lookfor-${latest.id}` : "lookfor-notification"
+            });
+            notification.onclick = () => {
+                window.focus();
+                if (latest.target_url) window.location.href = latest.target_url;
+                notification.close();
+            };
+        }
+    });
+
+    window.applyLookForPreferences = applyUserPreferences;
+    window.syncLookForPreferences = syncUserPreferences;
 
     function getTokenExpiryMs(token) {
         const payload = decodeJwtPayload(token);
@@ -700,7 +821,9 @@
         });
     }
 
+    loadCachedPreferences();
     initializeSessionKeepAlive();
+    syncUserPreferences();
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", preloadAdminPermissions, { once: true });
         document.addEventListener("DOMContentLoaded", loadTopbarProfileAvatar, { once: true });
