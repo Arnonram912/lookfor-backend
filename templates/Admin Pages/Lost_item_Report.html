@@ -982,12 +982,16 @@ function renderDetailPossibleMatches(result, categoryFallback = '', isMatched = 
             viewBtn.disabled = false;
             viewBtn.textContent = `View Possible Matches (${matchedItems.length})`;
         }
-        container.innerHTML = matchedItems.map((match, index) => `
-            <div style="display:block; border:1px solid #d9e4f2; border-radius:12px; padding:12px 14px; margin-bottom:10px; background:${index === 0 ? '#f7fbff' : '#fff'};">
+        container.innerHTML = matchedItems.map((match, index) => {
+            const canSelect = match.source !== 'pending_found';
+            return `
+            <label style="display:block; border:1px solid #d9e4f2; border-radius:12px; padding:12px 14px; margin-bottom:10px; background:${index === 0 ? '#f7fbff' : '#fff'}; cursor:${canSelect ? 'pointer' : 'default'};">
                 <div style="display:flex; gap:12px; align-items:flex-start;">
+                    <input type="radio" name="detailPossibleMatch" value="${escapeModalHtml(String(match.id))}" ${canSelect ? '' : 'disabled'} ${match.is_linked ? 'checked' : ''} style="margin-top:8px; width:18px; height:18px; accent-color:#1268b3;">
                     ${renderMatchThumbnail(match, match.category || 'Possible match image')}
                     <div style="flex:1;">
                         <div style="font-weight:700; color:#0e2742;">${index + 1}. ${escapeModalHtml(match.item_name || match.category || categoryFallback || 'Item')}</div>
+                        ${match.is_linked ? '<div style="margin-top:5px; color:#16803a; font-weight:700; font-size:12px;">CURRENT MATCH</div>' : ''}
                         ${match.source === 'pending_found' ? '<div style="margin-top:5px; color:#a96600; font-weight:700; font-size:12px;">AWAITING APPROVAL</div>' : ''}
                         <div style="margin-top:6px; color:#556678;">ID: ${escapeModalHtml(String(match.id || 'N/A'))}</div>
                         <div style="margin-top:4px; color:#556678;">Location: ${escapeModalHtml(match.location || 'Unknown')}</div>
@@ -995,13 +999,18 @@ function renderDetailPossibleMatches(result, categoryFallback = '', isMatched = 
                     </div>
                     <div style="white-space:nowrap; font-weight:700; color:#114b7a;">Confidence: ${formatMatchScore(match.score)}</div>
                 </div>
-            </div>
-        `).join('');
+            </label>
+        `}).join('');
 
         if (applyBtn) {
-            applyBtn.style.display = "none";
+            applyBtn.style.display = isArchived || !matchedItems.some(match => match.source !== 'pending_found') ? "none" : "inline-flex";
             applyBtn.disabled = true;
         }
+        container.querySelectorAll('input[name="detailPossibleMatch"]').forEach(input => {
+            input.addEventListener('change', () => {
+                if (applyBtn) applyBtn.disabled = false;
+            });
+        });
 }
 
 async function analyzeLostItemMatches() {

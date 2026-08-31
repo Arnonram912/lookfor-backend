@@ -204,8 +204,51 @@ def replace_weaker_ai_match_after_reanalysis(
         ("pending_found", int(item.id), item)
         for item in reservations
     ]
-    if any(source == new_source and item_id == int(new_id) for source, item_id, _ in current_links):
-        return 0
+    already_linked = any(
+        source == new_source and item_id == int(new_id)
+        for source, item_id, _ in current_links
+    )
+
+    if already_linked:
+        # A previous buggy lifecycle could leave two proofless AI links active.
+        # Keeping the strongest pair must also retire every weaker duplicate;
+        # returning early here was the reason two found reports stayed marked.
+        for source, item_id, link in current_links:
+            if source == new_source and item_id == int(new_id):
+                continue
+            if source == "found":
+                if not _is_replaceable_ai_claim(link):
+                    return 0
+                has_proof = db.query(models.ClaimProof.id).filter(
+                    models.ClaimProof.claim_id == link.id,
+                ).first() is not None
+                if has_proof:
+                    return 0
+
+        released_found_ids = set()
+        released_count = 0
+        for source, item_id, link in current_links:
+            if source == new_source and item_id == int(new_id):
+                continue
+            if source == "found":
+                link.status = "rejected"
+                link.admin_decision_date = datetime.utcnow()
+                released_found_ids.add(item_id)
+            else:
+                link.matched_item_id = None
+            released_count += 1
+
+        if released_count:
+            db.flush()
+            if released_found_ids:
+                released_found_items = db.query(models.Item).filter(
+                    models.Item.id.in_(released_found_ids),
+                    models.Item.status == "found",
+                ).all()
+                for found_item in released_found_items:
+                    found_item.is_matched = _has_active_claim(db, found_item.id)
+            lost_item.is_matched = True
+        return released_count
 
     for claim in pending_claims:
         if not _is_replaceable_ai_claim(claim):

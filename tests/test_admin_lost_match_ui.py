@@ -21,6 +21,11 @@ class AdminLostMatchUiTests(unittest.TestCase):
         self.assertIn('id="detailPossibleMatchesModal"', self.html)
         self.assertIn('id="modalPossibleMatches"', self.html)
 
+    def test_admin_can_select_exactly_one_possible_match(self):
+        self.assertIn('type="radio" name="detailPossibleMatch"', self.html)
+        self.assertIn('id="applySelectedMatchBtn"', self.html)
+        self.assertIn("fetch('/api/admin/manual-claim'", self.html)
+
     def test_active_upload_handler_shows_results_after_closing_review(self):
         handler = re.search(
             r"async function executeSubmit\(\) \{(?P<body>.*?)\n\}\nasync function disposeItem",

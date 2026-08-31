@@ -226,6 +226,48 @@ class ItemMatchLifecycleTests(unittest.TestCase):
         self.assertTrue(lost.is_matched)
         self.assertEqual(db.flush_count, 0)
 
+    def test_reanalysis_keeps_top_link_and_rejects_weaker_duplicate(self):
+        lost = SimpleNamespace(id=18, status="lost", is_matched=True)
+        top_claim = SimpleNamespace(
+            id=41,
+            found_item_id=22,
+            similarity_score="89.3%",
+            status="pending",
+            admin_decision_date=None,
+        )
+        weaker_claim = SimpleNamespace(
+            id=40,
+            found_item_id=16,
+            similarity_score="83.7%",
+            status="pending",
+            admin_decision_date=None,
+        )
+        weaker_found = SimpleNamespace(id=16, status="found", is_matched=True)
+        db = ScriptedDB([
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(all_value=[top_claim, weaker_claim]),
+            ScriptedQuery(all_value=[]),
+            ScriptedQuery(first_value=None),
+            ScriptedQuery(all_value=[weaker_found]),
+            ScriptedQuery(first_value=None),
+        ])
+
+        released = replace_weaker_ai_match_after_reanalysis(
+            db,
+            lost,
+            {"id": 22, "source": "found", "score": 0.893},
+            ranked_candidates=[
+                {"id": 22, "source": "found", "score": 0.893},
+                {"id": 16, "source": "found", "score": 0.837},
+            ],
+        )
+
+        self.assertEqual(released, 1)
+        self.assertEqual(top_claim.status, "pending")
+        self.assertEqual(weaker_claim.status, "rejected")
+        self.assertFalse(weaker_found.is_matched)
+        self.assertTrue(lost.is_matched)
+
     @patch("item_match_lifecycle.release_stale_ai_match_after_reanalysis", return_value=1)
     def test_stronger_candidate_replaces_proofless_ai_claim(self, release_match):
         lost = SimpleNamespace(id=18, status="lost", is_matched=True)

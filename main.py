@@ -3047,7 +3047,36 @@ def get_saved_item_possible_matches(
             saved_matches = []
 
         if saved_matches:
-            saved_matches = saved_matches[:5]
+            active_found_ids = {
+                int(found_item_id)
+                for (found_item_id,) in db.query(models.Claim.found_item_id).filter(
+                    models.Claim.lost_item_id == item.id,
+                    models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+                    models.Claim.found_item_id.isnot(None),
+                ).all()
+            }
+            active_pending_ids = {
+                int(pending_id)
+                for (pending_id,) in db.query(models.PendingItem.id).filter(
+                    models.PendingItem.matched_item_id == item.id,
+                    models.PendingItem.archived == False,
+                    models.PendingItem.deleted == False,
+                ).all()
+            }
+            saved_matches = [
+                {
+                    **match,
+                    "is_linked": (
+                        int(match.get("id")) in (
+                            active_pending_ids
+                            if match.get("source") == "pending_found"
+                            else active_found_ids
+                        )
+                    ),
+                }
+                for match in saved_matches[:5]
+                if isinstance(match, dict) and match.get("id") is not None
+            ]
             best_match = saved_matches[0]
             highest_score = float(best_match.get("score", 0) or 0)
             return {
@@ -5162,40 +5191,43 @@ def create_manual_claim(
     if found_item.archived or lost_item.archived:
         raise HTTPException(status_code=400, detail="Archived items cannot be used for manual claims")
 
-    found_category = (found_item.category or "").strip().lower()
-    lost_category = (lost_item.category or "").strip().lower()
-    if found_category and lost_category and found_category != lost_category:
-        raise HTTPException(status_code=400, detail="Manual claims can only be created for items in the same category")
-
-    existing_active_claim = db.query(models.Claim).filter(
-        models.Claim.lost_item_id == lost_item_id,
+    # A found report can belong to only one lost report. Do not let a manual
+    # selection steal a record that is genuinely active elsewhere.
+    conflicting_found_claim = db.query(models.Claim).filter(
         models.Claim.found_item_id == found_item_id,
+        models.Claim.lost_item_id != lost_item_id,
         models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES)
     ).first()
-    if existing_active_claim:
+    if conflicting_found_claim:
+        raise HTTPException(
+            status_code=409,
+            detail="This found item is already linked to another lost report",
+        )
+
+    # Admin selection is authoritative for proofless pending/AI links on this
+    # lost report. Retire those links first so the selected pair becomes the
+    # sole active match. Proof-backed or final claims remain protected.
+    released_links = release_stale_ai_match_after_reanalysis(db, lost_item)
+    remaining_active_claim = db.query(models.Claim).filter(
+        models.Claim.lost_item_id == lost_item_id,
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+    ).first()
+    if remaining_active_claim:
+        if remaining_active_claim.found_item_id != found_item_id:
+            raise HTTPException(
+                status_code=409,
+                detail="This lost item has a protected claim that cannot be replaced",
+            )
         lost_item.is_matched = True
         found_item.is_matched = True
         db.commit()
         return {
             "status": "success",
-            "message": "A claim for this pair already exists.",
-            "claim_id": existing_active_claim.id,
-            "existing": True
+            "message": "The selected item is already the protected active match.",
+            "claim_id": remaining_active_claim.id,
+            "existing": True,
+            "released_links": released_links,
         }
-
-    conflicting_found_claim = db.query(models.Claim).filter(
-        models.Claim.found_item_id == found_item_id,
-        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)
-    ).first()
-    if conflicting_found_claim:
-        raise HTTPException(status_code=409, detail="This found item is already claimed")
-
-    conflicting_lost_claim = db.query(models.Claim).filter(
-        models.Claim.lost_item_id == lost_item_id,
-        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES)
-    ).first()
-    if conflicting_lost_claim:
-        raise HTTPException(status_code=409, detail="This lost item is already claimed")
 
     new_claim = models.Claim(
         lost_item_id=lost_item_id,
@@ -5219,7 +5251,12 @@ def create_manual_claim(
     db.commit()
     db.refresh(new_claim)
 
-    return {"status": "success", "message": "Manual claim created", "claim_id": new_claim.id}
+    return {
+        "status": "success",
+        "message": "Selected item saved as the only active match",
+        "claim_id": new_claim.id,
+        "released_links": released_links,
+    }
 
 
 @app.post("/api/admin/direct-claim")
