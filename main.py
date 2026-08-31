@@ -3105,48 +3105,48 @@ def recover_authoritative_lost_match(
     lost_item: models.Item,
     analysis: dict,
 ) -> dict | None:
-    """Choose the strongest review-safe candidate using real link ownership.
+    """Recover only the rank-one candidate when its availability flag is stale.
 
     ``is_matched`` is a display/cache flag and can be stale after an older
     claim transition. The scorer still exposes such candidates in its ranked
-    results but marks them unavailable. Before concluding that a lost report
-    has no match, verify ownership against active claims/reservations. This
-    also lets us skip a genuinely occupied first candidate and use the next
-    highest eligible one.
+    results but marks them unavailable. Verify the top candidate's ownership
+    before concluding that the lost report has no match, but never fall through
+    to a lower-ranked candidate. An automatic link must always represent the
+    highest-scoring result.
     """
     ranked_candidates = analysis.get("ranked_candidates", [])
-    if not isinstance(ranked_candidates, list):
+    if not isinstance(ranked_candidates, list) or not ranked_candidates:
         return None
 
-    for ranked_candidate in ranked_candidates:
-        if not isinstance(ranked_candidate, dict):
-            continue
-        candidate = {**ranked_candidate, "available_for_match": True}
-        if not is_automatic_match_candidate(candidate):
-            continue
+    ranked_candidate = ranked_candidates[0]
+    if not isinstance(ranked_candidate, dict):
+        return None
+    candidate = {**ranked_candidate, "available_for_match": True}
+    if not is_automatic_match_candidate(candidate):
+        return None
 
-        candidate_id = candidate.get("id")
-        if candidate_id is None:
-            continue
-        source = candidate.get("source", "found")
+    candidate_id = candidate.get("id")
+    if candidate_id is None:
+        return None
+    source = candidate.get("source", "found")
 
-        if source == "found":
-            active_owner = db.query(models.Claim).filter(
-                models.Claim.found_item_id == candidate_id,
-                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
-            ).first()
-            if active_owner and active_owner.lost_item_id != lost_item.id:
-                continue
+    if source == "found":
+        active_owner = db.query(models.Claim).filter(
+            models.Claim.found_item_id == candidate_id,
+            models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+        ).first()
+        if active_owner and active_owner.lost_item_id != lost_item.id:
+            return None
+        return candidate
+
+    if source == "pending_found":
+        pending_found = db.query(models.PendingItem).filter(
+            models.PendingItem.id == candidate_id,
+            models.PendingItem.archived == False,
+            models.PendingItem.deleted == False,
+        ).first()
+        if pending_found and pending_found.matched_item_id in {None, lost_item.id}:
             return candidate
-
-        if source == "pending_found":
-            pending_found = db.query(models.PendingItem).filter(
-                models.PendingItem.id == candidate_id,
-                models.PendingItem.archived == False,
-                models.PendingItem.deleted == False,
-            ).first()
-            if pending_found and pending_found.matched_item_id in {None, lost_item.id}:
-                return candidate
 
     return None
 

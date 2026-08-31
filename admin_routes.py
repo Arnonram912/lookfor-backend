@@ -45,7 +45,12 @@ from account_email import (
     queue_account_access_email,
     queue_item_event_email,
 )
-from matching_metrics import MATCH_THRESHOLD, calculate_match_score, clamp_similarity_score
+from matching_metrics import (
+    MATCH_THRESHOLD,
+    calculate_match_score,
+    clamp_similarity_score,
+    is_automatic_match_candidate,
+)
 from item_match_lifecycle import (
     authorize_single_ai_link,
     delete_item_claims_and_release_matches,
@@ -4670,8 +4675,31 @@ async def approve_item(
     db.add(new_item)
     db.flush()
 
-    # Preserve cached possible matches while replacing the temporary pending
-    # identifier with the approved found-item identifier. No CLIP rerun occurs.
+    # A pending found report was ranked against lost reports when it was
+    # uploaded. That reservation does not prove that this found report is the
+    # reserved lost report's current rank-one found candidate. Release the
+    # temporary reservation before validating the approved item from the lost
+    # report's side.
+    matched_lost_item = None
+    if pending.matched_item_id:
+        matched_lost_item = db.query(models.Item).filter(
+            models.Item.id == pending.matched_item_id,
+            models.Item.status == "lost",
+            models.Item.archived == False,
+            models.Item.deleted == False,
+        ).first()
+    if matched_lost_item:
+        release_pending_found_link(db, pending)
+
+    # Keep the pending copy out of the approval-time ranking so the same
+    # physical report cannot occupy one rank as pending and another as found.
+    pending.archived = True
+    pending.matched_item_id = None
+    db.flush()
+
+    # Preserve other reports' cached possible matches while replacing the
+    # temporary pending identifier with the approved found-item identifier.
+    # The reserved lost report is reanalyzed below before any claim is created.
     cached_lost_items = db.query(models.Item).filter(
         models.Item.status.ilike("lost"),
         models.Item.possible_matches.isnot(None),
@@ -4708,30 +4736,49 @@ async def approve_item(
             )
             cached_lost.possible_matches = json.dumps(converted_matches[:5])
 
-    matched_lost_item = None
-    if pending.matched_item_id:
-        matched_lost_item = db.query(models.Item).filter(
-            models.Item.id == pending.matched_item_id,
-            models.Item.status == "lost",
-            models.Item.archived == False,
-            models.Item.deleted == False,
-        ).first()
+    approved_match = None
+    if matched_lost_item:
+        from main import analyze_saved_item_details
+
+        approval_analysis = await run_in_threadpool(
+            lambda: analyze_saved_item_details(db, matched_lost_item, record_type="item")
+        )
+        ranked_candidates = approval_analysis.get("ranked_candidates", [])
+        top_candidate = (
+            ranked_candidates[0]
+            if isinstance(ranked_candidates, list) and ranked_candidates
+            else None
+        )
+        if (
+            isinstance(top_candidate, dict)
+            and top_candidate.get("source", "found") == "found"
+            and top_candidate.get("id") == new_item.id
+            and is_automatic_match_candidate(top_candidate)
+        ):
+            link_authorized, _ = authorize_single_ai_link(
+                db,
+                matched_lost_item,
+                top_candidate,
+                ranked_candidates=ranked_candidates,
+            )
+            if link_authorized:
+                approved_match = top_candidate
+        if not approved_match:
+            matched_lost_item = None
 
     if matched_lost_item:
         new_item.is_matched = True
         matched_lost_item.is_matched = True
         prepend_lost_possible_match(
             matched_lost_item,
-            serialize_found_item_match(
-                new_item, MATCH_THRESHOLD, previous_pending_id=pending.id
-            )
+            serialize_found_item_match(new_item, approved_match.get("score", 0))
         )
         claim = ensure_pending_claim_for_pair(
             db,
             lost_item=matched_lost_item,
             found_item=new_item,
             claimant_id=matched_lost_item.user_id or pending.user_id,
-            similarity_score="Auto Match"
+            similarity_score=f"{float(approved_match.get('score', 0) or 0) * 100:.1f}%"
         )
         db.flush()
         notify_lost_item_owner_of_match(db, matched_lost_item, new_item)

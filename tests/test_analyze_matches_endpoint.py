@@ -205,6 +205,49 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertTrue(lost.is_matched)
         self.assertTrue(found.is_matched)
 
+    @patch("main.release_stale_ai_match_after_reanalysis", return_value=1)
+    @patch("main.analyze_saved_item_details")
+    def test_occupied_top_candidate_does_not_fall_through_to_second_highest(
+        self,
+        analyzer,
+        release_match,
+    ):
+        lost = lost_item()
+        lost.is_matched = True
+        top_candidate_owner = SimpleNamespace(lost_item_id=9001)
+        db = SequencedFakeSession([lost, top_candidate_owner])
+        analyzer.return_value = {
+            "highest_score": 0.91,
+            "matched_item": None,
+            "matched_items": [
+                {"id": 8001, "source": "found", "score": 0.91},
+                {"id": 8002, "source": "found", "score": 0.86},
+            ],
+            "ranked_candidates": [
+                {
+                    "id": 8001,
+                    "source": "found",
+                    "score": 0.91,
+                    "available_for_match": False,
+                },
+                {
+                    "id": 8002,
+                    "source": "found",
+                    "score": 0.86,
+                    "available_for_match": True,
+                },
+            ],
+            "action": "show_match",
+        }
+
+        result = analyze_lost_item_matches(7162, db=db, current_user=user())
+
+        self.assertFalse(result["auto_linked"])
+        self.assertIsNone(result["matched_item"])
+        self.assertEqual(result["released_ai_links"], 1)
+        release_match.assert_called_once_with(db, lost)
+        self.assertTrue(db.committed)
+
     @patch("main.replace_weaker_ai_match_after_reanalysis", return_value=1)
     @patch("main.analyze_saved_item_details")
     def test_stronger_match_replaces_previous_ai_link(self, analyzer, replace_match):
