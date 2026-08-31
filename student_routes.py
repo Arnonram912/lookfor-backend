@@ -833,7 +833,7 @@ def update_student_settings(
 
     user.two_factor_enabled = bool(data.two_factor)
     user.push_notifications = bool(data.notifications)
-    user.theme_mode = data.theme if data.theme in {"light", "dark", "system"} else "light"
+    user.theme_mode = "light"
     user.font_size = max(12, min(24, int(data.font_size)))
     user.notification_sound = data.notification_sound if data.notification_sound in {"default", "mute"} else "default"
     db.commit()

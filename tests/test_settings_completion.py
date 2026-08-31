@@ -47,7 +47,7 @@ class CompletedSettingsTests(unittest.TestCase):
             font_size=18,
             notification_sound="mute",
         )
-        self.assertEqual(settings.theme, "dark")
+        self.assertEqual(settings.theme, "dark")  # Accepted for legacy clients; server forces light.
         self.assertEqual(settings.notification_sound, "mute")
 
     @patch("security.jwt.decode")
@@ -84,7 +84,7 @@ class CompletedSettingsTests(unittest.TestCase):
             "templates/Student Pages/Student_Settings.html",
         ):
             html = (ROOT / relative_path).read_text(encoding="utf-8")
-            self.assertIn('id="theme-select"', html)
+            self.assertNotIn('id="theme-select"', html)
             self.assertIn("notification_sound:", html)
             self.assertIn("onclick=\"resetSettings()\"", html)
             self.assertIn("logoutOtherSessions(this)", html)
@@ -93,9 +93,18 @@ class CompletedSettingsTests(unittest.TestCase):
     def test_shared_portal_script_applies_and_alerts_preferences(self):
         script = (ROOT / "static/session-keepalive.js").read_text(encoding="utf-8")
         self.assertIn("syncUserPreferences()", script)
-        self.assertIn("lookfor-dark-theme", script)
+        self.assertNotIn("html.lookfor-dark-theme", script)
         self.assertIn('lookfor:new-notifications', script)
         self.assertIn("playNotificationTone", script)
+
+    def test_login_switches_browser_to_exactly_one_account(self):
+        login = (ROOT / "templates/index.html").read_text(encoding="utf-8")
+        session = (ROOT / "static/session-keepalive.js").read_text(encoding="utf-8")
+        self.assertIn('localStorage.setItem("lookfor_active_account", accountId)', login)
+        self.assertIn('sessionStorage.removeItem("admin_token")', login)
+        self.assertIn('localStorage.removeItem("token")', login)
+        self.assertIn('event.key !== ACTIVE_ACCOUNT_KEY', session)
+        self.assertIn('logoutTabForAccountSwitch()', session)
 
     @patch("main.create_access_token", return_value="replacement-token")
     def test_logout_other_sessions_rotates_generation_and_returns_current_token(self, create_token):

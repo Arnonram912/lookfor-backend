@@ -6,6 +6,8 @@
     const ACTIVE_WINDOW_MS = 2 * 60 * 1000;
     const LAST_ACTIVITY_KEY = "lookfor_last_activity_at";
     const PREFERENCES_KEY = "lookfor_user_preferences";
+    const ACTIVE_ACCOUNT_KEY = "lookfor_active_account";
+    const TAB_ACCOUNT_KEY = "lookfor_tab_account";
 
     let lastRefreshAt = 0;
     let lastActivityAt = Date.now();
@@ -51,12 +53,42 @@
         return adminToken || studentToken;
     }
 
+    function normalizedTokenAccount(token) {
+        const payload = token ? decodeJwtPayload(token) : null;
+        return String(payload?.sub || payload?.id || "").trim().toLowerCase();
+    }
+
+    function registerCurrentTabAccount() {
+        const accountId = normalizedTokenAccount(getStoredToken());
+        if (!accountId) return;
+        sessionStorage.setItem(TAB_ACCOUNT_KEY, accountId);
+        const activeAccount = String(localStorage.getItem(ACTIVE_ACCOUNT_KEY) || "").trim().toLowerCase();
+        if (!activeAccount) localStorage.setItem(ACTIVE_ACCOUNT_KEY, accountId);
+    }
+
+    function logoutTabForAccountSwitch() {
+        // Do not clear localStorage token/cookie here: they now belong to the
+        // newly logged-in account in another tab. Only retire this tab's token.
+        sessionStorage.removeItem("admin_token");
+        sessionStorage.removeItem(TAB_ACCOUNT_KEY);
+        window.location.replace("/login?reason=account_switched");
+    }
+
+    window.addEventListener("storage", event => {
+        if (event.key !== ACTIVE_ACCOUNT_KEY || !event.newValue) return;
+        const tabAccount = String(sessionStorage.getItem(TAB_ACCOUNT_KEY) || "").trim().toLowerCase();
+        const newAccount = String(event.newValue).trim().toLowerCase();
+        if (tabAccount && newAccount && tabAccount !== newAccount) {
+            logoutTabForAccountSwitch();
+        }
+    });
+
     function normalizePreferences(value) {
         const preferences = value && typeof value === "object" ? value : {};
         return {
             two_factor: !!preferences.two_factor,
             notifications: preferences.notifications !== false,
-            theme: ["light", "dark", "system"].includes(preferences.theme) ? preferences.theme : "light",
+            theme: "light",
             font_size: Math.max(12, Math.min(24, Number(preferences.font_size) || 16)),
             notification_sound: preferences.notification_sound === "mute" ? "mute" : "default"
         };
@@ -70,35 +102,12 @@
             style.textContent = `
                 html { font-size: var(--base-font-size, 16px); }
                 body, button, input, select, textarea { font-size: inherit; }
-                html.lookfor-dark-theme { color-scheme: dark; }
-                html.lookfor-dark-theme body,
-                html.lookfor-dark-theme .main-content,
-                html.lookfor-dark-theme .content,
-                html.lookfor-dark-theme .page-scroll-area { background-color: #111827 !important; color: #e5e7eb !important; }
-                html.lookfor-dark-theme .settings-card,
-                html.lookfor-dark-theme .profile-card,
-                html.lookfor-dark-theme .modal-content,
-                html.lookfor-dark-theme .detail-card,
-                html.lookfor-dark-theme .table-container { background-color: #1f2937 !important; color: #e5e7eb !important; }
-                html.lookfor-dark-theme h1,
-                html.lookfor-dark-theme h2,
-                html.lookfor-dark-theme h3,
-                html.lookfor-dark-theme h4,
-                html.lookfor-dark-theme p,
-                html.lookfor-dark-theme label { color: inherit; }
-                html.lookfor-dark-theme input,
-                html.lookfor-dark-theme select,
-                html.lookfor-dark-theme textarea { background-color: #111827; color: #f9fafb; border-color: #4b5563; }
             `;
             document.head.appendChild(style);
         }
-        const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-        const useDark = preferences.theme === "dark" || (preferences.theme === "system" && prefersDark);
-        document.documentElement.classList.toggle("lookfor-dark-theme", !!useDark);
         document.documentElement.style.setProperty("--base-font-size", `${preferences.font_size}px`);
         document.documentElement.style.fontSize = `${preferences.font_size}px`;
         if (document.body) {
-            document.body.classList.toggle("dark-theme", !!useDark);
             document.body.style.fontSize = `${preferences.font_size}px`;
         }
         window.lookforUserPreferences = preferences;
@@ -822,6 +831,7 @@
     }
 
     loadCachedPreferences();
+    registerCurrentTabAccount();
     initializeSessionKeepAlive();
     syncUserPreferences();
     if (document.readyState === "loading") {

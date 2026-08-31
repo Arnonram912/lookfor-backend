@@ -166,6 +166,45 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertTrue(lost.is_matched)
         self.assertTrue(found.is_matched)
 
+    @patch("main.analyze_saved_item_details")
+    def test_ranked_candidate_with_stale_matched_flag_is_linked(self, analyzer):
+        lost = lost_item()
+        found = SimpleNamespace(id=7212, is_matched=True)
+        # lost lookup, candidate ownership check, found lookup, existing pair,
+        # and final conflicting-claim check.
+        db = SequencedFakeSession([lost, None, found, None, None])
+        analyzer.return_value = {
+            "highest_score": 0.893,
+            "matched_item": None,
+            "matched_items": [
+                {
+                    "id": 7212,
+                    "source": "found",
+                    "score": 0.893,
+                    "available_for_match": False,
+                }
+            ],
+            "ranked_candidates": [
+                {
+                    "id": 7212,
+                    "source": "found",
+                    "score": 0.893,
+                    "available_for_match": False,
+                }
+            ],
+            "action": "show_match",
+        }
+
+        result = analyze_lost_item_matches(7162, db=db, current_user=user())
+
+        claims = [value for value in db.added if isinstance(value, models.Claim)]
+        self.assertTrue(result["auto_linked"])
+        self.assertEqual(result["matched_item"]["id"], 7212)
+        self.assertTrue(result["matched_item"]["available_for_match"])
+        self.assertEqual(len(claims), 1)
+        self.assertTrue(lost.is_matched)
+        self.assertTrue(found.is_matched)
+
     @patch("main.replace_weaker_ai_match_after_reanalysis", return_value=1)
     @patch("main.analyze_saved_item_details")
     def test_stronger_match_replaces_previous_ai_link(self, analyzer, replace_match):

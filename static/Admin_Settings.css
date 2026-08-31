@@ -8,12 +8,6 @@
   --shadow-strong: 4px 4px 0px #000;
 }
 
-body.dark-theme {
-    --bg-color: #1a1c23;
-    --card-bg: #242631;
-    --text-color: #e1e1e1;
-}
-
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
@@ -110,8 +104,7 @@ body {
   box-shadow: 3px 3px 0px #000;
 }
 
-#notif-sound,
-#theme-select {
+#notif-sound {
   padding: 8px 12px;
   font-size: 14px;
   border: 1px solid #ccc;
@@ -122,14 +115,12 @@ body {
   cursor: pointer;
 }
 
-#notif-sound:hover,
-#theme-select:hover {
+#notif-sound:hover {
   border-color: #0078d7;
   background-color: #eef6ff;
 }
 
-#notif-sound:focus,
-#theme-select:focus {
+#notif-sound:focus {
   outline: none;
   border-color: #0078d7;
   box-shadow: 0 0 4px rgba(0, 120, 215, 0.6);

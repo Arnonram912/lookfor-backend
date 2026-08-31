@@ -454,35 +454,34 @@
             showLoginError('Invalid login session. Please try again.');
             return;
         }
+        const accountId = String(payload.sub || payload.id || '').trim().toLowerCase();
+        if (!accountId) {
+            showLoginError('Invalid account identity. Please try again.');
+            return;
+        }
+
+        // A browser may have an admin token in sessionStorage and a portal token
+        // in localStorage at the same time. A successful login is authoritative:
+        // clear both before storing exactly one account session.
+        sessionStorage.removeItem("admin_token");
+        localStorage.removeItem("token");
+        localStorage.removeItem("admin_token");
+
         // Keep the server-visible page session in sync with the bearer token.
         // The server also sets this cookie; this assignment repairs older
         // browser sessions that cached the pre-cookie login page.
         document.cookie = `admin_access_token=${data.access_token}; max-age=900; path=/; SameSite=Lax`;
 
-        const existingAdminToken = sessionStorage.getItem("admin_token");
-        const existingStudentToken = localStorage.getItem("token");
-
         if (payload.is_admin) {
             sessionStorage.setItem("admin_token", data.access_token);
-            localStorage.removeItem("admin_token");
-
-            if (existingStudentToken) {
-                const studentPayload = decodeJwtPayload(existingStudentToken);
-                if (studentPayload?.is_admin) {
-                    localStorage.removeItem("token");
-                }
-            }
         } else {
             localStorage.setItem("token", data.access_token);
-
-            if (existingAdminToken) {
-                const adminPayload = decodeJwtPayload(existingAdminToken);
-                if (adminPayload && !adminPayload.is_admin) {
-                    sessionStorage.removeItem("admin_token");
-                    localStorage.removeItem("admin_token");
-                }
-            }
         }
+
+        sessionStorage.setItem("lookfor_tab_account", accountId);
+        // localStorage changes broadcast to every other LookFor tab/window.
+        // Tabs belonging to a different account immediately return to login.
+        localStorage.setItem("lookfor_active_account", accountId);
 
         localStorage.setItem("lookfor_last_activity_at", String(Date.now()));
         localStorage.setItem("is_admin", payload.is_admin);

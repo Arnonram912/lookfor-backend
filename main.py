@@ -1495,7 +1495,7 @@ def get_auth_settings(
     return {
         "two_factor": bool(getattr(current_user, "two_factor_enabled", False)),
         "notifications": bool(getattr(current_user, "push_notifications", True)),
-        "theme": getattr(current_user, "theme_mode", "light") or "light",
+        "theme": "light",
         "font_size": int(getattr(current_user, "font_size", 16) or 16),
         "notification_sound": getattr(current_user, "notification_sound", "default") or "default",
     }
@@ -1513,7 +1513,7 @@ def update_auth_settings(
 
     user.two_factor_enabled = bool(payload.two_factor)
     user.push_notifications = bool(payload.notifications)
-    user.theme_mode = payload.theme if payload.theme in {"light", "dark", "system"} else "light"
+    user.theme_mode = "light"
     user.font_size = max(12, min(24, int(payload.font_size)))
     user.notification_sound = (
         payload.notification_sound
@@ -3071,6 +3071,57 @@ def get_saved_item_possible_matches(
     }
 
 
+def recover_authoritative_lost_match(
+    db: Session,
+    lost_item: models.Item,
+    analysis: dict,
+) -> dict | None:
+    """Choose the strongest review-safe candidate using real link ownership.
+
+    ``is_matched`` is a display/cache flag and can be stale after an older
+    claim transition. The scorer still exposes such candidates in its ranked
+    results but marks them unavailable. Before concluding that a lost report
+    has no match, verify ownership against active claims/reservations. This
+    also lets us skip a genuinely occupied first candidate and use the next
+    highest eligible one.
+    """
+    ranked_candidates = analysis.get("ranked_candidates", [])
+    if not isinstance(ranked_candidates, list):
+        return None
+
+    for ranked_candidate in ranked_candidates:
+        if not isinstance(ranked_candidate, dict):
+            continue
+        candidate = {**ranked_candidate, "available_for_match": True}
+        if not is_automatic_match_candidate(candidate):
+            continue
+
+        candidate_id = candidate.get("id")
+        if candidate_id is None:
+            continue
+        source = candidate.get("source", "found")
+
+        if source == "found":
+            active_owner = db.query(models.Claim).filter(
+                models.Claim.found_item_id == candidate_id,
+                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+            ).first()
+            if active_owner and active_owner.lost_item_id != lost_item.id:
+                continue
+            return candidate
+
+        if source == "pending_found":
+            pending_found = db.query(models.PendingItem).filter(
+                models.PendingItem.id == candidate_id,
+                models.PendingItem.archived == False,
+                models.PendingItem.deleted == False,
+            ).first()
+            if pending_found and pending_found.matched_item_id in {None, lost_item.id}:
+                return candidate
+
+    return None
+
+
 @app.post("/api/items/{item_id}/analyze-matches")
 def analyze_lost_item_matches(
     item_id: int,
@@ -3097,6 +3148,10 @@ def analyze_lost_item_matches(
 
     result = analyze_saved_item_details(db, item, record_type="item")
     strongest_match = result.get("matched_item")
+    if not strongest_match:
+        strongest_match = recover_authoritative_lost_match(db, item, result)
+        if strongest_match:
+            result["matched_item"] = strongest_match
     auto_linked = False
     claim_id = None
     pending_approval = False

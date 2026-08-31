@@ -191,14 +191,6 @@
     <section class="settings-card">
         <h3>Display & Layout</h3>
         <div class="setting-item">
-            <p>Theme</p>
-            <select id="theme-select">
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="system">Use device setting</option>
-            </select>
-        </div>
-        <div class="setting-item">
             <p>Font Size</p>
             <input type="range" id="font-slider" min="12" max="24" value="16">
             <span id="font-value">16px</span>
@@ -330,7 +322,7 @@ async function saveSettingsToDB() {
     const settings = {
         two_factor: document.getElementById('2fa-toggle').checked,
         notifications: document.getElementById('push-toggle').checked,
-        theme: document.getElementById('theme-select').value,
+        theme: 'light',
         font_size: parseInt(localStorage.getItem('admin-font-size')) || 16,
         notification_sound: document.getElementById('notif-sound').value,
     };
@@ -366,7 +358,6 @@ async function saveSettingsToDB() {
 async function resetSettings() {
     document.getElementById('2fa-toggle').checked = false;
     document.getElementById('push-toggle').checked = true;
-    document.getElementById('theme-select').value = 'light';
     document.getElementById('notif-sound').value = 'default';
     document.getElementById('font-slider').value = 16;
     updateFontSize(16);
@@ -406,7 +397,6 @@ async function loadSettings() {
     const settings = await response.json();
     document.getElementById('2fa-toggle').checked = !!settings.two_factor;
     document.getElementById('push-toggle').checked = !!settings.notifications;
-    document.getElementById('theme-select').value = settings.theme || 'light';
     document.getElementById('notif-sound').value = settings.notification_sound || 'default';
     localStorage.setItem('admin-font-size', settings.font_size || 16);
     updateFontSize(settings.font_size || 16);
@@ -416,14 +406,6 @@ async function loadSettings() {
 document.getElementById('font-slider').addEventListener('input', (event) => {
     updateFontSize(event.target.value);
 });
-document.getElementById('theme-select').addEventListener('change', event => {
-    window.applyLookForPreferences?.({
-        ...(window.lookforUserPreferences || {}),
-        theme: event.target.value,
-        font_size: Number(document.getElementById('font-slider').value)
-    });
-});
-
 loadSettings();
 function logout() {
         sessionStorage.clear();
@@ -432,7 +414,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=16"></script>
+<script src="/static/session-keepalive.js?v=17"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=6"></script>
