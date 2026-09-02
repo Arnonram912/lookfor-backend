@@ -305,6 +305,32 @@ def strongest_upload_match(match_result: dict | None) -> dict | None:
     return candidate if is_automatic_match_candidate(candidate) else None
 
 
+def mutual_top_upload_match(
+    lost_analysis: dict | None,
+    uploaded_item_id: int,
+    *,
+    source: str,
+) -> dict | None:
+    """Return the upload only when it is the lost report's automatic rank one.
+
+    A found upload must enter each lost report's full candidate competition,
+    including competition decay, before a reservation or claim is authorized.
+    """
+    if not isinstance(lost_analysis, dict):
+        return None
+    ranked_candidates = lost_analysis.get("ranked_candidates")
+    if not isinstance(ranked_candidates, list) or not ranked_candidates:
+        return None
+    top_candidate = ranked_candidates[0]
+    if not isinstance(top_candidate, dict):
+        return None
+    if str(top_candidate.get("id")) != str(uploaded_item_id):
+        return None
+    if top_candidate.get("source", "found") != source:
+        return None
+    return top_candidate if is_automatic_match_candidate(top_candidate) else None
+
+
 def authorize_single_ai_link(
     db,
     lost_item: models.Item,

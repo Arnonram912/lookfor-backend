@@ -58,6 +58,12 @@
             </li>
 
             <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claimed-Items', 'Claim-Management'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon"> Claimed Items
+                </a>
+            </li>
+            <li class="#">
                 <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
                     <img src="/static/photos/handw.png" class="side-icon">  Claim Management
@@ -159,7 +165,6 @@
                             <option value="all">All Items</option>
                             <option value="pending">Pending</option>
                             <option value="matched">Matched</option>
-                            <option value="claimed">Claimed Item</option>
                         </select>
                         <select id="lostCategoryFilter" class="inventory-filter" onchange="resetLostPaginationAndRender()">
                             <option value="all">All Categories</option>

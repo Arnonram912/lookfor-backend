@@ -299,6 +299,33 @@ def _outbox_cipher() -> Fernet:
     return Fernet(key)
 
 
+_ACCOUNT_EMAIL_MAX_ATTEMPTS = 5
+
+
+def _mark_account_email_failed(db, job, *, stage: str, error: Exception | str) -> None:
+    """Permanently fail one delivery stage and emit exactly one alert."""
+    failed_status = f"failed_{stage}"
+    was_failed = job.status == failed_status
+    job.attempt_count = min(
+        int(job.attempt_count or 0),
+        _ACCOUNT_EMAIL_MAX_ATTEMPTS,
+    )
+    job.status = failed_status
+    job.last_error = str(error)[:1000]
+    if not was_failed:
+        db.add(models.Notification(
+            message=(
+                f"The {stage} credential email failed for {job.recipient_email} "
+                f"after {job.attempt_count} attempts. No more automatic retries will be made."
+            ),
+            type="account_email_failed",
+            related_id=job.id,
+            target_url="/admin/User-Management",
+            is_read=False,
+            created_at=datetime.utcnow(),
+        ))
+
+
 def _claim_next_account_email():
     """Claim one job before SMTP delivery so a restart cannot lose the batch."""
     db = SessionLocal()
@@ -330,6 +357,18 @@ def _claim_next_account_email():
             if job.status in {"password_pending", "sending_password"}
             else "username"
         )
+        # Never reclaim a job after its fifth attempt. This also closes the
+        # restart/crash case where attempt five remained in a stale `sending`
+        # state and would otherwise become eligible again after ten minutes.
+        if int(job.attempt_count or 0) >= _ACCOUNT_EMAIL_MAX_ATTEMPTS:
+            _mark_account_email_failed(
+                db,
+                job,
+                stage=stage,
+                error=job.last_error or "Maximum automatic delivery attempts reached",
+            )
+            db.commit()
+            return None
         job.status = f"sending_{stage}"
         job.attempt_count += 1
         # A worker that stops mid-send becomes eligible again after ten minutes.
@@ -368,23 +407,8 @@ def _finish_account_email(
                 job.status = "sent"
                 job.sent_at = datetime.utcnow()
             job.last_error = None
-        elif job.attempt_count >= 5:
-            failed_status = f"failed_{stage}"
-            was_failed = job.status == failed_status
-            job.status = failed_status
-            job.last_error = str(error)[:1000]
-            if not was_failed:
-                db.add(models.Notification(
-                    message=(
-                        f"The {stage} credential email failed for {job.recipient_email} "
-                        f"after {job.attempt_count} attempts."
-                    ),
-                    type="account_email_failed",
-                    related_id=job.id,
-                    target_url="/admin/User-Management",
-                    is_read=False,
-                    created_at=datetime.utcnow(),
-                ))
+        elif job.attempt_count >= _ACCOUNT_EMAIL_MAX_ATTEMPTS:
+            _mark_account_email_failed(db, job, stage=stage, error=error)
         else:
             job.status = "password_pending" if stage == "password" else "pending"
             job.last_error = str(error)[:1000]

@@ -6,6 +6,7 @@ from unittest.mock import patch
 from item_match_lifecycle import (
     authorize_single_ai_link,
     delete_item_claims_and_release_matches,
+    mutual_top_upload_match,
     release_pending_found_link,
     release_stale_ai_match_after_reanalysis,
     replace_weaker_ai_match_after_reanalysis,
@@ -58,6 +59,53 @@ class ItemMatchLifecycleTests(unittest.TestCase):
 
         self.assertEqual(selected["id"], 18)
         self.assertTrue(selected["available_for_match"])
+
+    def test_mutual_top_upload_match_accepts_automatic_rank_one(self):
+        candidate = {
+            "id": 22,
+            "source": "pending_found",
+            "score": 0.81,
+            "available_for_match": True,
+        }
+
+        selected = mutual_top_upload_match(
+            {"ranked_candidates": [candidate, {"id": 23, "score": 0.79}]},
+            22,
+            source="pending_found",
+        )
+
+        self.assertEqual(selected, candidate)
+
+    def test_mutual_top_upload_match_rejects_upload_ranked_second(self):
+        selected = mutual_top_upload_match(
+            {
+                "ranked_candidates": [
+                    {"id": 21, "source": "pending_found", "score": 0.84},
+                    {"id": 22, "source": "pending_found", "score": 0.81},
+                ]
+            },
+            22,
+            source="pending_found",
+        )
+
+        self.assertIsNone(selected)
+
+    def test_mutual_top_upload_match_rejects_review_blocked_rank_one(self):
+        selected = mutual_top_upload_match(
+            {
+                "ranked_candidates": [{
+                    "id": 22,
+                    "source": "pending_found",
+                    "score": 0.81,
+                    "available_for_match": True,
+                    "color_review_required": True,
+                }]
+            },
+            22,
+            source="pending_found",
+        )
+
+        self.assertIsNone(selected)
 
     @patch("item_match_lifecycle.replace_weaker_ai_match_after_reanalysis", return_value=2)
     def test_higher_upload_replaces_existing_ai_links(self, replace_match):

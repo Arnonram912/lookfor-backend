@@ -8,7 +8,7 @@
 
     <title>Admin Panel | LookFor STI</title> 
     <script src="/static/js/script.js"></script>
-    <link rel="stylesheet" href="/static/admin2.o.css?v=17">
+    <link rel="stylesheet" href="/static/admin2.o.css?v=18">
     <link rel="stylesheet" href="/static/Admin_Settings.css?v=9"> 
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -60,6 +60,12 @@
                 </a>
             </li>
 
+            <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claimed-Items', 'Claim-Management'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon"> Claimed Items
+                </a>
+            </li>
             <li class="#">
                 <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
@@ -414,7 +420,7 @@ function logout() {
     }
 </script>
 
-<script src="/static/session-keepalive.js?v=17"></script>
+<script src="/static/session-keepalive.js?v=18"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/admin-notifications.js?v=6"></script>

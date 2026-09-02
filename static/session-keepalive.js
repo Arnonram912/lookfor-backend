@@ -450,13 +450,6 @@
     window.checkAccess = cachedCheckAccess;
 
     function addAdminSidebarMenuItems() {
-        const currentAdminPath = (window.location.pathname || "").toLowerCase();
-        if (
-            currentAdminPath === "/admin/settings"
-            || currentAdminPath === "/c/7d38a2ff-96c7-5851-875e-7a3112aeddf1"
-        ) {
-            return;
-        }
         const nav = document.querySelector("body > .sidebar .nav-links");
         if (!nav) return;
         const menuPermissionByPath = {

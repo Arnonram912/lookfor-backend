@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from fastapi.responses import RedirectResponse, FileResponse
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy.orm import Session, joinedload, load_only
 import models
 from database import get_db, SessionLocal
 from security import get_current_admin, pwd_context, sanitize_email_name_part
@@ -55,7 +55,6 @@ from item_match_lifecycle import (
     authorize_single_ai_link,
     delete_item_claims_and_release_matches,
     release_pending_found_link,
-    strongest_upload_match,
 )
 from lookfor_constants import (
     ACADEMIC_CLASSIFICATIONS,
@@ -2629,16 +2628,79 @@ def get_found_item_match_evaluation(
     }
 
 
+def exclude_claimed_inventory_items(db: Session, item_status: str):
+    """Return an item query that omits records owned by a completed claim."""
+    claim_item_column = (
+        models.Claim.found_item_id
+        if item_status == "found"
+        else models.Claim.lost_item_id
+    )
+    claimed_item_ids = db.query(claim_item_column).filter(
+        models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES),
+        claim_item_column.isnot(None),
+    )
+    return db.query(models.Item).filter(~models.Item.id.in_(claimed_item_ids))
+
+
+@router.get("/items/claimed")
+def get_claimed_items(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("claim_management.view")),
+):
+    """Return completed claims with both lost and found item details."""
+    claims = (
+        db.query(models.Claim)
+        .options(
+            joinedload(models.Claim.lost_item).joinedload(models.Item.owner),
+            joinedload(models.Claim.found_item).joinedload(models.Item.owner),
+            joinedload(models.Claim.claimant),
+        )
+        .filter(models.Claim.status.in_(models.CLAIMED_CLAIM_STATUSES))
+        .order_by(
+            models.Claim.admin_decision_date.desc(),
+            models.Claim.created_at.desc(),
+            models.Claim.id.desc(),
+        )
+        .all()
+    )
+
+    results = []
+    for claim in claims:
+        claimed_at = claim.admin_decision_date or claim.created_at
+        results.append({
+            "claim_id": claim.id,
+            "status": "Claimed Item",
+            "similarity": claim.similarity_score or "Manual Match",
+            "claimed_at": claimed_at.isoformat() if claimed_at else None,
+            "claimant": {
+                "id": claim.claimant.id if claim.claimant else None,
+                "name": format_user_display_name(claim.claimant, "Unknown User"),
+                "student_no": claim.claimant.student_no if claim.claimant else None,
+                "course": claim.claimant.course if claim.claimant else None,
+                "department": claim.claimant.department if claim.claimant else None,
+            },
+            "lost_item": (
+                serialize_inventory_item(db, claim.lost_item)
+                if claim.lost_item else None
+            ),
+            "found_item": (
+                serialize_inventory_item(db, claim.found_item)
+                if claim.found_item else None
+            ),
+        })
+    return results
+
+
 @router.get("/items/found")
 def get_found_items(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("found_items.view")),
 ):
-    items = db.query(models.Item).filter(
+    items = exclude_claimed_inventory_items(db, "found").filter(
         models.Item.status == "found",
         models.Item.archived == False,
         models.Item.deleted == False,
-    ).all()
+    ).order_by(models.Item.created_at.desc(), models.Item.id.desc()).all()
     return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/found/archived")
@@ -2646,12 +2708,12 @@ def get_archived_found_items(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("found_items.view")),
 ):
-    items = db.query(models.Item).filter(
+    items = exclude_claimed_inventory_items(db, "found").filter(
         models.Item.status == "found",
         models.Item.archived == True,
         models.Item.deleted == False,
         models.Item.disposal_status == "active",
-    ).all()
+    ).order_by(models.Item.created_at.desc(), models.Item.id.desc()).all()
     return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/found/deleted")
@@ -2659,10 +2721,10 @@ def get_deleted_found_items(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("found_items.view")),
 ):
-    items = db.query(models.Item).filter(
+    items = exclude_claimed_inventory_items(db, "found").filter(
         models.Item.status == "found",
         models.Item.deleted == True,
-    ).all()
+    ).order_by(models.Item.created_at.desc(), models.Item.id.desc()).all()
     return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/lost")
@@ -2670,11 +2732,11 @@ def get_lost_items(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("lost_items.view")),
 ):
-    items = db.query(models.Item).filter(
+    items = exclude_claimed_inventory_items(db, "lost").filter(
         models.Item.status == "lost",
         models.Item.archived == False,
         models.Item.deleted == False,
-    ).all()
+    ).order_by(models.Item.created_at.desc(), models.Item.id.desc()).all()
     return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/lost/archived")
@@ -2682,12 +2744,12 @@ def get_archived_lost_items(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("lost_items.view")),
 ):
-    items = db.query(models.Item).filter(
+    items = exclude_claimed_inventory_items(db, "lost").filter(
         models.Item.status == "lost",
         models.Item.archived == True,
         models.Item.deleted == False,
         models.Item.disposal_status == "active",
-    ).all()
+    ).order_by(models.Item.created_at.desc(), models.Item.id.desc()).all()
     return [serialize_inventory_item(db, item) for item in items]
 
 @router.get("/items/lost/deleted")
@@ -2695,10 +2757,10 @@ def get_deleted_lost_items(
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(check_permission("lost_items.view")),
 ):
-    items = db.query(models.Item).filter(
+    items = exclude_claimed_inventory_items(db, "lost").filter(
         models.Item.status == "lost",
         models.Item.deleted == True,
-    ).all()
+    ).order_by(models.Item.created_at.desc(), models.Item.id.desc()).all()
     return [serialize_inventory_item(db, item) for item in items]
 @router.get("/dashboard")
 def admin_dashboard(
@@ -2762,6 +2824,16 @@ def admin_claim_management( # Renamed this function
         "Admin Pages/Claim_Management.html",
         {"request": request} 
     )
+
+
+@router.get("/Claimed-Items")
+def admin_claimed_items(request: Request):
+    return templates.TemplateResponse(
+        "Admin Pages/Claimed_Items.html",
+        {"request": request},
+    )
+
+
 @router.get("/Reports")
 def admin_reports(
     request: Request
@@ -2957,7 +3029,7 @@ def get_pending_items(
     items = db.query(models.PendingItem).filter(
         models.PendingItem.archived == False,
         models.PendingItem.deleted == False,
-    ).order_by(models.PendingItem.created_at.desc()).all()
+    ).order_by(models.PendingItem.created_at.desc(), models.PendingItem.id.desc()).all()
 
     return [serialize_pending_item(db, item) for item in items]
 
@@ -2970,7 +3042,7 @@ def get_archived_pending_items(
     items = db.query(models.PendingItem).filter(
         models.PendingItem.archived == True,
         models.PendingItem.deleted == False,
-    ).order_by(models.PendingItem.created_at.desc()).all()
+    ).order_by(models.PendingItem.created_at.desc(), models.PendingItem.id.desc()).all()
 
     return [serialize_pending_item(db, item) for item in items]
 
@@ -2981,7 +3053,7 @@ def get_deleted_pending_items(
 ):
     items = db.query(models.PendingItem).filter(
         models.PendingItem.deleted == True
-    ).order_by(models.PendingItem.created_at.desc()).all()
+    ).order_by(models.PendingItem.created_at.desc(), models.PendingItem.id.desc()).all()
     return [serialize_pending_item(db, item) for item in items]
 
 @router.get("/departments")
@@ -5313,47 +5385,51 @@ async def finalize_found_upload(
         db.add(new_item)
         db.flush()
 
-        from main import analyze_saved_item_details
+        from main import analyze_found_upload_from_lost_side
 
         match_result = await run_in_threadpool(
-            lambda: analyze_saved_item_details(db, new_item, record_type="found")
+            lambda: analyze_found_upload_from_lost_side(
+                db,
+                new_item,
+                record_type="found",
+            )
         )
-        strongest_match = strongest_upload_match(match_result)
-        matched_item_id = strongest_match.get("id") if strongest_match else None
-        ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
-        is_auto_match = matched_item_id is not None and ai_score >= MATCH_THRESHOLD
+        automatic_matches = match_result.pop("automatic_matches", [])
+        lost_item = None
+        ai_score = 0.0
+        is_auto_match = False
         
         # 6. Handle the "Other Side" of the match
-        if is_auto_match:
-            lost_item = db.query(models.Item).filter(models.Item.id == matched_item_id).first()
-            if lost_item and lost_item.status == "lost" and not lost_item.archived:
-                is_auto_match, _ = authorize_single_ai_link(
-                    db,
-                    lost_item,
-                    {
-                        "id": new_item.id,
-                        "source": "found",
-                        "score": float(strongest_match.get("score", ai_score) or 0),
-                    },
-                )
-            else:
-                is_auto_match = False
-
+        for automatic_match in automatic_matches:
+            candidate_lost_item = automatic_match["lost_item"]
+            lost_analysis = automatic_match["analysis"]
+            lost_side_match = automatic_match["upload_candidate"]
+            is_auto_match, _ = authorize_single_ai_link(
+                db,
+                candidate_lost_item,
+                lost_side_match,
+                ranked_candidates=lost_analysis.get("ranked_candidates", []),
+            )
             if is_auto_match:
-                new_item.is_matched = True
-                lost_item.is_matched = True
-                prepend_lost_possible_match(
-                    lost_item,
-                    serialize_found_item_match(new_item, ai_score)
-                )
-                ensure_pending_claim_for_pair(
-                    db,
-                    lost_item=lost_item,
-                    found_item=new_item,
-                    claimant_id=lost_item.user_id or new_item.user_id or current_user.id,
-                    similarity_score=f"{ai_score * 100:.1f}%"
-                )
-                notify_lost_item_owner_of_match(db, lost_item, new_item)
+                lost_item = candidate_lost_item
+                ai_score = float(lost_side_match.get("score", 0) or 0)
+                break
+
+        if is_auto_match and lost_item:
+            new_item.is_matched = True
+            lost_item.is_matched = True
+            prepend_lost_possible_match(
+                lost_item,
+                serialize_found_item_match(new_item, ai_score)
+            )
+            ensure_pending_claim_for_pair(
+                db,
+                lost_item=lost_item,
+                found_item=new_item,
+                claimant_id=lost_item.user_id or new_item.user_id or current_user.id,
+                similarity_score=f"{ai_score * 100:.1f}%"
+            )
+            notify_lost_item_owner_of_match(db, lost_item, new_item)
 
         db.commit()
         db.refresh(new_item)

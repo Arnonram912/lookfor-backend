@@ -94,9 +94,9 @@ from matching_metrics import (
 from matching_observation_dataset import record_match_observations
 from item_match_lifecycle import (
     authorize_single_ai_link,
+    mutual_top_upload_match,
     release_stale_ai_match_after_reanalysis,
     replace_weaker_ai_match_after_reanalysis,
-    strongest_upload_match,
 )
 
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
@@ -271,6 +271,11 @@ PAGE_ALIASES = {
         "alias": "f97a07ee-7138-519e-8e81-c077ced9ee0a",
         "template": "Admin Pages/Claim_Management.html",
         "label": "Claim Management",
+    },
+    "/admin/Claimed-Items": {
+        "alias": "9a8d6db4-1ff0-5de3-9fb5-969b430a8c5d",
+        "template": "Admin Pages/Claimed_Items.html",
+        "label": "Claimed Items",
     },
     "/admin/Reports": {
         "alias": "8c2dc56e-79ae-5939-890e-315c8a959b32",
@@ -475,6 +480,7 @@ def hashed_page(
             "/admin/Lost_Items_Report": "lost_items.view",
             "/admin/Found_Items_Report": "found_items.view",
             "/admin/Claim-Management": "claim_management.view",
+            "/admin/Claimed-Items": "claim_management.view",
             "/admin/Reports": "reports.view",
             "/admin/Audit-Logs": "audit_logs.view",
             "/admin/Profile": "profile.view",
@@ -3298,6 +3304,102 @@ def analyze_lost_item_matches(
     return result
 
 
+def analyze_found_upload_from_lost_side(
+    db: Session,
+    uploaded_item,
+    *,
+    record_type: str,
+) -> dict:
+    """Run a new found report through every active lost report's analysis.
+
+    The lost report is deliberately the query, matching the behavior of the
+    explicit ``Analyze Match`` action.  This matters because competition decay
+    and rank-one selection are query-side decisions; reversing the query can
+    select a different pair.
+    """
+    if record_type not in {"pending-found", "found"}:
+        raise ValueError("Found upload analysis requires a found record type")
+
+    source = "pending_found" if record_type == "pending-found" else "found"
+    evaluated_matches = []
+    automatic_matches = []
+    lost_items = db.query(models.Item).filter(
+        models.Item.status.ilike("lost"),
+        models.Item.archived == False,
+        models.Item.deleted == False,
+    ).all()
+
+    for lost_item in lost_items:
+        analysis = analyze_saved_item_details(db, lost_item, record_type="item")
+        ranked_candidates = analysis.get("ranked_candidates", [])
+        uploaded_candidate = next((
+            candidate
+            for candidate in ranked_candidates
+            if (
+                isinstance(candidate, dict)
+                and str(candidate.get("id")) == str(uploaded_item.id)
+                and candidate.get("source", "found") == source
+            )
+        ), None)
+        if not uploaded_candidate:
+            continue
+
+        lost_payload = build_saved_match_payload(
+            lost_item,
+            uploaded_candidate.get("score", 0),
+            "lost",
+            evaluation=uploaded_candidate,
+        )
+        possible_matches = analysis.get("matched_items", [])
+        if any(
+            isinstance(candidate, dict)
+            and str(candidate.get("id")) == str(uploaded_item.id)
+            and candidate.get("source", "found") == source
+            for candidate in possible_matches
+        ):
+            evaluated_matches.append(lost_payload)
+
+        automatic_candidate = mutual_top_upload_match(
+            analysis,
+            uploaded_item.id,
+            source=source,
+        )
+        if automatic_candidate:
+            automatic_matches.append({
+                "lost_item": lost_item,
+                "analysis": analysis,
+                "upload_candidate": automatic_candidate,
+                "lost_payload": lost_payload,
+            })
+
+    evaluated_matches.sort(
+        key=lambda candidate: (
+            float(candidate.get("score", 0) or 0),
+            float(candidate.get("raw_score", 0) or 0),
+        ),
+        reverse=True,
+    )
+    automatic_matches.sort(
+        key=lambda entry: (
+            float(entry["upload_candidate"].get("score", 0) or 0),
+            float(entry["upload_candidate"].get("raw_score", 0) or 0),
+        ),
+        reverse=True,
+    )
+
+    top_payload = automatic_matches[0]["lost_payload"] if automatic_matches else None
+    return {
+        "highest_score": float(top_payload.get("score", 0) or 0) if top_payload else 0.0,
+        "highest_raw_score": float(top_payload.get("raw_score", 0) or 0) if top_payload else 0.0,
+        "generated_embedding": [],
+        "matched_item": top_payload,
+        "matched_items": evaluated_matches[:5],
+        "ranked_candidates": evaluated_matches[:10],
+        "action": "show_match" if evaluated_matches else "no_match",
+        "automatic_matches": automatic_matches,
+    }
+
+
 @app.get("/api/users/list")
 def get_conversation_partners(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     # 1. Find all User IDs involved in a conversation with the logged-in user
@@ -3549,17 +3651,38 @@ async def save_found_item(
     db.add(new_pending)
     db.flush()
     match_result = await run_in_threadpool(
-        lambda: analyze_saved_item_details(db, new_pending, record_type="pending-found")
+        lambda: analyze_found_upload_from_lost_side(
+            db,
+            new_pending,
+            record_type="pending-found",
+        )
     )
-    strongest_match = strongest_upload_match(match_result)
-    matched_item_id = strongest_match.get("id") if strongest_match else None
-    match_score = float(match_result.get("highest_score", 0.0) or 0.0)
-    # Keep the new report unreserved until the single-link lifecycle authorizes
-    # it. This makes an unlink-and-relink happen in the final transaction.
-    new_pending.matched_item_id = None
+    automatic_matches = match_result.pop("automatic_matches", [])
+    matched_lost_item = None
+    matched_payload = None
+    match_score = 0.0
+    match_raw_score = 0.0
+    for automatic_match in automatic_matches:
+        candidate_lost_item = automatic_match["lost_item"]
+        lost_analysis = automatic_match["analysis"]
+        lost_side_match = automatic_match["upload_candidate"]
+        link_authorized, _ = authorize_single_ai_link(
+            db,
+            candidate_lost_item,
+            lost_side_match,
+            ranked_candidates=lost_analysis.get("ranked_candidates", []),
+        )
+        if link_authorized:
+            matched_lost_item = candidate_lost_item
+            matched_payload = automatic_match["lost_payload"]
+            match_score = float(lost_side_match.get("score", 0) or 0)
+            match_raw_score = float(lost_side_match.get("raw_score", match_score) or 0)
+            break
 
-    db.commit()
-    db.refresh(new_pending)
+    matched_item_id = matched_lost_item.id if matched_lost_item else None
+    match_result["matched_item"] = matched_payload
+    match_result["highest_score"] = match_score
+    match_result["highest_raw_score"] = match_raw_score
 
     queue_item_event_email(
         current_user.email,
@@ -3583,64 +3706,38 @@ async def save_found_item(
     
     db.add(admin_notif)
 
-    if matched_item_id:
-        matched_lost_item = db.query(models.Item).filter(
-            models.Item.id == matched_item_id,
-            models.Item.status == "lost",
-            models.Item.archived == False,
-            models.Item.deleted == False,
-        ).first()
+    if matched_lost_item:
+        new_pending.matched_item_id = matched_lost_item.id
+        matched_lost_item.is_matched = True
+        possible_match_count = prepend_lost_possible_match(
+            matched_lost_item,
+            serialize_pending_found_match(new_pending, match_score)
+        )
 
-        if matched_lost_item:
-            link_authorized, _ = authorize_single_ai_link(
-                db,
-                matched_lost_item,
-                {
-                    "id": new_pending.id,
-                    "source": "pending_found",
-                    "score": float(strongest_match.get("score", match_score) or 0),
-                },
-            )
-        else:
-            link_authorized = False
-
-        if matched_lost_item and link_authorized:
-            new_pending.matched_item_id = matched_lost_item.id
-            matched_lost_item.is_matched = True
-            possible_match_count = prepend_lost_possible_match(
-                matched_lost_item,
-                serialize_pending_found_match(new_pending, match_score)
-            )
-
-            if matched_lost_item.user_id:
-                reporter_name = format_user_display_name(current_user)
-                lost_owner = db.query(models.User).filter(
-                    models.User.id == matched_lost_item.user_id
-                ).first()
-                db.add(models.Notification(
-                    message=f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
-                    type="student_match",
-                    related_id=matched_lost_item.user_id,
-                    target_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
-                    is_read=False,
-                    created_at=datetime.utcnow()
-                ))
-                if lost_owner:
-                    queue_item_event_email(
-                        lost_owner.email,
-                        format_user_display_name(lost_owner),
-                        subject="A possible match was found for your lost item",
-                        message_text=POSSIBLE_MATCH_EMAIL_TEXT,
-                        action_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
-                    )
-        else:
-            # It remains a possible match for display, but it is not the linked
-            # match when an equal/stronger or protected link already exists.
-            matched_item_id = None
-            admin_notif.message = f"New {category} reported at {location}."
-            admin_notif.type = "new_report"
+        if matched_lost_item.user_id:
+            reporter_name = format_user_display_name(current_user)
+            lost_owner = db.query(models.User).filter(
+                models.User.id == matched_lost_item.user_id
+            ).first()
+            db.add(models.Notification(
+                message=f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
+                type="student_match",
+                related_id=matched_lost_item.user_id,
+                target_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
+                is_read=False,
+                created_at=datetime.utcnow()
+            ))
+            if lost_owner:
+                queue_item_event_email(
+                    lost_owner.email,
+                    format_user_display_name(lost_owner),
+                    subject="A possible match was found for your lost item",
+                    message_text=POSSIBLE_MATCH_EMAIL_TEXT,
+                    action_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
+                )
 
     db.commit()
+    db.refresh(new_pending)
     
     return {
         "message": "Submitted successfully",

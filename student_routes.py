@@ -35,7 +35,6 @@ from item_match_lifecycle import (
     authorize_single_ai_link,
     delete_item_claims_and_release_matches,
     release_pending_found_link,
-    strongest_upload_match,
 )
 
 
@@ -268,6 +267,7 @@ def serialize_student_item(
     report_item_code = item_display_code(item)
     report_owner_name = str(getattr(item, "report_owner_name", "") or "").strip()
     report_owner_group = str(getattr(item, "report_owner_group", "") or "").strip()
+    created_at = getattr(item, "created_at", None)
     # Approved found items and matched/claimed lost items have a student-only
     # lifecycle. Unmatched lost reports still use the shared admin lifecycle.
     uses_personal_lifecycle = (
@@ -294,6 +294,7 @@ def serialize_student_item(
         "image_path": public_file_url(item.image_path),
         "date": item.date.isoformat() if item.date else None,
         "time_found": item.time_found,
+        "created_at": created_at.isoformat() if created_at else None,
         "is_matched": bool(item.is_matched),
         "is_claimed": bool(is_claimed),
         "is_surrendered": bool(item.is_surrendered),
@@ -314,6 +315,7 @@ def serialize_student_item(
 
 def serialize_student_pending_found(item: models.PendingItem, owner: models.User | None) -> dict:
     pending_code = format_item_code("pending_found", item.id)
+    created_at = getattr(item, "created_at", None)
     return {
         "id": item.id,
         "item_id": item.id,
@@ -331,6 +333,7 @@ def serialize_student_pending_found(item: models.PendingItem, owner: models.User
         "description": item.description,
         "date": item.date.isoformat() if item.date else None,
         "time_found": item.time_found,
+        "created_at": created_at.isoformat() if created_at else None,
         "uploader_name": format_user_display_name(owner, "Self"),
         "uploader_role": format_user_role_label(owner),
     }
@@ -609,67 +612,64 @@ async def report_found_item(
 
     # A newly uploaded found report is the event that refreshes affected lost
     # report caches. Do not trust or require a pre-upload browser comparison.
-    from main import analyze_saved_item_details
+    from main import analyze_found_upload_from_lost_side
 
     match_result = await run_in_threadpool(
-        lambda: analyze_saved_item_details(db, pending_item, record_type="pending-found")
+        lambda: analyze_found_upload_from_lost_side(
+            db,
+            pending_item,
+            record_type="pending-found",
+        )
     )
-    strongest_match = strongest_upload_match(match_result)
-    matched_item_id = strongest_match.get("id") if strongest_match else None
-    ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
-    is_auto_match = matched_item_id is not None and ai_score >= MATCH_THRESHOLD
-    # The analyzer may tentatively fill this field. Linking is authorized below
-    # only after checking/replacing the lost report's existing AI link.
-    pending_item.matched_item_id = None
-
+    automatic_matches = match_result.pop("automatic_matches", [])
     matched_lost_item = None
     matched_lost_owner = None
-    match_score = float(ai_score or 0)
-    if is_auto_match:
-        matched_lost_item = db.query(models.Item).filter(
-            models.Item.id == matched_item_id,
-            models.Item.status == "lost",
-            models.Item.archived == False
-        ).first()
-        if matched_lost_item:
-            is_auto_match, _ = authorize_single_ai_link(
+    match_score = 0.0
+    is_auto_match = False
+    for automatic_match in automatic_matches:
+        candidate_lost_item = automatic_match["lost_item"]
+        lost_analysis = automatic_match["analysis"]
+        lost_side_match = automatic_match["upload_candidate"]
+        is_auto_match, _ = authorize_single_ai_link(
+            db,
+            candidate_lost_item,
+            lost_side_match,
+            ranked_candidates=lost_analysis.get("ranked_candidates", []),
+        )
+        if is_auto_match:
+            matched_lost_item = candidate_lost_item
+            match_score = float(lost_side_match.get("score", 0) or 0)
+            break
+
+    if matched_lost_item and is_auto_match:
+        matched_item_id = matched_lost_item.id
+        admin_match_score = f"{match_score * 100:.1f}%"
+        pending_item.matched_item_id = matched_lost_item.id
+        matched_lost_item.is_matched = True
+        possible_match_count = prepend_lost_possible_match(
+            matched_lost_item,
+            serialize_pending_found_match(pending_item, match_score)
+        )
+        db.add(models.Notification(
+            message=f"AI MATCH ({admin_match_score}): Found {category} may match Lost Item #{matched_item_id}.",
+            type="match",
+            related_id=pending_item.id,
+            target_url="/admin/Found_Items_Report",
+            is_read=False,
+            created_at=datetime.utcnow()
+        ))
+
+        owner_id = matched_lost_item.report_owner_user_id or matched_lost_item.user_id
+        if owner_id:
+            matched_lost_owner = db.query(models.User).filter(models.User.id == owner_id).first()
+            reporter_name = current_user.full_name or current_user.email or "A student"
+            create_student_notification(
                 db,
-                matched_lost_item,
-                {
-                    "id": pending_item.id,
-                    "source": "pending_found",
-                    "score": float(strongest_match.get("score", ai_score) or 0),
-                },
+                owner_id,
+                f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
+                "student_match",
+                f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1"
             )
-
-        if matched_lost_item and is_auto_match:
-            admin_match_score = f"{ai_score * 100:.1f}%"
-            pending_item.matched_item_id = matched_lost_item.id
-            matched_lost_item.is_matched = True
-            possible_match_count = prepend_lost_possible_match(
-                matched_lost_item,
-                serialize_pending_found_match(pending_item, match_score)
-            )
-            db.add(models.Notification(
-                message=f"AI MATCH ({admin_match_score}): Found {category} may match Lost Item #{matched_item_id}.",
-                type="match",
-                related_id=pending_item.id,
-                target_url="/admin/Found_Items_Report",
-                is_read=False,
-                created_at=datetime.utcnow()
-            ))
-
-            owner_id = matched_lost_item.report_owner_user_id or matched_lost_item.user_id
-            if owner_id:
-                matched_lost_owner = db.query(models.User).filter(models.User.id == owner_id).first()
-                reporter_name = current_user.full_name or current_user.email or "A student"
-                create_student_notification(
-                    db,
-                    owner_id,
-                    f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
-                    "student_match",
-                    f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1"
-                )
     else:
         db.add(models.Notification(
             message=f"New Found Report: {category} ({item_name}) submitted by {current_user.full_name or current_user.email}.",
@@ -867,6 +867,9 @@ def get_my_found_items(
         models.PendingItem.user_id == current_user.id,
         models.PendingItem.archived == archived,
         models.PendingItem.deleted == deleted,
+    ).order_by(
+        models.PendingItem.created_at.desc(),
+        models.PendingItem.id.desc(),
     ).all()
     
     approved = db.query(models.Item).filter(
@@ -877,6 +880,9 @@ def get_my_found_items(
         models.Item.student_archived == archived,
         models.Item.student_deleted == deleted,
         models.Item.student_hidden == False,
+    ).order_by(
+        models.Item.created_at.desc(),
+        models.Item.id.desc(),
     ).all()
     approved_ids = [item.id for item in approved]
     claimed_found_ids = set()
@@ -903,6 +909,14 @@ def get_my_found_items(
             "display_status": display_status,
             "data": serialize_student_item(a, current_user, is_claimed=is_claimed)
         })
+
+    results.sort(
+        key=lambda entry: (
+            entry["data"].get("created_at") or "",
+            int(entry["data"].get("id") or 0),
+        ),
+        reverse=True,
+    )
         
     return results
 
@@ -1412,6 +1426,9 @@ def get_my_lost_reports(
             ) if current_user_name else False,
         ),
         models.Item.status == "lost",
+    ).order_by(
+        models.Item.created_at.desc(),
+        models.Item.id.desc(),
     ).all()
 
     report_ids = [report.id for report in reports]

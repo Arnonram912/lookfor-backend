@@ -68,6 +68,12 @@
             </li>
 
             <li class="#">
+                <a href="#" onclick="checkAccess('/admin/Claimed-Items', 'Claim-Management'); return false;"
+                   style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
+                    <img src="/static/photos/handw.png" class="side-icon"> Claimed Items
+                </a>
+            </li>
+            <li class="#">
                 <a href="#" onclick="checkAccess('/admin/Claim-Management', 'Claim-Management'); return false;" 
                    style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%;">
                     <img src="/static/photos/handw.png" class="side-icon">  Claim Management
@@ -173,7 +179,6 @@
                             <option value="pending">Pending</option>
                             <option value="approved">Approved</option>
                             <option value="matched">Matched</option>
-                            <option value="claimed">Claimed Item</option>
                             <option value="user-gave">User Gave Item</option>
                         </select>
                         <select id="foundCategoryFilter" class="inventory-filter" onchange="resetFoundPaginationAndRender()">
@@ -744,6 +749,11 @@ function showAccessDeniedPopup(permName) {
                         : []),
                 ];
             }
+            foundItemsCache.sort((a, b) => {
+                const timeDifference = (Date.parse(b?.created_at || '') || 0)
+                    - (Date.parse(a?.created_at || '') || 0);
+                return timeDifference || (Number(b?.id || 0) - Number(a?.id || 0));
+            });
             updateFoundArchiveButton();
             populateFoundCategoryFilter();
             currentFoundPage = 1;

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from account_email import (
     POSSIBLE_MATCH_EMAIL_TEXT,
+    _claim_next_account_email,
     _finish_account_email,
     build_account_access_messages,
     send_account_access_email_stage,
@@ -22,17 +23,21 @@ class FakeOutboxQuery:
     def first(self):
         return self.job
 
+    def order_by(self, *args, **kwargs):
+        return self
+
 
 class FakeOutboxSession:
     def __init__(self, job):
         self.job = job
         self.committed = False
+        self.added = []
 
     def query(self, *args, **kwargs):
         return FakeOutboxQuery(self.job)
 
     def add(self, value):
-        pass
+        self.added.append(value)
 
     def commit(self):
         self.committed = True
@@ -137,6 +142,47 @@ class AccountEmailTests(unittest.TestCase):
         self.assertLess(delay_seconds, 121)
         self.assertIsNone(job.sent_at)
         self.assertTrue(db.committed)
+
+    def test_fifth_attempt_is_never_reclaimed_for_a_sixth_send(self):
+        job = SimpleNamespace(
+            id=8,
+            status="sending_username",
+            attempt_count=5,
+            available_at=datetime.utcnow(),
+            last_error="SMTP credentials rejected",
+            recipient_email="student@example.com",
+        )
+        db = FakeOutboxSession(job)
+
+        with patch("account_email.SessionLocal", return_value=db):
+            claimed = _claim_next_account_email()
+
+        self.assertIsNone(claimed)
+        self.assertEqual(job.status, "failed_username")
+        self.assertEqual(job.attempt_count, 5)
+        self.assertEqual(len(db.added), 1)
+        self.assertIn("No more automatic retries", db.added[0].message)
+        self.assertTrue(db.committed)
+
+    def test_exhausted_job_creates_only_one_failure_notification(self):
+        job = SimpleNamespace(
+            id=9,
+            status="sending_username",
+            attempt_count=5,
+            available_at=datetime.utcnow(),
+            sent_at=None,
+            last_error=None,
+            recipient_email="student@example.com",
+        )
+        db = FakeOutboxSession(job)
+
+        with patch("account_email.SessionLocal", return_value=db):
+            _finish_account_email(job.id, stage="username", error=RuntimeError("SMTP failed"))
+            _finish_account_email(job.id, stage="username", error=RuntimeError("SMTP failed again"))
+
+        self.assertEqual(job.status, "failed_username")
+        self.assertEqual(job.attempt_count, 5)
+        self.assertEqual(len(db.added), 1)
 
 
 if __name__ == "__main__":
