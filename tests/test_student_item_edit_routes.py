@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
+from main import item_detail_owner_matches
 from student_routes import edit_lost_item, edit_pending_found_item, reanalyze_student_item_edit
 
 
@@ -40,6 +41,10 @@ class FakeSession:
 
 def student_user():
     return SimpleNamespace(id=7, full_name="Test Student", first_name=None, middle_name=None, last_name=None)
+
+
+def admin_user():
+    return SimpleNamespace(id=99, is_admin=True, full_name="Admin User", first_name=None, middle_name=None, last_name=None)
 
 
 def lost_item(*, matched=False):
@@ -226,6 +231,11 @@ class StudentItemEditRouteTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(error.exception.status_code, 409)
         self.assertFalse(db.committed)
+
+    def test_admin_cannot_edit_someone_elses_item_details(self):
+        item = lost_item()
+
+        self.assertFalse(item_detail_owner_matches(item, admin_user()))
 
 
 if __name__ == "__main__":

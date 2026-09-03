@@ -1355,10 +1355,12 @@ async function analyzeStudentLostItemMatches() {
                 statusEl.style.color = '#28a745';
             }
             await showLostUploadAlert(
-                'success',
-                'Automatic match linked',
-                'The confidence reached 75%, both items were marked as matched, and a pending claim was created.'
+                'info',
+                'AI match found',
+                'Your report is marked as matched. An administrator must still confirm the correct item before a claim is created.'
             );
+        } else if (result.requires_admin_selection) {
+            await showLostUploadAlert('info', 'Possible matches found', 'An administrator will review these matches before creating a claim.');
         }
         const container = document.getElementById('modalPossibleMatches');
         const matchedItems = Array.isArray(result?.matched_items) ? result.matched_items : [];
@@ -1566,9 +1568,9 @@ async function studentLostLifecycleAction(action, itemId, personalOnly = false) 
             }
         };
     </script>
-<script src="/static/item-detail-editor.js?v=7" data-item-type="item" data-reload="loadLostItems"></script>
+<script src="/static/item-detail-editor.js?v=8" data-item-type="item" data-reload="loadLostItems"></script>
 <script src="/static/session-keepalive.js?v=17"></script>
-<script src="/static/student-notifications.js?v=7"></script>
+<script src="/static/student-notifications.js?v=9"></script>
 <script src="/static/force-password-change.js"></script>
 <script src="/static/student-sidebar-access.js?v=3"></script>
 </body>

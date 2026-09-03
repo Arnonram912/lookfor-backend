@@ -2,6 +2,9 @@
     let notifications = [];
     let unreadCount = 0;
     let observedUnreadCount = null;
+    let notificationSocket = null;
+    let notificationSocketRetryHandle = null;
+    const STUDENT_NOTIFICATION_FALLBACK_POLL_MS = 120000;
 
     function formatUnreadCount(count) {
         return count > 99 ? "99+" : String(count);
@@ -22,6 +25,13 @@
     function getStudentAuthHeader() {
         const token = getStudentToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
+    function notificationWebSocketUrl() {
+        const token = getStudentToken();
+        if (!token) return "";
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        return `${protocol}//${window.location.host}/ws/notifications?role=student&token=${encodeURIComponent(token)}`;
     }
 
     function escapeHtml(text) {
@@ -353,6 +363,50 @@
         }
     }
 
+    function scheduleNotificationSocketReconnect() {
+        if (notificationSocketRetryHandle) return;
+        notificationSocketRetryHandle = window.setTimeout(() => {
+            notificationSocketRetryHandle = null;
+            connectNotificationSocket();
+        }, 5000);
+    }
+
+    function connectNotificationSocket() {
+        if (!("WebSocket" in window)) return;
+        if (notificationSocket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(notificationSocket.readyState)) {
+            return;
+        }
+
+        const socketUrl = notificationWebSocketUrl();
+        if (!socketUrl) return;
+
+        notificationSocket = new WebSocket(socketUrl);
+        notificationSocket.onopen = () => {
+            loadNotifications();
+        };
+        notificationSocket.onmessage = (event) => {
+            let payload = null;
+            try {
+                payload = JSON.parse(event.data);
+            } catch (error) {
+                return;
+            }
+            if (payload?.type !== "notification_count") return;
+
+            const nextUnreadCount = Number(payload.unread_count || 0);
+            if (nextUnreadCount !== unreadCount) {
+                unreadCount = nextUnreadCount;
+                loadNotifications();
+            } else {
+                updateNotificationUI();
+            }
+        };
+        notificationSocket.onclose = scheduleNotificationSocketReconnect;
+        notificationSocket.onerror = () => {
+            notificationSocket?.close();
+        };
+    }
+
     async function markStudentNotificationRead(notifId) {
         const notif = notifications.find((entry) => entry.id === notifId);
         if (notif && !notif.is_read) {
@@ -420,11 +474,16 @@
         ensureMessageDropdown();
         updateMessageUnreadBadge();
         loadMessageInteractions();
+        connectNotificationSocket();
         setInterval(updateMessageUnreadBadge, 10000);
         if (document.getElementById("notificationList")) {
             ensureNotificationActions();
             loadNotifications();
-            setInterval(loadNotifications, 30000);
+            setInterval(() => {
+                if (!notificationSocket || notificationSocket.readyState !== WebSocket.OPEN) {
+                    loadNotifications();
+                }
+            }, STUDENT_NOTIFICATION_FALLBACK_POLL_MS);
         }
     });
 

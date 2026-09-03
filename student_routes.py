@@ -612,7 +612,7 @@ async def report_found_item(
 
     # A newly uploaded found report is the event that refreshes affected lost
     # report caches. Do not trust or require a pre-upload browser comparison.
-    from main import analyze_found_upload_from_lost_side
+    from main import analyze_found_upload_from_lost_side, synchronize_automatic_item_match
 
     match_result = await run_in_threadpool(
         lambda: analyze_found_upload_from_lost_side(
@@ -622,79 +622,40 @@ async def report_found_item(
         )
     )
     automatic_matches = match_result.pop("automatic_matches", [])
-    matched_lost_item = None
-    matched_lost_owner = None
-    match_score = 0.0
     is_auto_match = False
-    for automatic_match in automatic_matches:
-        candidate_lost_item = automatic_match["lost_item"]
-        lost_analysis = automatic_match["analysis"]
-        lost_side_match = automatic_match["upload_candidate"]
-        is_auto_match, _ = authorize_single_ai_link(
+    if automatic_matches:
+        automatic_match = automatic_matches[0]
+        is_auto_match, _ = synchronize_automatic_item_match(
             db,
-            candidate_lost_item,
-            lost_side_match,
-            ranked_candidates=lost_analysis.get("ranked_candidates", []),
+            automatic_match["lost_item"],
+            automatic_match["upload_candidate"],
         )
-        if is_auto_match:
-            matched_lost_item = candidate_lost_item
-            match_score = float(lost_side_match.get("score", 0) or 0)
-            break
-
-    if matched_lost_item and is_auto_match:
-        matched_item_id = matched_lost_item.id
-        admin_match_score = f"{match_score * 100:.1f}%"
-        pending_item.matched_item_id = matched_lost_item.id
-        matched_lost_item.is_matched = True
-        possible_match_count = prepend_lost_possible_match(
-            matched_lost_item,
-            serialize_pending_found_match(pending_item, match_score)
-        )
-        db.add(models.Notification(
-            message=f"AI MATCH ({admin_match_score}): Found {category} may match Lost Item #{matched_item_id}.",
-            type="match",
-            related_id=pending_item.id,
-            target_url="/admin/Found_Items_Report",
-            is_read=False,
-            created_at=datetime.utcnow()
-        ))
-
-        owner_id = matched_lost_item.report_owner_user_id or matched_lost_item.user_id
-        if owner_id:
-            matched_lost_owner = db.query(models.User).filter(models.User.id == owner_id).first()
-            reporter_name = current_user.full_name or current_user.email or "A student"
-            create_student_notification(
-                db,
-                owner_id,
-                f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
-                "student_match",
-                f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1"
-            )
-    else:
-        db.add(models.Notification(
-            message=f"New Found Report: {category} ({item_name}) submitted by {current_user.full_name or current_user.email}.",
-            type="new_report",
-            related_id=pending_item.id,
-            target_url="/admin/Found_Items_Report",
-            is_read=False,
-            created_at=datetime.utcnow()
-        ))
+    has_possible_match = bool(match_result.get("matched_items"))
+    db.add(models.Notification(
+        message=(
+            f"New Found Report with possible matches: {category} ({item_name}) "
+            f"submitted by {current_user.full_name or current_user.email}."
+            if has_possible_match
+            else f"New Found Report: {category} ({item_name}) submitted by {current_user.full_name or current_user.email}."
+        ),
+        type="new_report",
+        related_id=pending_item.id,
+        target_url="/admin/Found_Items_Report",
+        is_read=False,
+        created_at=datetime.utcnow()
+    ))
 
     db.commit()
     db.refresh(pending_item)
-
-    if matched_lost_item and matched_lost_owner:
-        queue_lost_item_match_email(
-            matched_lost_owner,
-            matched_lost_item,
-        )
 
     return {
         "message": "Item reported successfully",
         "item_id": pending_item.id,
         "status": "pending_approval",
         "is_matched": False,
-        "has_possible_match": bool(matched_lost_item)
+        "auto_matched": is_auto_match,
+        "has_possible_match": has_possible_match,
+        "requires_admin_selection": has_possible_match,
     }
 
 # Create a dedicated route for students
@@ -1322,78 +1283,42 @@ async def submit_user_lost_report(
 
         # Calculate and persist possible matches once, after the lost report
         # exists. Later reads use this cache; new found uploads refresh it.
-        from main import analyze_saved_item_details
+        from main import analyze_saved_item_details, synchronize_automatic_item_match
 
         match_result = await run_in_threadpool(
             lambda: analyze_saved_item_details(db, new_report, record_type="item")
         )
-
-        # 4. Handle possible match and notification logic
-        strongest_match = match_result.get("matched_item")
-        automatic_found_id = (
-            strongest_match.get("id")
-            if strongest_match and strongest_match.get("source", "found") == "found"
-            else None
+        is_auto_match, _ = synchronize_automatic_item_match(
+            db, new_report, match_result.get("matched_item")
         )
-        ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
-        found_item = None
-        new_claim = None
-        if automatic_found_id is not None and ai_score >= MATCH_THRESHOLD:
-            found_item = db.query(models.Item).filter(
-                models.Item.id == automatic_found_id,
-                models.Item.status.ilike("found"),
-                models.Item.archived == False,
-                models.Item.deleted == False,
-                models.Item.is_matched == False,
-            ).first()
 
-        if found_item:
-            new_report.is_matched = True
-            found_item.is_matched = True
-            new_claim = ensure_student_claim_for_pair(
-                db,
-                lost_item=new_report,
-                found_item=found_item,
-                claimant_id=current_user.id,
-                similarity_score=f"{ai_score * 100:.1f}%",
-            )
-
-            # Notification for Admin (Match)
-            notif = models.Notification(
-                message=f"Automatic AI match: {current_user.full_name} reported a lost item matching Item #{found_item.id}",
-                type="match",
-                related_id=new_claim.id,
-                target_url=f"/admin/Reports?report_type=claim&claim_id={new_claim.id}",
-                is_read=False
-            )
-            db.add(notif)
-        else:
-            # Notification for Admin (New General Report)
-            notif = models.Notification(
-                message=f"New Lost Report: {category} ({item_name}) from {current_user.full_name}",
-                type="new_report",
-                related_id=new_report.id,
-                target_url="/admin/Lost_Items_Report",
-                is_read=False
-            )
-            db.add(notif)
+        # Possible matches remain suggestions until an administrator selects
+        # one from the lost report. That selection alone creates the claim.
+        has_possible_match = bool(match_result.get("matched_items"))
+        notif = models.Notification(
+            message=(
+                f"New Lost Report with possible matches: {category} ({item_name}) from {current_user.full_name}"
+                if has_possible_match
+                else f"New Lost Report: {category} ({item_name}) from {current_user.full_name}"
+            ),
+            type="new_report",
+            related_id=new_report.id,
+            target_url="/admin/Lost_Items_Report",
+            is_read=False
+        )
+        db.add(notif)
 
         db.commit()
         db.refresh(new_report)
 
-        if new_report.is_matched:
-            queue_lost_item_match_email(
-                current_user,
-                new_report,
-                subject="A match was found for your lost item",
-            )
-        
         return {
             "status": "success", 
             "item_id": new_report.id,
             "is_matched": bool(new_report.is_matched),
+            "auto_matched": is_auto_match,
             "has_possible_match": bool(match_result.get("matched_items")),
-            "matched_item_id": found_item.id if found_item else None,
+            "matched_item_id": None,
+            "requires_admin_selection": has_possible_match,
             "analysis": match_result,
         }
 

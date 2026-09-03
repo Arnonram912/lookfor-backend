@@ -2600,6 +2600,9 @@ def get_found_item_match_evaluation(
                 models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
             ).all()
         }
+        auto_linked_lost_id = getattr(found_item, "matched_item_id", None)
+        if auto_linked_lost_id:
+            linked_lost_ids.add(int(auto_linked_lost_id))
         for evaluation in evaluations:
             evaluation["is_linked"] = evaluation["id"] in linked_lost_ids
             evaluation["link_state"] = (
@@ -4747,21 +4750,21 @@ async def approve_item(
     db.add(new_item)
     db.flush()
 
-    # A pending found report was ranked against lost reports when it was
-    # uploaded. That reservation does not prove that this found report is the
-    # reserved lost report's current rank-one found candidate. Release the
-    # temporary reservation before validating the approved item from the lost
-    # report's side.
-    matched_lost_item = None
+    # Carry the AI-only link into approved inventory without creating a claim.
+    # Claim Management remains empty until an administrator confirms a choice
+    # from the lost report's Possible Matches list.
+    legacy_reserved_lost_item = None
     if pending.matched_item_id:
-        matched_lost_item = db.query(models.Item).filter(
+        legacy_reserved_lost_item = db.query(models.Item).filter(
             models.Item.id == pending.matched_item_id,
             models.Item.status == "lost",
             models.Item.archived == False,
             models.Item.deleted == False,
         ).first()
-    if matched_lost_item:
-        release_pending_found_link(db, pending)
+    if legacy_reserved_lost_item:
+        new_item.matched_item_id = legacy_reserved_lost_item.id
+        new_item.is_matched = True
+        legacy_reserved_lost_item.is_matched = True
 
     # Keep the pending copy out of the approval-time ranking so the same
     # physical report cannot occupy one rank as pending and another as found.
@@ -4771,7 +4774,6 @@ async def approve_item(
 
     # Preserve other reports' cached possible matches while replacing the
     # temporary pending identifier with the approved found-item identifier.
-    # The reserved lost report is reanalyzed below before any claim is created.
     cached_lost_items = db.query(models.Item).filter(
         models.Item.status.ilike("lost"),
         models.Item.possible_matches.isnot(None),
@@ -4808,73 +4810,13 @@ async def approve_item(
             )
             cached_lost.possible_matches = json.dumps(converted_matches[:5])
 
-    approved_match = None
-    if matched_lost_item:
-        from main import analyze_saved_item_details
-
-        approval_analysis = await run_in_threadpool(
-            lambda: analyze_saved_item_details(db, matched_lost_item, record_type="item")
-        )
-        ranked_candidates = approval_analysis.get("ranked_candidates", [])
-        top_candidate = (
-            ranked_candidates[0]
-            if isinstance(ranked_candidates, list) and ranked_candidates
-            else None
-        )
-        if (
-            isinstance(top_candidate, dict)
-            and top_candidate.get("source", "found") == "found"
-            and top_candidate.get("id") == new_item.id
-            and is_automatic_match_candidate(top_candidate)
-        ):
-            link_authorized, _ = authorize_single_ai_link(
-                db,
-                matched_lost_item,
-                top_candidate,
-                ranked_candidates=ranked_candidates,
-            )
-            if link_authorized:
-                approved_match = top_candidate
-        if not approved_match:
-            matched_lost_item = None
-
-    if matched_lost_item:
-        new_item.is_matched = True
-        matched_lost_item.is_matched = True
-        prepend_lost_possible_match(
-            matched_lost_item,
-            serialize_found_item_match(new_item, approved_match.get("score", 0))
-        )
-        claim = ensure_pending_claim_for_pair(
-            db,
-            lost_item=matched_lost_item,
-            found_item=new_item,
-            claimant_id=matched_lost_item.user_id or pending.user_id,
-            similarity_score=f"{float(approved_match.get('score', 0) or 0) * 100:.1f}%"
-        )
-        db.flush()
-        notify_lost_item_owner_of_match(db, matched_lost_item, new_item)
-        create_admin_notification(
-            db,
-            f"Approved found item #{new_item.id} was linked to lost item #{matched_lost_item.id}.",
-            "match",
-            claim.id,
-            f"/admin/Reports?report_type=claim&claim_id={claim.id}",
-            created_by_admin_id=current_admin.id
-        )
-
     # 3. Remove from pending
-    final_status = "matched" if matched_lost_item else "approved"
     db.delete(pending)
     db.commit()
     create_admin_notification(
         db,
-        (
-            f"Pending item #{item_id} is now matched with lost item #{matched_lost_item.id}."
-            if matched_lost_item
-            else f"Pending item #{item_id} was approved and moved to active inventory."
-        ),
-        "match" if matched_lost_item else "new_report",
+        f"Pending item #{item_id} was approved and moved to active inventory.",
+        "new_report",
         new_item.id,
         "/admin/Found_Items_Report",
         created_by_admin_id=current_admin.id
@@ -4882,12 +4824,12 @@ async def approve_item(
 
     return {
         "status": "success",
-        "item_status": final_status,
-        "is_matched": bool(matched_lost_item),
+        "item_status": "matched" if legacy_reserved_lost_item else "approved",
+        "is_matched": bool(legacy_reserved_lost_item),
         "message": (
-            "Pending item approved and moved directly to Matched."
-            if matched_lost_item
-            else "Item approved and moved to inventory."
+            "Item approved with its AI match retained. Select the correct item from Possible Matches to create the claim."
+            if legacy_reserved_lost_item
+            else "Item approved and moved to inventory. An admin can now select it from Possible Matches."
         ),
     }
 
@@ -5112,6 +5054,17 @@ async def reset_student_password(
     user.must_change_password = True
     
     db.commit()
+    account_type = (
+        clean_text(getattr(user, "user_category", "")).casefold()
+        or ("faculty" if user_is_faculty_account(user) else "student")
+    )
+    email_queued = queue_account_access_email(
+        user.email,
+        user.full_name or user.email,
+        new_temp,
+        account_type=account_type,
+        supersede_existing=True,
+    )
     create_admin_notification(
         db,
         f"Password was reset for user {user.full_name or user.email}.",
@@ -5122,7 +5075,8 @@ async def reset_student_password(
     
     return {
         "status": "success",
-        "new_temp_password": new_temp
+        "new_temp_password": new_temp,
+        "email_queued": email_queued,
     }
 import os
 import shutil
@@ -5248,35 +5202,14 @@ async def finalize_lost_upload(
         db.add(new_item)
         db.flush()
 
-        from main import analyze_saved_item_details
+        from main import analyze_saved_item_details, synchronize_automatic_item_match
 
         match_result = await run_in_threadpool(
             lambda: analyze_saved_item_details(db, new_item, record_type="item")
         )
-        strongest_match = match_result.get("matched_item")
-        matched_item_id = strongest_match.get("id") if strongest_match else None
-        ai_score = float(match_result.get("highest_score", 0.0) or 0.0)
-        is_auto_match = bool(
-            strongest_match
-            and strongest_match.get("source", "found") == "found"
-            and ai_score >= MATCH_THRESHOLD
+        is_auto_match, _ = synchronize_automatic_item_match(
+            db, new_item, match_result.get("matched_item")
         )
-        
-        # 6. Handle the "Other Side" of the match
-        if is_auto_match:
-            found_item = db.query(models.Item).filter(models.Item.id == matched_item_id).first()
-            if found_item and found_item.status == "found" and not found_item.archived:
-                new_item.is_matched = True
-                found_item.is_matched = True
-                ensure_pending_claim_for_pair(
-                    db,
-                    lost_item=new_item,
-                    found_item=found_item,
-                    claimant_id=new_item.user_id or found_item.user_id or current_user.id,
-                    similarity_score=f"{ai_score * 100:.1f}%"
-                )
-                notify_lost_item_owner_of_match(db, new_item, found_item)
-
         db.commit()
         db.refresh(new_item)
 
@@ -5294,6 +5227,7 @@ async def finalize_lost_upload(
             "item_id": new_item.id,
             "uploader": current_user.full_name,
             "auto_matched": is_auto_match,
+            "requires_admin_selection": bool(match_result.get("matched_items")),
             "analysis": match_result,
         }
         
@@ -5385,7 +5319,7 @@ async def finalize_found_upload(
         db.add(new_item)
         db.flush()
 
-        from main import analyze_found_upload_from_lost_side
+        from main import analyze_found_upload_from_lost_side, synchronize_automatic_item_match
 
         match_result = await run_in_threadpool(
             lambda: analyze_found_upload_from_lost_side(
@@ -5395,41 +5329,14 @@ async def finalize_found_upload(
             )
         )
         automatic_matches = match_result.pop("automatic_matches", [])
-        lost_item = None
-        ai_score = 0.0
         is_auto_match = False
-        
-        # 6. Handle the "Other Side" of the match
-        for automatic_match in automatic_matches:
-            candidate_lost_item = automatic_match["lost_item"]
-            lost_analysis = automatic_match["analysis"]
-            lost_side_match = automatic_match["upload_candidate"]
-            is_auto_match, _ = authorize_single_ai_link(
+        if automatic_matches:
+            automatic_match = automatic_matches[0]
+            is_auto_match, _ = synchronize_automatic_item_match(
                 db,
-                candidate_lost_item,
-                lost_side_match,
-                ranked_candidates=lost_analysis.get("ranked_candidates", []),
+                automatic_match["lost_item"],
+                automatic_match["upload_candidate"],
             )
-            if is_auto_match:
-                lost_item = candidate_lost_item
-                ai_score = float(lost_side_match.get("score", 0) or 0)
-                break
-
-        if is_auto_match and lost_item:
-            new_item.is_matched = True
-            lost_item.is_matched = True
-            prepend_lost_possible_match(
-                lost_item,
-                serialize_found_item_match(new_item, ai_score)
-            )
-            ensure_pending_claim_for_pair(
-                db,
-                lost_item=lost_item,
-                found_item=new_item,
-                claimant_id=lost_item.user_id or new_item.user_id or current_user.id,
-                similarity_score=f"{ai_score * 100:.1f}%"
-            )
-            notify_lost_item_owner_of_match(db, lost_item, new_item)
 
         db.commit()
         db.refresh(new_item)
@@ -5447,7 +5354,9 @@ async def finalize_found_upload(
             "status": "success", 
             "item_id": new_item.id,
             "uploader": current_user.full_name,
-            "auto_matched": is_auto_match
+            "auto_matched": is_auto_match,
+            "requires_admin_selection": bool(match_result.get("matched_items")),
+            "analysis": match_result,
         }
         
     except Exception as e:
@@ -5675,6 +5584,64 @@ def resend_user_credential_email(
     return {
         "message": f"Credential email resend queued for {recipient_email}.",
         "email_delivery_status": "pending",
+    }
+
+
+@router.post("/users/credential-emails/resend-all")
+def resend_all_failed_credential_emails(
+    db: Session = Depends(get_db),
+    current_admin: models.User = Depends(check_permission("user_management.create")),
+):
+    """Retry the latest failed credential-email job for every recipient."""
+    latest_job_ids = (
+        db.query(func.max(models.AccountEmailOutbox.id).label("id"))
+        .group_by(func.lower(models.AccountEmailOutbox.recipient_email))
+        .subquery()
+    )
+    failed_jobs = (
+        db.query(models.AccountEmailOutbox)
+        .filter(
+            models.AccountEmailOutbox.id.in_(db.query(latest_job_ids.c.id)),
+            models.AccountEmailOutbox.status.in_({"failed", "failed_username", "failed_password"}),
+            func.lower(models.AccountEmailOutbox.recipient_email).in_(
+                db.query(func.lower(models.User.email)).filter(
+                    models.User.email.isnot(None),
+                    models.User.is_archived == False,
+                )
+            ),
+        )
+        .all()
+    )
+
+    if not failed_jobs:
+        return {
+            "message": "There are no failed credential emails to resend.",
+            "queued_count": 0,
+        }
+
+    now = datetime.utcnow()
+    for email_job in failed_jobs:
+        failed_status = clean_text(email_job.status).casefold()
+        email_job.status = "password_pending" if failed_status == "failed_password" else "pending"
+        email_job.attempt_count = 0
+        email_job.available_at = now
+        email_job.sent_at = None
+        email_job.last_error = None
+
+    queued_count = len(failed_jobs)
+    create_admin_notification(
+        db,
+        f"Bulk credential email resend queued for {queued_count} account(s).",
+        "user_management_students",
+        current_admin.id,
+        target_url="/admin/User-Management",
+        created_by_admin_id=current_admin.id,
+    )
+    db.commit()
+    ensure_account_email_outbox_worker()
+    return {
+        "message": f"Queued {queued_count} failed credential email(s) for delivery.",
+        "queued_count": queued_count,
     }
 
 
@@ -6069,35 +6036,71 @@ def update_archived_item_disposal(
         raise HTTPException(status_code=409, detail="Only items waiting for disposal can be returned to Archive")
     if action == "schedule" and item.deleted:
         raise HTTPException(status_code=400, detail="Deleted items cannot be moved to For Disposal")
+    affected_items = [item]
+    cancelled_claims = 0
     if action == "schedule":
-        active_claim = db.query(models.Claim.id).filter(
+        active_claims = db.query(models.Claim).filter(
             or_(
                 models.Claim.found_item_id == item.id,
                 models.Claim.lost_item_id == item.id,
             ),
             models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
-        ).first()
-        if active_claim:
+        ).all()
+        if any(str(claim.status or "").lower() in models.CLAIMED_CLAIM_STATUSES for claim in active_claims):
             raise HTTPException(
                 status_code=409,
-                detail="Items with an active or claimed record cannot be moved to For Disposal",
+                detail="Claimed items cannot be moved to For Disposal",
             )
+        connected_ids = set()
+        for claim in active_claims:
+            if claim.found_item_id and claim.found_item_id != item.id:
+                connected_ids.add(int(claim.found_item_id))
+            if claim.lost_item_id and claim.lost_item_id != item.id:
+                connected_ids.add(int(claim.lost_item_id))
+            claim.status = "rejected"
+            claim.admin_decision_date = datetime.utcnow()
+            cancelled_claims += 1
+
+        if getattr(item, "matched_item_id", None):
+            connected_ids.add(int(item.matched_item_id))
+        linked_by_ai = db.query(models.Item.id).filter(
+            models.Item.matched_item_id == item.id,
+            models.Item.deleted == False,
+        ).all()
+        connected_ids.update(int(linked_id) for (linked_id,) in linked_by_ai if linked_id is not None)
+
+        if connected_ids:
+            connected_items = db.query(models.Item).filter(
+                models.Item.id.in_(connected_ids),
+                models.Item.deleted == False,
+            ).all()
+            affected_items.extend(connected_items)
+
         # For Disposal is outside the live inventory, so active items are
         # archived automatically as part of this transition.
-        item.archived = True
-        item.deleted = False
+        for affected_item in affected_items:
+            affected_item.archived = True
+            affected_item.deleted = False
+            affected_item.is_matched = False
+            affected_item.matched_item_id = None
     if action == "complete" and item.disposal_status != "for_disposal":
         raise HTTPException(status_code=400, detail="Only items waiting for disposal can be confirmed")
-    item.disposal_status = statuses[action]
     submitted_note = str(payload.get("note") or "").strip()[:500]
-    if action == "schedule" or submitted_note:
-        item.disposal_note = submitted_note or None
-    item.disposal_updated_at = datetime.utcnow()
+    for affected_item in affected_items:
+        affected_item.disposal_status = statuses[action]
+        if action == "schedule" or submitted_note:
+            affected_item.disposal_note = submitted_note or None
+        affected_item.disposal_updated_at = datetime.utcnow()
     if action == "complete":
         create_disposal_report(db, item, "report", current_admin.id)
     label = {"schedule": "moved to For Disposal", "cancel": "returned to Archive", "complete": "recorded as disposed"}[action]
+    affected_count = len({affected_item.id for affected_item in affected_items})
     db.add(models.Notification(
-        message=f"{item.status.title()} item #{item.id} was {label}.",
+        message=(
+            f"{item.status.title()} item #{item.id} and {affected_count - 1} connected item(s) were {label}."
+            if affected_count > 1
+            else f"{item.status.title()} item #{item.id} was {label}."
+        ),
         type="item_disposal",
         related_id=item.id,
         created_by_admin_id=current_admin.id,
@@ -6111,9 +6114,15 @@ def update_archived_item_disposal(
         db.rollback()
         raise
     return {
-        "message": f"Item {label}" + (" and disposal report created" if action == "complete" else ""),
+        "message": (
+            f"{affected_count} connected items {label}"
+            if affected_count > 1
+            else f"Item {label}"
+        ) + (" and disposal report created" if action == "complete" else ""),
         "status": item.disposal_status,
         "report_created": action == "complete",
+        "affected_item_count": affected_count,
+        "cancelled_claim_count": cancelled_claims,
     }
 
 

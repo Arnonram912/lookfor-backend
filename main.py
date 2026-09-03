@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, date
 from typing import List
 from email.message import EmailMessage
 from PIL import Image
-from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, status, Header, Response
+from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, HTTPException, status, Header, Response, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordRequestForm
@@ -24,7 +24,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, EmailStr, Field
 import models  # This is already there
-from database import engine, get_db
+from database import SessionLocal, engine, get_db
 from utils import (
     UPLOAD_FOLDER,
     public_file_url,
@@ -122,6 +122,199 @@ app.include_router(admin_messages_router)
 pending_items = []
 main_items = []
 archive_items = []
+
+NOTIFICATION_WS_POLL_SECONDS = max(
+    10,
+    int(os.getenv("NOTIFICATION_WS_POLL_SECONDS", "20")),
+)
+
+
+NotificationClientKey = tuple[str, int]
+
+
+def count_unread_notifications_for_key(db: Session, client_key: NotificationClientKey) -> int:
+    role, user_id = client_key
+    if role == "admin":
+        return db.query(models.Notification).filter(
+            ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
+            or_(
+                models.Notification.created_by_admin_id == None,
+                models.Notification.created_by_admin_id == user_id,
+            ),
+            models.Notification.is_read == False,
+        ).count()
+
+    return db.query(models.Notification).filter(
+        models.Notification.type.in_(["student_match", "student_update"]),
+        models.Notification.related_id == user_id,
+        models.Notification.is_read == False,
+    ).count()
+
+
+def count_unread_notifications_for_keys(
+    db: Session,
+    client_keys: list[NotificationClientKey],
+) -> dict[NotificationClientKey, int]:
+    counts = {client_key: 0 for client_key in client_keys}
+    student_ids = sorted({user_id for role, user_id in client_keys if role == "student"})
+    admin_ids = sorted({user_id for role, user_id in client_keys if role == "admin"})
+
+    if student_ids:
+        rows = db.query(
+            models.Notification.related_id,
+            func.count(models.Notification.id),
+        ).filter(
+            models.Notification.type.in_(["student_match", "student_update"]),
+            models.Notification.related_id.in_(student_ids),
+            models.Notification.is_read == False,
+        ).group_by(models.Notification.related_id).all()
+        for user_id, unread_count in rows:
+            counts[("student", int(user_id))] = int(unread_count)
+
+    if admin_ids:
+        global_count = db.query(models.Notification).filter(
+            ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
+            models.Notification.created_by_admin_id == None,
+            models.Notification.is_read == False,
+        ).count()
+        personal_rows = db.query(
+            models.Notification.created_by_admin_id,
+            func.count(models.Notification.id),
+        ).filter(
+            ~models.Notification.type.in_(["chat", "student_match", "student_update"]),
+            models.Notification.created_by_admin_id.in_(admin_ids),
+            models.Notification.is_read == False,
+        ).group_by(models.Notification.created_by_admin_id).all()
+        personal_counts = {
+            int(user_id): int(unread_count)
+            for user_id, unread_count in personal_rows
+            if user_id is not None
+        }
+        for admin_id in admin_ids:
+            counts[("admin", admin_id)] = global_count + personal_counts.get(admin_id, 0)
+
+    return counts
+
+
+class NotificationSocketHub:
+    def __init__(self) -> None:
+        self.clients: dict[NotificationClientKey, set[WebSocket]] = {}
+        self.last_counts: dict[NotificationClientKey, int] = {}
+        self.lock = asyncio.Lock()
+        self.task: asyncio.Task | None = None
+
+    async def start(self) -> None:
+        if self.task and not self.task.done():
+            return
+        self.task = asyncio.create_task(self.broadcast_loop())
+
+    async def register(self, client_key: NotificationClientKey, websocket: WebSocket, unread_count: int) -> None:
+        async with self.lock:
+            self.clients.setdefault(client_key, set()).add(websocket)
+            self.last_counts[client_key] = unread_count
+
+    async def unregister(self, client_key: NotificationClientKey, websocket: WebSocket) -> None:
+        async with self.lock:
+            sockets = self.clients.get(client_key)
+            if not sockets:
+                return
+            sockets.discard(websocket)
+            if not sockets:
+                self.clients.pop(client_key, None)
+                self.last_counts.pop(client_key, None)
+
+    async def snapshot_keys(self) -> list[NotificationClientKey]:
+        async with self.lock:
+            return list(self.clients.keys())
+
+    async def broadcast_count(self, client_key: NotificationClientKey, unread_count: int) -> None:
+        role, _user_id = client_key
+        async with self.lock:
+            previous_count = self.last_counts.get(client_key)
+            if previous_count == unread_count:
+                return
+            self.last_counts[client_key] = unread_count
+            sockets = list(self.clients.get(client_key, set()))
+
+        stale_sockets = []
+        for websocket in sockets:
+            try:
+                await websocket.send_json({
+                    "type": "notification_count",
+                    "role": role,
+                    "unread_count": unread_count,
+                })
+            except RuntimeError:
+                stale_sockets.append(websocket)
+
+        if stale_sockets:
+            async with self.lock:
+                active_sockets = self.clients.get(client_key)
+                if active_sockets:
+                    for websocket in stale_sockets:
+                        active_sockets.discard(websocket)
+
+    async def broadcast_loop(self) -> None:
+        while True:
+            await asyncio.sleep(NOTIFICATION_WS_POLL_SECONDS)
+            client_keys = await self.snapshot_keys()
+            if not client_keys:
+                continue
+
+            db = SessionLocal()
+            try:
+                try:
+                    unread_counts = count_unread_notifications_for_keys(db, client_keys)
+                except Exception as exc:
+                    print(f"Notification websocket batch warning: {exc}")
+                    continue
+                for client_key, unread_count in unread_counts.items():
+                    await self.broadcast_count(client_key, unread_count)
+            finally:
+                db.close()
+
+
+notification_socket_hub = NotificationSocketHub()
+
+
+@app.websocket("/ws/notifications")
+async def notifications_websocket(websocket: WebSocket):
+    token = (websocket.query_params.get("token") or "").strip()
+    role = (websocket.query_params.get("role") or "student").strip().lower()
+    role = "admin" if role == "admin" else "student"
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    db = SessionLocal()
+    client_key: NotificationClientKey | None = None
+    try:
+        try:
+            user = resolve_authenticated_user(token, db)
+            if role == "admin" and not bool(getattr(user, "is_admin", False)):
+                raise HTTPException(status_code=403, detail="Administrative access required")
+            client_key = (role, int(user.id))
+            unread_count = count_unread_notifications_for_key(db, client_key)
+        except (HTTPException, JWTError, ValueError):
+            await websocket.close(code=1008)
+            return
+
+        await websocket.accept()
+        await notification_socket_hub.register(client_key, websocket, unread_count)
+        await websocket.send_json({
+            "type": "notification_count",
+            "role": role,
+            "unread_count": unread_count,
+        })
+
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        return
+    finally:
+        if client_key is not None:
+            await notification_socket_hub.unregister(client_key, websocket)
+        db.close()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -646,6 +839,18 @@ def ensure_item_possible_matches_column():
     IF COL_LENGTH('items', 'possible_matches') IS NULL
     BEGIN
         ALTER TABLE items ADD possible_matches NVARCHAR(MAX) NULL
+    END
+    """
+    with engine.begin() as connection:
+        connection.execute(text(statement))
+
+
+def ensure_item_matched_item_id_column():
+    statement = """
+    IF COL_LENGTH('items', 'matched_item_id') IS NULL
+    BEGIN
+        ALTER TABLE items ADD matched_item_id INT NULL
+        CREATE INDEX IX_items_matched_item_id ON items (matched_item_id)
     END
     """
     with engine.begin() as connection:
@@ -1258,13 +1463,15 @@ def auto_archive_pending(db: Session):
 
 # --- 4. STARTUP TASKS (Ensure Admin Access) ---
 @app.on_event("startup")
-def create_default_admin():
+async def create_default_admin():
+    await notification_socket_hub.start()
     ensure_user_settings_columns()
     ensure_user_classification_schema()
     ensure_academic_schedule_columns()
     ensure_item_id_column()
     ensure_item_code_column()
     ensure_item_possible_matches_column()
+    ensure_item_matched_item_id_column()
     ensure_item_name_columns()
     ensure_item_lifecycle_columns()
     ensure_confiscated_disposal_columns()
@@ -2524,16 +2731,13 @@ class ItemDetailUpdate(BaseModel):
 
 
 def item_detail_owner_matches(item, current_user: models.User) -> bool:
-    if bool(getattr(current_user, "is_admin", False)):
-        return True
-
     if getattr(item, "user_id", None) == current_user.id:
         return True
 
     if getattr(item, "report_owner_user_id", None) == current_user.id:
         return True
 
-    current_name = format_user_display_name(current_user, "").strip().lower()
+    current_name = format_user_display_name(current_user).strip().lower()
     return bool(
         current_name
         and not getattr(item, "report_owner_user_id", None)
@@ -2674,12 +2878,21 @@ def cached_found_candidate_ids(item) -> set[int]:
 
 
 def actively_linked_found_candidate_ids(db: Session, lost_item_id: int) -> set[int]:
-    """Return found reports already linked to this lost report by active claims."""
+    """Return found reports linked by either AI state or an active claim."""
     rows = db.query(models.Claim.found_item_id).filter(
         models.Claim.lost_item_id == lost_item_id,
         models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
     ).all()
-    return {int(found_item_id) for (found_item_id,) in rows if found_item_id is not None}
+    linked_ids = {int(found_item_id) for (found_item_id,) in rows if found_item_id is not None}
+    auto_rows = db.query(models.Item.id).filter(
+        models.Item.status.ilike("found"),
+        models.Item.matched_item_id == lost_item_id,
+    ).all()
+    linked_ids.update(
+        int(found_item_id) for (found_item_id,) in auto_rows
+        if found_item_id is not None
+    )
+    return linked_ids
 
 
 def analyze_saved_item_details(db: Session, item, *, record_type: str) -> dict:
@@ -3061,6 +3274,15 @@ def get_saved_item_possible_matches(
                     models.Claim.found_item_id.isnot(None),
                 ).all()
             }
+            auto_found_ids = {
+                int(found_item_id)
+                for (found_item_id,) in db.query(models.Item.id).filter(
+                    models.Item.status.ilike("found"),
+                    models.Item.matched_item_id == item.id,
+                    models.Item.archived == False,
+                    models.Item.deleted == False,
+                ).all()
+            }
             active_pending_ids = {
                 int(pending_id)
                 for (pending_id,) in db.query(models.PendingItem.id).filter(
@@ -3076,7 +3298,7 @@ def get_saved_item_possible_matches(
                         int(match.get("id")) in (
                             active_pending_ids
                             if match.get("source") == "pending_found"
-                            else active_found_ids
+                            else active_found_ids | auto_found_ids
                         )
                     ),
                 }
@@ -3157,13 +3379,106 @@ def recover_authoritative_lost_match(
     return None
 
 
+def release_automatic_item_match(db: Session, lost_item: models.Item) -> int:
+    """Remove AI-only links for a lost report without touching real claims."""
+    released = 0
+    auto_found_items = db.query(models.Item).filter(
+        models.Item.status.ilike("found"),
+        models.Item.matched_item_id == lost_item.id,
+    ).all()
+    for found_item in auto_found_items:
+        found_item.matched_item_id = None
+        has_active_claim = db.query(models.Claim.id).filter(
+            models.Claim.found_item_id == found_item.id,
+            models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+        ).first()
+        found_item.is_matched = bool(has_active_claim)
+        released += 1
+
+    auto_pending_items = db.query(models.PendingItem).filter(
+        models.PendingItem.matched_item_id == lost_item.id,
+        models.PendingItem.archived == False,
+        models.PendingItem.deleted == False,
+    ).all()
+    for pending_item in auto_pending_items:
+        pending_item.matched_item_id = None
+        released += 1
+
+    active_lost_claim = db.query(models.Claim.id).filter(
+        models.Claim.lost_item_id == lost_item.id,
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+    ).first()
+    lost_item.matched_item_id = None
+    lost_item.is_matched = bool(active_lost_claim)
+    return released
+
+
+def synchronize_automatic_item_match(
+    db: Session,
+    lost_item: models.Item,
+    strongest_match: dict | None,
+) -> tuple[bool, bool]:
+    """Persist the AI match indicator while keeping Claim Management empty."""
+    active_claim = db.query(models.Claim.id).filter(
+        models.Claim.lost_item_id == lost_item.id,
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+    ).first()
+    if active_claim:
+        return False, False
+
+    release_automatic_item_match(db, lost_item)
+    if not isinstance(strongest_match, dict) or not is_automatic_match_candidate(strongest_match):
+        return False, False
+
+    candidate_id = strongest_match.get("id")
+    source = strongest_match.get("source", "found")
+    if source == "pending_found":
+        candidate = db.query(models.PendingItem).filter(
+            models.PendingItem.id == candidate_id,
+            models.PendingItem.archived == False,
+            models.PendingItem.deleted == False,
+        ).first()
+        if not candidate or candidate.matched_item_id not in {None, lost_item.id}:
+            return False, False
+        candidate.matched_item_id = lost_item.id
+        pending_approval = True
+    else:
+        candidate = db.query(models.Item).filter(
+            models.Item.id == candidate_id,
+            models.Item.status.ilike("found"),
+            models.Item.archived == False,
+            models.Item.deleted == False,
+        ).first()
+        if not candidate or candidate.matched_item_id not in {None, lost_item.id}:
+            return False, False
+        candidate_claim = db.query(models.Claim.id).filter(
+            models.Claim.found_item_id == candidate.id,
+            models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+        ).first()
+        if candidate_claim:
+            return False, False
+        candidate.matched_item_id = lost_item.id
+        candidate.is_matched = True
+        pending_approval = False
+
+    lost_item.is_matched = True
+    strongest_match["is_linked"] = True
+    strongest_match["link_state"] = "ai_matched"
+    return True, pending_approval
+
+
 @app.post("/api/items/{item_id}/analyze-matches")
 def analyze_lost_item_matches(
     item_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    """Explicitly reanalyze a lost report and link an authoritative auto-match."""
+    """Explicitly reanalyze a lost report without creating a claim.
+
+    Analysis only refreshes the possible-match cache. An administrator must
+    choose a found item from that list before the pair is sent to Claim
+    Management.
+    """
     item = db.query(models.Item).filter(models.Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
@@ -3175,132 +3490,25 @@ def analyze_lost_item_matches(
     if bool(getattr(item, "archived", False)) or bool(getattr(item, "deleted", False)):
         raise HTTPException(status_code=409, detail="Archived or deleted reports cannot be analyzed")
 
-    try:
-        parsed_previous_matches = json.loads(item.possible_matches or "[]")
-        previous_matches = parsed_previous_matches if isinstance(parsed_previous_matches, list) else []
-    except (TypeError, ValueError, json.JSONDecodeError):
-        previous_matches = []
-
     result = analyze_saved_item_details(db, item, record_type="item")
-    strongest_match = result.get("matched_item")
-    if not strongest_match:
-        strongest_match = recover_authoritative_lost_match(db, item, result)
-        if strongest_match:
-            result["matched_item"] = strongest_match
-    auto_linked = False
-    claim_id = None
-    pending_approval = False
-    released_ai_links = 0
-
-    if not strongest_match and bool(getattr(item, "is_matched", False)):
-        released_ai_links = release_stale_ai_match_after_reanalysis(db, item)
-    elif strongest_match and bool(getattr(item, "is_matched", False)):
-        released_ai_links = replace_weaker_ai_match_after_reanalysis(
-            db,
-            item,
-            strongest_match,
-            ranked_candidates=result.get("ranked_candidates", []),
-            previous_matches=previous_matches,
-        )
-
-    if strongest_match and strongest_match.get("source", "found") == "found":
-        found_item = db.query(models.Item).filter(
-            models.Item.id == strongest_match.get("id"),
-            models.Item.status.ilike("found"),
-            models.Item.archived == False,
-            models.Item.deleted == False,
-        ).first()
-        if found_item:
-            existing_pair_claim = db.query(models.Claim).filter(
-                models.Claim.lost_item_id == item.id,
-                models.Claim.found_item_id == found_item.id,
-                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
-            ).first()
-            conflicting_claim = db.query(models.Claim).filter(
-                or_(
-                    models.Claim.lost_item_id == item.id,
-                    models.Claim.found_item_id == found_item.id,
-                ),
-                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
-            ).first()
-
-            if existing_pair_claim:
-                item.is_matched = True
-                found_item.is_matched = True
-                claim_id = existing_pair_claim.id
-                auto_linked = True
-            elif not conflicting_claim:
-                # No active claim owns either item. Any remaining is_matched
-                # value is stale (for example after an older permanent delete)
-                # and must not prevent a valid authoritative reanalysis.
-                score = float(strongest_match.get("score", 0) or 0)
-                claim = models.Claim(
-                    lost_item_id=item.id,
-                    found_item_id=found_item.id,
-                    claimant_id=item.user_id or current_user.id,
-                    similarity_score=f"{score * 100:.1f}%",
-                    status="pending",
-                )
-                db.add(claim)
-                db.flush()
-                item.is_matched = True
-                found_item.is_matched = True
-                claim_id = claim.id
-                auto_linked = True
-                db.add(models.Notification(
-                    message=(
-                        f"Automatic AI match: Lost Item #{item.id} matched "
-                        f"Found Item #{found_item.id}."
-                    ),
-                    type="match",
-                    related_id=claim.id,
-                    target_url=f"/admin/Reports?report_type=claim&claim_id={claim.id}",
-                    is_read=False,
-                ))
-
-    elif strongest_match and strongest_match.get("source") == "pending_found":
-        pending_found = db.query(models.PendingItem).filter(
-            models.PendingItem.id == strongest_match.get("id"),
-            models.PendingItem.archived == False,
-            models.PendingItem.deleted == False,
-        ).first()
-        if pending_found and pending_found.matched_item_id in {None, item.id}:
-            active_claim = db.query(models.Claim.id).filter(
-                models.Claim.lost_item_id == item.id,
-                models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
-            ).first()
-            other_pending_link = db.query(models.PendingItem.id).filter(
-                models.PendingItem.matched_item_id == item.id,
-                models.PendingItem.id != pending_found.id,
-                models.PendingItem.archived == False,
-                models.PendingItem.deleted == False,
-            ).first()
-            if not active_claim and not other_pending_link:
-                # Reserve the pair without approving the found report or
-                # creating a claim. Approval converts this pending record into
-                # a matched found inventory item and creates the claim then.
-                pending_found.matched_item_id = item.id
-                item.is_matched = True
-                auto_linked = True
-                pending_approval = True
-                db.add(models.Notification(
-                    message=(
-                        f"Automatic AI match reserved: Pending Found Item #{pending_found.id} "
-                        f"matches Lost Item #{item.id} and is awaiting approval."
-                    ),
-                    type="match",
-                    related_id=pending_found.id,
-                    target_url="/admin/Found_Items_Report",
-                    is_read=False,
-                ))
-
+    auto_linked, pending_approval = synchronize_automatic_item_match(
+        db, item, result.get("matched_item")
+    )
+    if auto_linked:
+        linked_id = result["matched_item"].get("id")
+        linked_source = result["matched_item"].get("source", "found")
+        for match in result.get("matched_items", []):
+            if match.get("id") == linked_id and match.get("source", "found") == linked_source:
+                match["is_linked"] = True
+                match["link_state"] = "ai_matched"
     db.commit()
     result["auto_linked"] = auto_linked
-    result["claim_id"] = claim_id
+    result["claim_id"] = None
     result["pending_approval"] = pending_approval
-    result["match_released"] = released_ai_links > 0
-    result["match_replaced"] = bool(released_ai_links and auto_linked)
-    result["released_ai_links"] = released_ai_links
+    result["requires_admin_selection"] = bool(result.get("matched_items"))
+    result["match_released"] = False
+    result["match_replaced"] = False
+    result["released_ai_links"] = 0
     return result
 
 
@@ -3658,31 +3866,19 @@ async def save_found_item(
         )
     )
     automatic_matches = match_result.pop("automatic_matches", [])
-    matched_lost_item = None
-    matched_payload = None
-    match_score = 0.0
-    match_raw_score = 0.0
-    for automatic_match in automatic_matches:
-        candidate_lost_item = automatic_match["lost_item"]
-        lost_analysis = automatic_match["analysis"]
-        lost_side_match = automatic_match["upload_candidate"]
-        link_authorized, _ = authorize_single_ai_link(
+    auto_linked = False
+    if automatic_matches:
+        automatic_match = automatic_matches[0]
+        auto_linked, _ = synchronize_automatic_item_match(
             db,
-            candidate_lost_item,
-            lost_side_match,
-            ranked_candidates=lost_analysis.get("ranked_candidates", []),
+            automatic_match["lost_item"],
+            automatic_match["upload_candidate"],
         )
-        if link_authorized:
-            matched_lost_item = candidate_lost_item
-            matched_payload = automatic_match["lost_payload"]
-            match_score = float(lost_side_match.get("score", 0) or 0)
-            match_raw_score = float(lost_side_match.get("raw_score", match_score) or 0)
-            break
-
-    matched_item_id = matched_lost_item.id if matched_lost_item else None
-    match_result["matched_item"] = matched_payload
-    match_result["highest_score"] = match_score
-    match_result["highest_raw_score"] = match_raw_score
+        if auto_linked:
+            automatic_match["lost_payload"]["is_linked"] = True
+            automatic_match["lost_payload"]["link_state"] = "ai_matched"
+            match_result["matched_item"] = automatic_match["lost_payload"]
+    has_possible_match = bool(match_result.get("matched_items"))
 
     queue_item_event_email(
         current_user.email,
@@ -3693,11 +3889,15 @@ async def save_found_item(
     )
 
     # 4. NOTIFICATION
-    notif_msg = f"Match Found! A {category} matches Lost Item #{matched_item_id}." if matched_item_id else f"New {category} reported at {location}."
+    notif_msg = (
+        f"New {category} reported at {location}; possible matches are ready for admin review."
+        if has_possible_match
+        else f"New {category} reported at {location}."
+    )
     
     admin_notif = models.Notification(
         message=notif_msg,
-        type="match" if matched_item_id else "new_report",
+        type="new_report",
         related_id=new_pending.id,
         target_url="/admin/Found_Items_Report",
         is_read=False,
@@ -3705,36 +3905,6 @@ async def save_found_item(
     )
     
     db.add(admin_notif)
-
-    if matched_lost_item:
-        new_pending.matched_item_id = matched_lost_item.id
-        matched_lost_item.is_matched = True
-        possible_match_count = prepend_lost_possible_match(
-            matched_lost_item,
-            serialize_pending_found_match(new_pending, match_score)
-        )
-
-        if matched_lost_item.user_id:
-            reporter_name = format_user_display_name(current_user)
-            lost_owner = db.query(models.User).filter(
-                models.User.id == matched_lost_item.user_id
-            ).first()
-            db.add(models.Notification(
-                message=f"New possible match found: {reporter_name} submitted a found {category} that may match your lost item. You now have {possible_match_count} possible match(es). It is waiting for admin approval.",
-                type="student_match",
-                related_id=matched_lost_item.user_id,
-                target_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
-                is_read=False,
-                created_at=datetime.utcnow()
-            ))
-            if lost_owner:
-                queue_item_event_email(
-                    lost_owner.email,
-                    format_user_display_name(lost_owner),
-                    subject="A possible match was found for your lost item",
-                    message_text=POSSIBLE_MATCH_EMAIL_TEXT,
-                    action_url=f"/student/Lost-report?item_id={matched_lost_item.id}&show_match=1",
-                )
 
     db.commit()
     db.refresh(new_pending)
@@ -3744,6 +3914,8 @@ async def save_found_item(
         "pending_id": new_pending.id,
         "item_code": format_item_code("pending_found", new_pending.id),
         "reported_by": format_user_display_name(current_user),
+        "auto_matched": auto_linked,
+        "requires_admin_selection": has_possible_match,
         "analysis": match_result,
     }
 
@@ -3851,47 +4023,24 @@ async def lost_report_upload(
     db.add(new_lost_report)
     db.flush() 
 
-    # 6. HANDLE THE "FOUND" ITEM, CLAIM, AND NOTIFICATIONS
-    if ai_match_found and matched_found_item:
-        # Create the automated claim
-        match_percentage = f"{final_score * 100:.1f}%"
-        new_claim = models.Claim(
-            lost_item_id=new_lost_report.id,
-            found_item_id=best_match_id,
-            claimant_id=current_user.id, 
-            similarity_score=match_percentage,
-            status="pending"
-        )
-        db.add(new_claim)
-        db.flush()
+    auto_linked, _ = synchronize_automatic_item_match(
+        db, new_lost_report, match_result.get("matched_item")
+    )
 
-        # Admin Match Notification
-        admin_notif = models.Notification(
-            message=f"🔥 AI MATCH ({match_percentage}): Lost {category} ({brand}) vs Found #{best_match_id}",
-            type="match",
-            related_id=new_claim.id,
-            target_url=f"/admin/Reports?report_type=claim&claim_id={new_claim.id}",
-            is_read=False
-        )
-        db.add(admin_notif)
-        db.add(models.Notification(
-            message=f"Possible match found for your lost {category}.",
-            type="student_match",
-            related_id=current_user.id,
-            target_url=f"/student/Lost-report?item_id={new_lost_report.id}&show_match=1",
-            is_read=False,
-            created_at=datetime.utcnow(),
-        ))
-    else:
-        # Standard Admin Notification for new submission
-        report_notif = models.Notification(
-            message=f"New Lost Report: {category} ({brand}) lost at {location}.",
-            type="new_report",
-            related_id=new_lost_report.id,
-            target_url="/admin/Lost_Items_Report",
-            is_read=False
-        )
-        db.add(report_notif)
+    # Possible matches are sent to the lost report for admin review. Do not put
+    # anything in Claim Management until an admin selects one.
+    report_notif = models.Notification(
+        message=(
+            f"New Lost Report with possible matches: {category} ({brand}) lost at {location}."
+            if ai_match_found
+            else f"New Lost Report: {category} ({brand}) lost at {location}."
+        ),
+        type="new_report",
+        related_id=new_lost_report.id,
+        target_url="/admin/Lost_Items_Report",
+        is_read=False
+    )
+    db.add(report_notif)
 
     db.commit()
     db.refresh(new_lost_report)
@@ -3914,7 +4063,9 @@ async def lost_report_upload(
     
     return {
         "status": "success", 
-        "ai_match": ai_match_found, 
+        "ai_match": auto_linked,
+        "auto_matched": auto_linked,
+        "requires_admin_selection": ai_match_found,
         "item_id": new_lost_report.id,
         "item_code": format_item_code("lost", new_lost_report.id, getattr(new_lost_report, "item_code", None)),
         "reported_by": format_user_display_name(current_user),
@@ -5288,6 +5439,24 @@ def create_manual_claim(
     if found_item.archived or lost_item.archived:
         raise HTTPException(status_code=400, detail="Archived items cannot be used for manual claims")
 
+    existing_pair_claim = db.query(models.Claim).filter(
+        models.Claim.lost_item_id == lost_item_id,
+        models.Claim.found_item_id == found_item_id,
+        models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
+    ).first()
+    if existing_pair_claim:
+        lost_item.is_matched = True
+        found_item.is_matched = True
+        db.commit()
+        return {
+            "status": "success",
+            "message": "This possible match is already linked and waiting in Claim Management.",
+            "claim_id": existing_pair_claim.id,
+            "existing": True,
+            "released_links": 0,
+            "target_url": "/admin/Claim-Management",
+        }
+
     # A found report can belong to only one lost report. Do not let a manual
     # selection steal a record that is genuinely active elsewhere.
     conflicting_found_claim = db.query(models.Claim).filter(
@@ -5304,7 +5473,8 @@ def create_manual_claim(
     # Admin selection is authoritative for proofless pending/AI links on this
     # lost report. Retire those links first so the selected pair becomes the
     # sole active match. Proof-backed or final claims remain protected.
-    released_links = release_stale_ai_match_after_reanalysis(db, lost_item)
+    released_links = release_automatic_item_match(db, lost_item)
+    released_links += release_stale_ai_match_after_reanalysis(db, lost_item)
     remaining_active_claim = db.query(models.Claim).filter(
         models.Claim.lost_item_id == lost_item_id,
         models.Claim.status.in_(models.ACTIVE_CLAIM_STATUSES),
@@ -5330,28 +5500,53 @@ def create_manual_claim(
         lost_item_id=lost_item_id,
         found_item_id=found_item_id,
         claimant_id=lost_item.user_id or current_admin.id,
-        similarity_score="Manual Match",
+        similarity_score="Admin Selected",
         status="pending",
     )
     lost_item.is_matched = True
     found_item.is_matched = True
     db.add(new_claim)
+    db.flush()
     db.add(
         models.Notification(
-            message=f"Manual claim created for Lost Item #{lost_item_id} and Found Item #{found_item_id}.",
+            message=f"Admin selected Found Item #{found_item_id} for Lost Item #{lost_item_id}; claim approval is pending.",
             type="match",
-            related_id=lost_item_id,
+            related_id=new_claim.id,
             target_url="/admin/Claim-Management",
             is_read=False
         )
     )
+    owner_id = getattr(lost_item, "report_owner_user_id", None) or lost_item.user_id
+    if owner_id:
+        db.add(models.Notification(
+            message=f"An administrator selected a possible match for your lost item. Claim approval is pending.",
+            type="student_match",
+            related_id=owner_id,
+            target_url=f"/student/Lost-report?item_id={lost_item.id}&show_match=1",
+            is_read=False,
+            created_at=datetime.utcnow(),
+        ))
+        owner = db.query(models.User).filter(models.User.id == owner_id).first()
+        if owner:
+            queue_item_event_email(
+                owner.email,
+                format_user_display_name(owner),
+                subject="A possible match was selected for your lost item",
+                message_text="An administrator selected a possible match. The claim is now waiting for approval.",
+                action_url=f"/student/Lost-report?item_id={lost_item.id}&show_match=1",
+            )
     db.commit()
     db.refresh(new_claim)
 
     return {
         "status": "success",
-        "message": "Selected item saved as the only active match",
+        "message": (
+            "Previous pending match unlinked. The selected match was linked and sent to Claim Management for approval."
+            if released_links
+            else "Selected match linked and sent to Claim Management for approval."
+        ),
         "claim_id": new_claim.id,
+        "target_url": "/admin/Claim-Management",
         "released_links": released_links,
     }
 

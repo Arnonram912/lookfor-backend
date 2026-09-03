@@ -409,6 +409,27 @@ def authorize_single_ai_link(
 
 def delete_item_claims_and_release_matches(db, item: models.Item) -> None:
     """Delete an item's claims and make no-longer-linked counterparts matchable."""
+    if item.status == "lost" and hasattr(item, "matched_item_id"):
+        auto_found_items = db.query(models.Item).filter(
+            models.Item.status == "found",
+            models.Item.matched_item_id == item.id,
+        ).all()
+        for found_item in auto_found_items:
+            found_item.matched_item_id = None
+            found_item.is_matched = _has_active_claim(db, found_item.id)
+        for pending_item in db.query(models.PendingItem).filter(
+            models.PendingItem.matched_item_id == item.id,
+        ).all():
+            pending_item.matched_item_id = None
+    elif item.status == "found" and getattr(item, "matched_item_id", None):
+        auto_lost_item = db.query(models.Item).filter(
+            models.Item.id == item.matched_item_id,
+            models.Item.status == "lost",
+        ).first()
+        item.matched_item_id = None
+        if auto_lost_item and not _has_active_claim(db, auto_lost_item.id):
+            auto_lost_item.is_matched = False
+
     linked_claims = db.query(models.Claim).filter(
         or_(
             models.Claim.lost_item_id == item.id,

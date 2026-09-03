@@ -261,6 +261,7 @@
                         </div>
                         
                         <div class="modal-actions">
+                            <button type="button" class="btn-archive-big" id="manualClaimBtn" onclick="handleLostManualClaimButtonClick()" style="display:none; background:#0d6efd;">Create Manual Claim</button>
                             <button type="button" class="btn-archive-big" id="archiveBtn">Delete</button>
                             <button type="button" class="btn-delete-big" id="deleteBtn" style="display:none;">Delete Item</button>
                             <button type="button" class="btn-archive-big" id="recoverBtn" style="display:none; background:#198754;">Recover Item</button>
@@ -278,7 +279,7 @@
                 <div id="modalPossibleMatches" style="display:grid; gap:12px; max-height:440px; overflow-y:auto; padding-right:4px;">Loading possible matches...</div>
                 <div class="modal-footer" style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                     <button type="button" class="btn-upload-img" onclick="closeModal('detailPossibleMatchesModal')" style="margin:0;">Close</button>
-                    <button type="button" class="btn-found lost-submit-btn" id="applySelectedMatchBtn" style="display:none; margin:0;" onclick="applySelectedPossibleMatch()">Use Selected Match</button>
+                    <button type="button" class="btn-found lost-submit-btn" id="applySelectedMatchBtn" style="display:none; margin:0;" onclick="applySelectedPossibleMatch()">Send Selected Match for Approval</button>
                 </div>
             </div>
         </div>
@@ -924,6 +925,18 @@ function showAccessDeniedPopup(permName) {
             openModal('detailPossibleMatchesModal');
         }
 
+        async function handleLostManualClaimButtonClick() {
+            if (!currentDetailLostItemId) {
+                await showLostUploadAlert('info', 'No item selected', 'Please open a lost item first.');
+                return;
+            }
+            if (detailPossibleMatchCount) {
+                openDetailPossibleMatches();
+                return;
+            }
+            await analyzeLostItemMatches();
+        }
+
         async function loadPossibleMatchesForDetail(itemId, categoryFallback = '', isMatched = false, isArchived = false) {
     const container = document.getElementById("modalPossibleMatches");
     const applyBtn = document.getElementById("applySelectedMatchBtn");
@@ -1046,10 +1059,12 @@ async function analyzeLostItemMatches() {
                 statusEl.style.color = "#28a745";
             }
             await showLostUploadAlert(
-                'success',
-                'Automatic match linked',
-                'The score reached 75%, both items were marked as matched, and a pending claim was created.'
+                'info',
+                'AI match found',
+                'The items are marked as matched, but no claim was created. Review the possible matches and confirm one to send it to Claim Management.'
             );
+        } else if (result.requires_admin_selection) {
+            await showLostUploadAlert('info', 'Possible matches ready', 'Review the results and confirm the correct item to send it to Claim Management.');
         }
         openModal('detailPossibleMatchesModal');
     } catch (error) {
@@ -1101,13 +1116,19 @@ async function analyzeLostItemMatches() {
         );
         renderLostItems();
 
+        const switchedMatch = Number(result.released_links || 0) > 0;
+
         const statusEl = document.getElementById("modalStatus");
         if (statusEl) {
             statusEl.innerText = "MATCHED";
             statusEl.style.color = "#28a745";
         }
 
-        await showLostUploadAlert('success', 'Match saved', result.message || 'The selected match was saved.');
+        await showLostUploadAlert(
+            'success',
+            switchedMatch ? 'Match changed' : 'Sent for approval',
+            result.message || 'The selected match was linked and sent to Claim Management.'
+        );
         closeModal('detailPossibleMatchesModal');
         closeModal('itemDetailModal');
         await loadLostItems();
@@ -1116,7 +1137,7 @@ async function analyzeLostItemMatches() {
     } finally {
         if (applyBtn) {
             applyBtn.disabled = false;
-            applyBtn.textContent = 'Use Selected Match';
+            applyBtn.textContent = 'Send Selected Match for Approval';
         }
     }
 }
@@ -1179,7 +1200,12 @@ async function analyzeLostItemMatches() {
     const archiveBtn = document.getElementById("archiveBtn");
     const deleteBtn = document.getElementById("deleteBtn");
     const recoveryBtn = document.getElementById("recoverBtn");
+    const manualClaimBtn = document.getElementById("manualClaimBtn");
     if (lostLifecycleView !== "active") {
+        if (manualClaimBtn) {
+            manualClaimBtn.style.display = "none";
+            manualClaimBtn.disabled = true;
+        }
         recoveryBtn.style.display = "inline-flex";
         archiveBtn.style.display = lostLifecycleView === "archive" ? "inline-flex" : "none";
         archiveBtn.textContent = "Delete";
@@ -1193,6 +1219,10 @@ async function analyzeLostItemMatches() {
         archiveBtn.textContent = "Archive Item";
         archiveBtn.onclick = () => archiveLostItem(item.id);
         recoveryBtn.style.display = "none"; 
+        if (manualClaimBtn) {
+            manualClaimBtn.style.display = !item.is_claimed ? "inline-flex" : "none";
+            manualClaimBtn.disabled = !!item.is_claimed;
+        }
         deleteBtn.style.display = "inline-flex";
         deleteBtn.textContent = "Delete";
         deleteBtn.onclick = () => moveLostItemToDeleted(item.id);
@@ -2067,6 +2097,7 @@ async function executeSubmit() {
         confirmBtn.innerText = "Confirm & Report";
     }
 }
+
 async function disposeItem(itemId) {
     const disposePrompt = await fireSwalOnTop({
         icon: 'warning',
@@ -2205,10 +2236,9 @@ async function disposeItem(itemId) {
         window.location.href = "/";
     }
     </script>
-<script src="/static/item-detail-editor.js?v=7" data-item-type="item" data-reload="loadLostItems"></script>
 <script src="/static/session-keepalive.js?v=17"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=6"></script>
+<script src="/static/admin-notifications.js?v=8"></script>
 </body>
 </html>

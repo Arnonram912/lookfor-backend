@@ -122,6 +122,9 @@ class Item(Base):
     image_embedding = Column(Text)
     possible_matches = Column(Text, nullable=True)
     is_matched = Column(Boolean, default=False)
+    # For AI-only links. These mark a pair as matched without creating a Claim;
+    # the value is cleared when an admin confirms or changes the selection.
+    matched_item_id = Column(Integer, nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_surrendered = Column(Boolean, default=False)
 

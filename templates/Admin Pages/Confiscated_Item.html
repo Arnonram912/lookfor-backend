@@ -312,6 +312,27 @@
             font-size: 14px;
             line-height: 1.7;
         }
+
+        .report-upload-modal.review-mode {
+            width: min(620px, 92vw);
+            max-width: min(620px, 92vw);
+            overflow-y: auto;
+        }
+
+        .confiscated-review-image {
+            width: 100%;
+            max-height: 220px;
+            object-fit: contain;
+            display: block;
+            margin-bottom: 12px;
+            border-radius: 10px;
+            border: 1px solid #d9e4f2;
+            background: #f8fbff;
+        }
+
+        .confiscated-review-card p {
+            margin: 6px 0;
+        }
         
 
         @media (max-width: 760px) {
@@ -661,6 +682,18 @@
 
 
 <script>
+    const ITEM_IMAGE_FALLBACK = '/static/photos/boxw.png';
+
+function getItemImageUrl(imagePath) {
+    const cleanPath = String(imagePath || '').replace(/\\/g, '/').trim();
+
+    if (!cleanPath) return ITEM_IMAGE_FALLBACK;
+    if (/^(https?:)?\/\//i.test(cleanPath) || cleanPath.startsWith('/')) {
+        return cleanPath;
+    }
+
+    return `/${cleanPath}`;
+}
     function closeAllDropdowns() {
         const dropdowns = [
             "notificationDropdown",
@@ -700,8 +733,8 @@ async function viewDetails(itemId) {
         const item = await response.json();
 
         if (response.ok && item) {
-            const cleanPath = (item.image_path || '').replace(/\\/g, '/');
-            document.getElementById('viewImage').src = cleanPath ? `/${cleanPath}` : '/static/photos/boxw.png';
+            const imageUrl = getItemImageUrl(item.image_path);
+            document.getElementById('viewImage').src = imageUrl;
             document.getElementById('viewCategory').innerText = item.category;
             document.getElementById('viewBrandColor').innerText = `${item.brand || 'N/A'} / ${item.color || 'N/A'}`;
             document.getElementById('viewDate').innerText = item.date_confiscated;
@@ -894,13 +927,13 @@ function renderConfiscatedItems() {
                     <button onclick="editConfiscated(${item.id})" class="btn-secondary" title="Edit" style="padding:7px 10px;background:#0d6efd;color:#fff;border-radius:8px;"><i class="fas fa-pen"></i></button>
                     <button onclick="updateDisposal(${item.id}, 'schedule')" class="btn-secondary" title="Move to For Disposal" style="padding:7px 10px;background:#f59f00;color:#fff;border-radius:8px;"><i class="fas fa-recycle"></i></button>
                   `;
-            const cleanPath = (item.image_path || '').replace(/\\/g, '/');
+            const imageUrl = getItemImageUrl(item.image_path);
             const key = confiscatedItemKey(item);
             const row = `
                 <tr>
                     <td><input type="checkbox" class="confiscated-select" ${selectedConfiscatedItems.has(key) ? 'checked' : ''} onchange="toggleConfiscatedSelection('${key}', this.checked)"></td>
                     <td>
-                        <img src="/${cleanPath || 'static/photos/boxw.png'}"
+                        <img src="${imageUrl}"
                              class="confiscated-thumb"
                              onerror="this.src='/static/photos/boxw.png'">
                     </td>
@@ -1002,6 +1035,7 @@ async function updateDisposal(itemId, action, sourceType = 'confiscated') {
 function openConfiscatedModal() {
     activeConfiscatedEditId = null;
     document.getElementById('confiscatedModal').style.display = 'flex';
+    document.querySelector('#confiscatedModal .report-upload-modal')?.classList.remove('review-mode');
     document.getElementById('step1').style.display = 'block';
     document.getElementById('step2').style.display = 'none';
     document.querySelector('#step1 .form-title').innerHTML = 'Report <span>New Item</span>';
@@ -1034,30 +1068,32 @@ function showReview() {
         return;
     }
     const categoryName = categorySelect.options[categorySelect.selectedIndex]?.text || '';
-    const previewImageHtml = document.getElementById('confImagePreview').innerHTML.includes('<img')
-        ? `<div style="margin-bottom:12px;">${document.getElementById('confImagePreview').innerHTML}</div>`
+    const reasonSelect = document.getElementById('confReason');
+    const reasonText = reasonSelect.options[reasonSelect.selectedIndex]?.text || reasonSelect.value || 'N/A';
+    const previewImage = document.querySelector('#confImagePreview img');
+    const previewImageHtml = previewImage?.src
+        ? `<img src="${escapeConfiscatedHtml(previewImage.src)}" class="confiscated-review-image" alt="Confiscated item preview">`
         : '';
 
     const details = `
         ${previewImageHtml}
-        <strong>Category:</strong> ${categoryName}<br>
-        <strong>Brand:</strong> ${document.getElementById('confBrand').value || 'N/A'}<br>
-        <strong>Color:</strong> ${document.getElementById('confColor').value || 'N/A'}<br>
-        <strong>Date:</strong> ${document.getElementById('confDate').value || 'N/A'}<br>
-        <strong>Time:</strong> ${document.getElementById('confTime').value || 'N/A'}<br>
-        <strong>Location:</strong> ${document.getElementById('confLocation').value || 'N/A'}<br>
-        <strong>Student Name:</strong> ${studentName || 'N/A'}<br>
-        <strong>Student Number:</strong> ${studentNumber || 'N/A'}<br>
-        <strong>Description:</strong> ${document.getElementById('confDescription').value || 'N/A'}<br>
-        <strong>Reason:</strong> ${document.getElementById('confReason').value || 'N/A'}
+        <p><strong>Item:</strong> <span>${escapeConfiscatedHtml(categoryName)}</span></p>
+        <p><strong>Brand/Color:</strong> <span>${escapeConfiscatedHtml(document.getElementById('confBrand').value || 'N/A')} / ${escapeConfiscatedHtml(document.getElementById('confColor').value || 'N/A')}</span></p>
+        <p><strong>Location:</strong> <span>${escapeConfiscatedHtml(document.getElementById('confLocation').value || 'N/A')}</span></p>
+        <p><strong>Student:</strong> <span>${escapeConfiscatedHtml(studentName || 'N/A')} / ${escapeConfiscatedHtml(studentNumber || 'N/A')}</span></p>
+        <p><strong>Date:</strong> <span>${escapeConfiscatedHtml(document.getElementById('confDate').value || 'N/A')} ${escapeConfiscatedHtml(document.getElementById('confTime').value || '')}</span></p>
+        <p><strong>Description:</strong> <span>${escapeConfiscatedHtml(document.getElementById('confDescription').value || 'N/A')}</span></p>
+        <p><strong>Reason:</strong> <span>${escapeConfiscatedHtml(reasonText)}</span></p>
     `;
 
     document.getElementById('reviewContent').innerHTML = details;
+    document.querySelector('#confiscatedModal .report-upload-modal')?.classList.add('review-mode');
     document.getElementById('step1').style.display = 'none';
     document.getElementById('step2').style.display = 'block';
 }
 
 function goBack() {
+    document.querySelector('#confiscatedModal .report-upload-modal')?.classList.remove('review-mode');
     document.getElementById('step1').style.display = 'block';
     document.getElementById('step2').style.display = 'none';
 }
@@ -1379,6 +1415,6 @@ function logout() {
 <script src="/static/session-keepalive.js?v=17"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=6"></script>
+<script src="/static/admin-notifications.js?v=8"></script>
 </body>
 </html>
