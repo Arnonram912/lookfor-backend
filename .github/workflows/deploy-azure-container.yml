@@ -48,6 +48,8 @@ jobs:
             --name "$AZURE_WEBAPP_NAME" \
             --settings \
               WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
+              WEBSITES_PORT=8000 \
+              COOKIE_SECURE=true \
               UPLOAD_FOLDER=/home/data/uploads \
               MATCHING_OBSERVATIONS_DATASET=/home/data/matching_observations.csv
 
