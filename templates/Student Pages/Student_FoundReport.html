@@ -524,6 +524,7 @@ window.onclick = function(event) {
                             <h3>${data.item_name || data.category || 'Unnamed Item'}</h3>
                             <p><i class="fas fa-map-marker-alt"></i> ${data.location || 'Unknown'}</p>
                             <p><strong>Found ID:</strong> ${data.found_id || data.item_code || 'N/A'}</p>
+                            ${item.display_status === "Pending Approval" ? '<p class="pending-surrender-reminder">Please put this item in the Guidance Office.</p>' : ''}
                             <span class="view-link" onclick='viewItemDetails(${itemData})'>View Details &rarr;</span>
                         </div>
                     </div>`;
@@ -1039,6 +1040,10 @@ window.onclick = function(event) {
         });
 
         document.addEventListener('DOMContentLoaded', () => {
+            const statusFromDashboard = new URLSearchParams(window.location.search).get('status');
+            if (['pending', 'approved', 'matched', 'claimed'].includes(statusFromDashboard)) {
+                document.getElementById('studentFoundStatusFilter').value = statusFromDashboard;
+            }
             loadFoundItems();
             fetchCategories();
             setReportTimeToNow();

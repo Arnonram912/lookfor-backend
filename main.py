@@ -98,7 +98,13 @@ from item_match_lifecycle import (
     release_stale_ai_match_after_reanalysis,
     replace_weaker_ai_match_after_reanalysis,
 )
-
+from item_match_lifecycle import (
+    authorize_single_ai_link,
+    mutual_top_upload_match,
+    release_stale_ai_match_after_reanalysis,
+    replace_weaker_ai_match_after_reanalysis,
+    delete_item_claims_and_release_matches,
+)
 if sys.platform.startswith("win") and hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -5342,7 +5348,7 @@ class ReportRecordDeleteRequest(BaseModel):
     row_type: str
     row_id: str
     item_id: int | None = None
-
+    claim_id: int | None = None
 
 @app.post("/api/admin/report-module/delete")
 def delete_report_module_record(
@@ -5357,34 +5363,50 @@ def delete_report_module_record(
 
     if row_type in {"lost", "found"}:
         require_admin_permission(current_admin, f"{row_type}_items.delete")
+
         item = db.query(models.Item).filter(
             models.Item.id == record_id,
             models.Item.status == row_type,
         ).first()
+
         if not item:
             raise HTTPException(status_code=404, detail="Report item not found")
-        item.deleted = True
-        message = f"{row_type.title()} item #{item.id} moved to Deleted Items from Reports."
+
+        delete_item_claims_and_release_matches(db, item)
+        db.delete(item)
+
+        message = (
+            f"{row_type.title()} item #{item.id} "
+            "was permanently deleted from Reports."
+        )
+            
     elif row_type == "pending":
         require_admin_permission(current_admin, "found_items.delete")
         item = db.query(models.PendingItem).filter(models.PendingItem.id == record_id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Pending found item not found")
-        item.deleted = True
-        message = f"Pending found item #{item.id} moved to Deleted Items from Reports."
+        db.delete(item)
+        message = f"Pending found item #{item.id} was permanently deleted from Reports."
     elif row_type == "claim":
         require_admin_permission(current_admin, "claim_management.decide")
-        claim = db.query(models.Claim).filter(models.Claim.id == record_id).first()
+
+        claim = db.query(models.Claim).filter(
+            models.Claim.id == payload.claim_id
+        ).first()
+
         if not claim:
             raise HTTPException(status_code=404, detail="Claim report not found")
+
         db.query(models.ClaimDecisionReport).filter(
             models.ClaimDecisionReport.claim_id == claim.id
         ).delete(synchronize_session=False)
-        db.query(models.ClaimProof).filter(models.ClaimProof.claim_id == claim.id).delete(
-            synchronize_session=False
-        )
+
+        db.query(models.ClaimProof).filter(
+            models.ClaimProof.claim_id == claim.id
+        ).delete(synchronize_session=False)
+
         db.delete(claim)
-        message = f"Claim report #{record_id} was permanently deleted from Reports."
+        message = f"Claim report #{claim.id} was permanently deleted from Reports."
     elif row_type == "confiscated":
         require_admin_permission(current_admin, "confiscated_items.delete")
         item = db.query(models.ConfiscatedItem).filter(models.ConfiscatedItem.id == record_id).first()

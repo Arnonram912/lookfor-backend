@@ -8,7 +8,7 @@
 
     <title>Student Panel | LookFor STI</title> 
 
-    <link rel="stylesheet" href="/static/student_dashboard.css?v=10"> 
+    <link rel="stylesheet" href="/static/student_dashboard.css?v=11"> 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
 
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet"> 
@@ -144,27 +144,23 @@
         </div>
     
 
-    <div class="stats-grid">
-        <div class="card" onclick="openFoundItemsModal()">
-            <div class="card-icon">📁</div>
+    <div class="stats-grid dashboard-stats-grid">
+        <div class="card" onclick="window.location.href='/student/Found-report'">
             <h3 id="foundCount">0</h3>
-            <p>Found Items Inventory</p>
+            <p>Found Items</p>
         </div>
 
-        <div class="card">
-            <div class="card-icon">🔍</div>
-            <h3>12</h3>
-            <p>Lost Item Inventory</p>
+        <div class="card" onclick="window.location.href='/student/Lost-report'">
+            <h3 id="lostCount">0</h3>
+            <p>Lost Items</p>
         </div>
 
-        <div class="card" onclick="openPendingSurrenderModal()">
-            <div class="card-icon">⏳</div>
+        <div class="card" onclick="openStudentItemsModal('pending')">
             <h3 id="pendingCount">0</h3>
             <p>Pending Surrender</p>
         </div>
 
-        <div class="card">
-            <div class="card-icon">✅</div>
+        <div class="card" onclick="openStudentItemsModal('claimed')">
             <h3 id="claimedCount">0</h3>
             <p>Claimed Item</p>
         </div>
@@ -207,22 +203,19 @@
             </div>
         </div>
     </div>
-        <div id="adminActionModal" class="modal">
-            <div class="modal-content" style="max-width: 600px;">
-                <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
-                    <h2 id="adminModalTitle">Pending Surrender Items</h2>
-                    <span class="close-modal" onclick="closeModal('adminActionModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <div id="adminModalList">
-                        <p style="text-align:center; padding:20px;">Loading items...</p>
-                    </div>
-                </div>
-                <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
-                    <button class="btn-secondary" onclick="closeModal('adminActionModal')" style="padding: 8px 20px; cursor: pointer;">Close</button>
-                </div>
+
+    <div id="studentItemsModal" class="modal">
+        <div class="modal-content" style="max-width: 760px; width: min(760px, 92vw);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                <h2 id="studentItemsModalTitle">Pending Surrender</h2>
+                <span class="close-modal" onclick="closeModal('studentItemsModal')" style="cursor:pointer; font-size: 24px;">&times;</span>
+            </div>
+            <div id="studentItemsModalList" class="modal-body" style="max-height: 65vh; overflow-y: auto;"></div>
+            <div class="modal-footer" style="padding-top: 15px; border-top: 1px solid #eee; text-align: right;">
+                <button class="btn-secondary" onclick="closeModal('studentItemsModal')">Close</button>
             </div>
         </div>
+    </div>
         <script>
 
 // --- UTILS & HELPERS ---
@@ -248,6 +241,32 @@ function moveSlide(direction) {
 let notifications = [];
 window.allPending = []; 
 window.allFound = [];
+window.allClaimed = [];
+
+function openStudentItemsModal(type) {
+    const isPending = type === 'pending';
+    const items = isPending ? window.allPending : window.allClaimed;
+    document.getElementById('studentItemsModalTitle').innerText = isPending
+        ? 'Pending Surrender'
+        : 'Claimed Items';
+    const list = document.getElementById('studentItemsModalList');
+    if (!items.length) {
+        list.innerHTML = `<p style="text-align:center; padding:24px;">No ${isPending ? 'pending surrender' : 'claimed'} items.</p>`;
+    } else {
+        list.innerHTML = items.map(item => {
+            const data = item.data || {};
+            const reminder = isPending
+                ? '<p style="margin:8px 0 0; color:#7a4b00; font-weight:700;">Please put this item in the Guidance Office.</p>'
+                : '';
+            return `<div style="padding:16px 0; border-bottom:1px solid #eee;">
+                <strong>${escapeHtml(data.item_name || data.category || 'Unnamed Item')}</strong>
+                <p style="margin:6px 0 0; color:#666;">Found ID: ${escapeHtml(data.found_id || data.item_code || 'N/A')}</p>
+                ${reminder}
+            </div>`;
+        }).join('');
+    }
+    openModal('studentItemsModal');
+}
 
 // --- 1. DYNAMIC CAROUSEL LOGIC ---
 async function loadAnnouncements() {
@@ -315,25 +334,29 @@ async function updateDashboardStats() {
     if (!token) return;
 
     try {
-        const [resMine, resFound] = await Promise.all([
+        const [resMine, resFound, resLost] = await Promise.all([
             fetch('/student/items/found/me', { headers: { 'Authorization': `Bearer ${token}` } }),
-            fetch('/student/items/found/active-count', { headers: { 'Authorization': `Bearer ${token}` } })
+            fetch('/student/items/found/active-count', { headers: { 'Authorization': `Bearer ${token}` } }),
+            fetch('/student/api/items/lost/me', { headers: { 'Authorization': `Bearer ${token}` } })
         ]);
 
-        if (!resMine.ok || !resFound.ok) {
+        if (!resMine.ok || !resFound.ok || !resLost.ok) {
             throw new Error("Failed to load dashboard stats.");
         }
 
         const myItems = await resMine.json();
         const foundStats = await resFound.json();
+        const lostItems = await resLost.json();
         const pendingItems = myItems.filter(item => item.display_status === "Pending Approval");
-        const claimedItems = myItems.filter(item => item.display_status !== "Pending Approval");
+        const claimedItems = myItems.filter(item => item.display_status === "Claimed Item");
 
         document.getElementById('pendingCount').innerText = pendingItems.length || 0;
         document.getElementById('foundCount').innerText = Number(foundStats.count || 0);
+        document.getElementById('lostCount').innerText = Array.isArray(lostItems) ? lostItems.length : 0;
         document.getElementById('claimedCount').innerText = claimedItems.length || 0;
         
         window.allPending = pendingItems;
+        window.allClaimed = claimedItems;
         window.allFound = [];
     } catch (err) {
         console.error("Stats sync failed");
