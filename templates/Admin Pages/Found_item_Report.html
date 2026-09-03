@@ -9,7 +9,7 @@
     <title>Admin Panel | LookFor STI</title> 
 
     <link rel="stylesheet" href="/static/admin2.o.css?v=17">
-    <link rel="stylesheet" href="/static/Found_item_report.css?v=23">
+    <link rel="stylesheet" href="/static/Found_item_report.css?v=25">
     <link rel="stylesheet" href="/static/admin-item-bulk-actions.css?v=5">
     <link rel="stylesheet" href="/static/report-confirm-modal.css?v=1">
 
@@ -242,6 +242,10 @@
                 <div class="detail-layout">
                     <div class="detail-image">
                         <img id="modalImg" src="" alt="Item Image">
+                        <div class="found-ai-evaluation">
+                            <strong style="color:#0e2742;">AI Match Evaluation (Admin Only)</strong>
+                            <div id="modalMatchScores" style="margin-top:10px; display:grid; gap:10px;"></div>
+                        </div>
                     </div>
                     <div class="detail-info">
                         <div class="modal-header-flex" style="display: flex; justify-content: space-between; align-items: center;">
@@ -266,11 +270,6 @@
 
                         <p><strong>Description:</strong></p>
                         <p id="modalDescription" class="description-text"></p>
-
-                        <div style="margin-top:16px; padding:14px; border:1px solid #d9e4f2; border-radius:12px; background:#f8fbff;">
-                            <strong style="color:#0e2742;">AI Match Evaluation (Admin Only)</strong>
-                            <div id="modalMatchScores" style="margin-top:10px; display:grid; gap:10px;"></div>
-                        </div>
                         
                         <div class="modal-actions">
                             <button type="button" class="btn-archive-big" id="approveBtn" style="display:none; background:#198754;">Approve Item</button>
@@ -568,7 +567,7 @@ function showAccessDeniedPopup(permName) {
         function renderFoundMatchScores(matches) {
             const container = document.getElementById('modalMatchScores');
             if (!container) return;
-            matches = parseFoundPossibleMatches(matches).slice(0, 5);
+            matches = parseFoundPossibleMatches(matches).slice(0, 1);
             if (!matches.length) {
                 container.textContent = 'No lost-report candidates reached the 45% possibility threshold.';
                 return;
@@ -1169,14 +1168,14 @@ function showAccessDeniedPopup(permName) {
             recoverBtn.onclick = null;
         }
         if (manualClaimBtn) {
-            manualClaimBtn.style.display = (!item.is_pending && !item.is_matched) ? "inline-flex" : "none";
-            manualClaimBtn.disabled = !!item.is_matched || !!item.is_pending;
+            manualClaimBtn.style.display = (!item.is_pending && !item.is_claimed) ? "inline-flex" : "none";
+            manualClaimBtn.disabled = !!item.is_pending || !!item.is_claimed;
         }
         if (claimedBtn) {
             claimedBtn.style.display = (!item.is_pending && !item.is_claimed) ? "inline-flex" : "none";
             claimedBtn.disabled = !!item.is_pending || !!item.is_claimed;
         }
-        const canMoveActiveItemToDisposal = !item.is_pending && !item.is_matched && !item.is_claimed;
+        const canMoveActiveItemToDisposal = !item.is_pending && !item.is_claimed;
         disposeBtn.style.display = canMoveActiveItemToDisposal ? "inline-flex" : "none";
         disposeBtn.textContent = "For Disposal";
         disposeBtn.onclick = canMoveActiveItemToDisposal ? () => moveFoundItemToDisposal(item.id) : null;
@@ -1997,10 +1996,9 @@ async function disposeItem(itemId, isPending = false) {
     </script>
       </div>
 </main>
-<script src="/static/item-detail-editor.js?v=7" data-item-type="item" data-reload="loadFoundItems"></script>
 <script src="/static/session-keepalive.js?v=17"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=2"></script>
 <script src="/static/force-password-change.js"></script>
-<script src="/static/admin-notifications.js?v=6"></script>
+<script src="/static/admin-notifications.js?v=8"></script>
 </body>
 </html>

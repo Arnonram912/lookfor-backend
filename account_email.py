@@ -9,7 +9,7 @@ from email.message import EmailMessage
 
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 
 from database import SessionLocal
 import models
@@ -467,6 +467,7 @@ def queue_account_access_email(
     temporary_password: str,
     *,
     account_type: str = "user",
+    supersede_existing: bool = False,
 ) -> bool:
     """Persist an account email before delivery so bulk imports survive restarts."""
     if not recipient_email or not temporary_password:
@@ -474,6 +475,23 @@ def queue_account_access_email(
     try:
         encrypted_password = _outbox_cipher().encrypt(temporary_password.encode("utf-8")).decode("utf-8")
         db = SessionLocal()
+        if supersede_existing:
+            db.query(models.AccountEmailOutbox).filter(
+                func.lower(models.AccountEmailOutbox.recipient_email) == recipient_email.strip().casefold(),
+                models.AccountEmailOutbox.status.in_({
+                    "pending",
+                    "password_pending",
+                    "sending",
+                    "sending_username",
+                    "sending_password",
+                }),
+            ).update(
+                {
+                    models.AccountEmailOutbox.status: "superseded",
+                    models.AccountEmailOutbox.last_error: "Superseded by newer credentials.",
+                },
+                synchronize_session=False,
+            )
         db.add(models.AccountEmailOutbox(
             recipient_email=recipient_email,
             full_name=full_name,

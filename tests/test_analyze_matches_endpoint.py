@@ -75,8 +75,9 @@ def user(user_id=7, is_admin=False):
 
 
 class AnalyzeMatchesEndpointTests(unittest.TestCase):
+    @patch("main.synchronize_automatic_item_match", return_value=(False, False))
     @patch("main.analyze_saved_item_details")
-    def test_owner_explicitly_reanalyzes_and_persists_result(self, analyzer):
+    def test_owner_explicitly_reanalyzes_and_persists_result(self, analyzer, _sync):
         db = FakeSession(lost_item())
         analyzer.return_value = {
             "highest_score": 0.0,
@@ -92,9 +93,9 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         self.assertTrue(db.committed)
         analyzer.assert_called_once_with(db, db.item, record_type="item")
 
-    @patch("main.release_stale_ai_match_after_reanalysis", return_value=1)
+    @patch("main.synchronize_automatic_item_match", return_value=(False, False))
     @patch("main.analyze_saved_item_details")
-    def test_no_new_match_releases_previous_unverified_ai_link(self, analyzer, release_match):
+    def test_reanalysis_does_not_change_an_existing_match(self, analyzer, _sync):
         lost = lost_item()
         lost.is_matched = True
         db = FakeSession(lost)
@@ -107,10 +108,10 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
 
         result = analyze_lost_item_matches(7162, db=db, current_user=user())
 
-        release_match.assert_called_once_with(db, lost)
-        self.assertTrue(result["match_released"])
-        self.assertEqual(result["released_ai_links"], 1)
+        self.assertFalse(result["match_released"])
+        self.assertEqual(result["released_ai_links"], 0)
         self.assertFalse(result["auto_linked"])
+        self.assertTrue(lost.is_matched)
         self.assertTrue(db.committed)
 
     def test_unrelated_student_cannot_reanalyze(self):
@@ -121,8 +122,9 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 403)
 
+    @patch("main.synchronize_automatic_item_match", return_value=(True, False))
     @patch("main.analyze_saved_item_details")
-    def test_authoritative_score_links_both_items_and_creates_claim(self, analyzer):
+    def test_authoritative_score_requires_admin_selection(self, analyzer, _sync):
         lost = lost_item()
         found = SimpleNamespace(id=7194, is_matched=False)
         db = SequencedFakeSession([lost, found, None, None])
@@ -137,16 +139,16 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
 
         claims = [value for value in db.added if isinstance(value, models.Claim)]
         self.assertTrue(result["auto_linked"])
-        self.assertEqual(result["claim_id"], 91)
-        self.assertTrue(lost.is_matched)
-        self.assertTrue(found.is_matched)
-        self.assertEqual(len(claims), 1)
-        self.assertEqual(claims[0].similarity_score, "82.0%")
+        self.assertIsNone(result["claim_id"])
+        self.assertTrue(result["requires_admin_selection"])
+        self.assertFalse(lost.is_matched)
+        self.assertFalse(found.is_matched)
+        self.assertEqual(claims, [])
         self.assertTrue(db.committed)
 
-    @patch("main.replace_weaker_ai_match_after_reanalysis", return_value=0)
+    @patch("main.synchronize_automatic_item_match", return_value=(True, False))
     @patch("main.analyze_saved_item_details")
-    def test_reanalysis_repairs_stale_matched_flags_when_no_active_claim_exists(self, analyzer, _replace):
+    def test_reanalysis_does_not_create_claim_for_previously_matched_item(self, analyzer, _sync):
         lost = lost_item()
         lost.is_matched = True
         found = SimpleNamespace(id=7194, is_matched=True)
@@ -162,12 +164,14 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
 
         claims = [value for value in db.added if isinstance(value, models.Claim)]
         self.assertTrue(result["auto_linked"])
-        self.assertEqual(len(claims), 1)
+        self.assertTrue(result["requires_admin_selection"])
+        self.assertEqual(claims, [])
         self.assertTrue(lost.is_matched)
         self.assertTrue(found.is_matched)
 
+    @patch("main.synchronize_automatic_item_match", return_value=(False, False))
     @patch("main.analyze_saved_item_details")
-    def test_ranked_candidate_with_stale_matched_flag_is_linked(self, analyzer):
+    def test_ranked_candidate_with_stale_flag_still_requires_admin_selection(self, analyzer, _sync):
         lost = lost_item()
         found = SimpleNamespace(id=7212, is_matched=True)
         # lost lookup, candidate ownership check, found lookup, existing pair,
@@ -198,19 +202,19 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         result = analyze_lost_item_matches(7162, db=db, current_user=user())
 
         claims = [value for value in db.added if isinstance(value, models.Claim)]
-        self.assertTrue(result["auto_linked"])
-        self.assertEqual(result["matched_item"]["id"], 7212)
-        self.assertTrue(result["matched_item"]["available_for_match"])
-        self.assertEqual(len(claims), 1)
-        self.assertTrue(lost.is_matched)
+        self.assertFalse(result["auto_linked"])
+        self.assertIsNone(result["matched_item"])
+        self.assertTrue(result["requires_admin_selection"])
+        self.assertEqual(claims, [])
+        self.assertFalse(lost.is_matched)
         self.assertTrue(found.is_matched)
 
-    @patch("main.release_stale_ai_match_after_reanalysis", return_value=1)
+    @patch("main.synchronize_automatic_item_match", return_value=(False, False))
     @patch("main.analyze_saved_item_details")
     def test_occupied_top_candidate_does_not_fall_through_to_second_highest(
         self,
         analyzer,
-        release_match,
+        _sync,
     ):
         lost = lost_item()
         lost.is_matched = True
@@ -244,13 +248,13 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
 
         self.assertFalse(result["auto_linked"])
         self.assertIsNone(result["matched_item"])
-        self.assertEqual(result["released_ai_links"], 1)
-        release_match.assert_called_once_with(db, lost)
+        self.assertEqual(result["released_ai_links"], 0)
+        self.assertTrue(result["requires_admin_selection"])
         self.assertTrue(db.committed)
 
-    @patch("main.replace_weaker_ai_match_after_reanalysis", return_value=1)
+    @patch("main.synchronize_automatic_item_match", return_value=(True, False))
     @patch("main.analyze_saved_item_details")
-    def test_stronger_match_replaces_previous_ai_link(self, analyzer, replace_match):
+    def test_stronger_match_does_not_replace_link_without_admin_selection(self, analyzer, _sync):
         lost = lost_item()
         lost.is_matched = True
         found = SimpleNamespace(id=7194, is_matched=False)
@@ -269,13 +273,14 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         result = analyze_lost_item_matches(7162, db=db, current_user=user())
 
         self.assertTrue(result["auto_linked"])
-        self.assertTrue(result["match_replaced"])
-        self.assertEqual(result["released_ai_links"], 1)
-        self.assertEqual(result["claim_id"], 91)
-        replace_match.assert_called_once()
+        self.assertFalse(result["match_replaced"])
+        self.assertEqual(result["released_ai_links"], 0)
+        self.assertIsNone(result["claim_id"])
+        self.assertTrue(result["requires_admin_selection"])
 
+    @patch("main.synchronize_automatic_item_match", return_value=(True, True))
     @patch("main.analyze_saved_item_details")
-    def test_pending_found_match_is_reserved_without_creating_claim(self, analyzer):
+    def test_pending_found_match_is_not_reserved_or_claimed(self, analyzer, _sync):
         lost = lost_item()
         pending = SimpleNamespace(id=99, matched_item_id=None, archived=False, deleted=False)
         db = SequencedFakeSession([lost, pending, None, None])
@@ -291,9 +296,10 @@ class AnalyzeMatchesEndpointTests(unittest.TestCase):
         claims = [value for value in db.added if isinstance(value, models.Claim)]
         self.assertTrue(result["auto_linked"])
         self.assertTrue(result["pending_approval"])
+        self.assertTrue(result["requires_admin_selection"])
         self.assertIsNone(result["claim_id"])
-        self.assertEqual(pending.matched_item_id, lost.id)
-        self.assertTrue(lost.is_matched)
+        self.assertIsNone(pending.matched_item_id)
+        self.assertFalse(lost.is_matched)
         self.assertEqual(claims, [])
         self.assertTrue(db.committed)
 

@@ -235,6 +235,9 @@
         <button id="openResetStudentPasswordBtn" class="upload-btn" onclick="openModal('resetStudentPasswordModal')">
             + Reset Student/Faculty Password
         </button>
+        <button id="resendAllCredentialEmailsBtn" class="upload-btn" onclick="resendAllCredentialEmails()">
+            <i class="fas fa-paper-plane" aria-hidden="true"></i> Resend All Failed Emails
+        </button>
         <button id="openAcademicTermBtn" class="upload-btn" onclick="openAcademicTermModal()">
             Academic Term
         </button>
@@ -1040,8 +1043,8 @@
         <div class="modal-content reset-password-result-content">
             <span class="close-modal" onclick="closeModal('resetPasswordResultModal')">&times;</span>
             <h2>Password Reset Complete</h2>
-            <p style="margin-bottom: 16px; color: #555; font-size: 13px;">
-                Share this temporary password with the student and ask them to change it after logging in.
+            <p id="resetResultDelivery" style="margin-bottom: 16px; color: #555; font-size: 13px;">
+                The new temporary password is being emailed to the student/faculty member.
             </p>
             <div class="form-group">
                 <label>Student/Faculty Email</label>
@@ -3164,6 +3167,54 @@ async function resendCredentialEmail(userId, button) {
     }
 }
 
+async function resendAllCredentialEmails() {
+    if (!hasAccessPermission('User-Management-Create')) {
+        Swal.fire('Access denied', 'You do not have permission to resend credential emails.', 'error');
+        return;
+    }
+
+    const button = document.getElementById('resendAllCredentialEmailsBtn');
+    const confirmation = await Swal.fire({
+        title: 'Resend all failed emails?',
+        text: 'This retries the latest failed credential email for every affected account. Successful or currently pending emails will not be resent.',
+        icon: 'question',
+        showCancelButton: true,
+        reverseButtons: true,
+        confirmButtonText: 'Resend All'
+    });
+    if (!confirmation.isConfirmed) return;
+
+    const originalHtml = button?.innerHTML || '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Queuing...';
+    }
+
+    try {
+        const response = await fetch('/admin/users/credential-emails/resend-all', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem("admin_token")}` }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.detail || 'Unable to resend failed credential emails.');
+
+        const queuedCount = Number(result.queued_count || 0);
+        await Swal.fire(
+            queuedCount ? 'Emails queued' : 'Nothing to resend',
+            result.message || `${queuedCount} credential email(s) queued.`,
+            queuedCount ? 'success' : 'info'
+        );
+        await loadUsers(currentView);
+    } catch (error) {
+        await Swal.fire('Resend failed', error.message, 'error');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const batchYearInput = document.getElementById('batchYear');
     if (batchYearInput && !batchYearInput.value) {
@@ -3880,6 +3931,11 @@ async function moveSingleUserToTrash(userId) {
             academicTermButton.style.display =
                 currentAdminPermissions.includes('academic_term.view') ? '' : 'none';
         }
+        const resendAllButton = document.getElementById('resendAllCredentialEmailsBtn');
+        if (resendAllButton) {
+            resendAllButton.style.display =
+                currentAdminPermissions.includes('User-Management-Create') ? '' : 'none';
+        }
 
         // Check if the required permission exists in the user's list
         if (hasAccessPermission(permission) || permissions.includes(permission)) {
@@ -3949,6 +4005,11 @@ async function applyPermissions() {
         if (academicTermButton) {
             academicTermButton.style.display =
                 currentAdminPermissions.includes('academic_term.view') ? '' : 'none';
+        }
+        const resendAllButton = document.getElementById('resendAllCredentialEmailsBtn');
+        if (resendAllButton) {
+            resendAllButton.style.display =
+                currentAdminPermissions.includes('User-Management-Create') ? '' : 'none';
         }
 
         document.querySelectorAll(".nav-links li").forEach(item => {
@@ -4486,11 +4547,17 @@ function normalizeSemesterTerm(value) {
     return match[1][0].toUpperCase() + match[1].slice(1);
 }
 
-function showResetPasswordResult(email, tempPassword) {
+function showResetPasswordResult(email, tempPassword, emailQueued) {
     const emailField = document.getElementById('resetResultEmail');
     const passwordField = document.getElementById('resetResultPassword');
+    const deliveryMessage = document.getElementById('resetResultDelivery');
     if (emailField) emailField.value = email;
     if (passwordField) passwordField.value = tempPassword;
+    if (deliveryMessage) {
+        deliveryMessage.textContent = emailQueued
+            ? 'The new temporary password has been queued for email delivery.'
+            : 'The password was reset, but its email could not be queued. Share the temporary password manually.';
+    }
     closeModal('resetStudentPasswordModal');
     openModal('resetPasswordResultModal');
 }
@@ -5201,7 +5268,7 @@ loadDepartments();
             });
             const result = await response.json();
             if (response.ok) {
-                showResetPasswordResult(email, result.new_temp_password);
+                showResetPasswordResult(email, result.new_temp_password, result.email_queued);
             } else {
                 await showUserManagementAlert('error', 'Reset failed', result.detail || 'Failed to reset password.');
             }
@@ -5224,7 +5291,7 @@ loadDepartments();
             });
             const result = await response.json();
             if (response.ok) {
-                showResetPasswordResult(email, result.new_temp_password);
+                showResetPasswordResult(email, result.new_temp_password, result.email_queued);
             } else {
                 await showUserManagementAlert('error', 'Reset failed', result.detail || 'Failed to reset password.');
             }
@@ -5770,7 +5837,7 @@ window.addEventListener('pageshow', () => {
 
 <script src="/static/session-keepalive.js?v=17"></script>
 <script src="/static/admin-bulk-job-monitor.js?v=3"></script>
-<script src="/static/admin-notifications.js?v=6"></script>
+<script src="/static/admin-notifications.js?v=8"></script>
 <script src="/static/force-password-change.js"></script>
 </body>
 </html>

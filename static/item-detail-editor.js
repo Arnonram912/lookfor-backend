@@ -22,6 +22,20 @@
         return sessionStorage.getItem("admin_token") || localStorage.getItem("token") || "";
     }
 
+    function decodeTokenPayload(token) {
+        try {
+            return JSON.parse(atob(String(token || "").split(".")[1] || ""));
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function currentUserId() {
+        const payload = decodeTokenPayload(authToken());
+        const id = Number(payload?.id);
+        return Number.isFinite(id) && id > 0 ? id : null;
+    }
+
     function imageUrl(path) {
         const cleanPath = String(path || "").replace(/\\/g, "/").trim();
         if (!cleanPath) return "/static/photos/placeholder.png";
@@ -39,6 +53,12 @@
         return String(item.status || "").toLowerCase() === "lost"
             && !item.is_matched
             && !item.is_claimed;
+    }
+
+    function isEditableByCurrentUser(item) {
+        const userId = currentUserId();
+        if (!userId) return false;
+        return Number(item?.user_id) === userId || Number(item?.report_owner_user_id) === userId;
     }
 
     function installMarkup() {
@@ -392,7 +412,9 @@
             button.addEventListener("click", openEditor);
             host.prepend(button);
         }
-        button.style.display = isPendingEditable(item, activeRecordType) ? "inline-flex" : "none";
+        button.style.display = (
+            isPendingEditable(item, activeRecordType) && isEditableByCurrentUser(item)
+        ) ? "inline-flex" : "none";
     }
 
     const originalViewDetails = window.viewItemDetails;

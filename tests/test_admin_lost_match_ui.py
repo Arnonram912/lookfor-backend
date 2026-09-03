@@ -25,6 +25,7 @@ class AdminLostMatchUiTests(unittest.TestCase):
         self.assertIn('type="radio" name="detailPossibleMatch"', self.html)
         self.assertIn('id="applySelectedMatchBtn"', self.html)
         self.assertIn("fetch('/api/admin/manual-claim'", self.html)
+        self.assertIn("switchedMatch ? 'Match changed' : 'Sent for approval'", self.html)
 
     def test_active_upload_handler_shows_results_after_closing_review(self):
         handler = re.search(

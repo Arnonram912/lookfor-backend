@@ -13,20 +13,20 @@ class PendingFoundApprovalStatusTests(unittest.TestCase):
             ROOT / "templates" / "Admin Pages" / "Found_item_Report.html"
         ).read_text(encoding="utf-8")
 
-    def test_linked_pending_item_returns_matched_final_state(self):
-        self.assertIn('final_status = "matched" if matched_lost_item else "approved"', self.routes)
-        self.assertIn('"is_matched": bool(matched_lost_item)', self.routes)
-        self.assertIn('"Pending item approved and moved directly to Matched."', self.routes)
-
-    def test_approval_links_only_when_approved_item_is_current_top_candidate(self):
-        self.assertIn('top_candidate = (', self.routes)
-        self.assertIn('ranked_candidates[0]', self.routes)
-        self.assertIn('top_candidate.get("id") == new_item.id', self.routes)
-        self.assertIn('is_automatic_match_candidate(top_candidate)', self.routes)
-        self.assertNotIn(
-            'serialize_found_item_match(\n                new_item, MATCH_THRESHOLD',
+    def test_approved_pending_item_retains_ai_match_without_claim(self):
+        self.assertIn('"item_status": "matched" if legacy_reserved_lost_item else "approved"', self.routes)
+        self.assertIn('"is_matched": bool(legacy_reserved_lost_item)', self.routes)
+        self.assertIn(
+            '"Item approved with its AI match retained. Select the correct item from Possible Matches to create the claim."',
             self.routes,
         )
+
+    def test_approval_does_not_automatically_create_a_claim(self):
+        approval_block = self.routes.split('@router.post("/approve-item/{item_id}")', 1)[1]
+        approval_block = approval_block.split('@router.post(', 1)[0]
+        self.assertNotIn('ensure_pending_claim_for_pair(', approval_block)
+        self.assertNotIn('authorize_single_ai_link(', approval_block)
+        self.assertIn('select it from Possible Matches', approval_block)
 
     def test_approval_dialog_uses_returned_final_state(self):
         self.assertIn("result.is_matched ? 'Item matched' : 'Item approved'", self.template)

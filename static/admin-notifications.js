@@ -1,9 +1,11 @@
 (function () {
-    const ADMIN_NOTIFICATION_POLL_MS = 30000;
+    const ADMIN_NOTIFICATION_FALLBACK_POLL_MS = 120000;
     let notifications = [];
     let unreadCount = 0;
     let observedUnreadCount = null;
     let pollHandle = null;
+    let notificationSocket = null;
+    let notificationSocketRetryHandle = null;
 
     function getAdminToken() {
         return sessionStorage.getItem("admin_token");
@@ -12,6 +14,13 @@
     function getAdminAuthHeader() {
         const token = getAdminToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
+    function notificationWebSocketUrl() {
+        const token = getAdminToken();
+        if (!token) return "";
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        return `${protocol}//${window.location.host}/ws/notifications?role=admin&token=${encodeURIComponent(token)}`;
     }
 
     function escapeHtml(text) {
@@ -352,6 +361,50 @@
         }
     }
 
+    function scheduleNotificationSocketReconnect() {
+        if (notificationSocketRetryHandle) return;
+        notificationSocketRetryHandle = window.setTimeout(() => {
+            notificationSocketRetryHandle = null;
+            connectNotificationSocket();
+        }, 5000);
+    }
+
+    function connectNotificationSocket() {
+        if (!("WebSocket" in window)) return;
+        if (notificationSocket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(notificationSocket.readyState)) {
+            return;
+        }
+
+        const socketUrl = notificationWebSocketUrl();
+        if (!socketUrl) return;
+
+        notificationSocket = new WebSocket(socketUrl);
+        notificationSocket.onopen = () => {
+            loadNotifications();
+        };
+        notificationSocket.onmessage = (event) => {
+            let payload = null;
+            try {
+                payload = JSON.parse(event.data);
+            } catch (error) {
+                return;
+            }
+            if (payload?.type !== "notification_count") return;
+
+            const nextUnreadCount = Number(payload.unread_count || 0);
+            if (nextUnreadCount !== unreadCount) {
+                unreadCount = nextUnreadCount;
+                loadNotifications();
+            } else {
+                updateNotificationUI();
+            }
+        };
+        notificationSocket.onclose = scheduleNotificationSocketReconnect;
+        notificationSocket.onerror = () => {
+            notificationSocket?.close();
+        };
+    }
+
     function closeNotificationDropdown() {
         const dropdown = document.getElementById("notificationDropdown");
         if (dropdown) {
@@ -478,7 +531,12 @@
         updateMessageUnreadBadge();
         loadMessageInteractions();
         loadNotifications();
-        pollHandle = window.setInterval(loadNotifications, ADMIN_NOTIFICATION_POLL_MS);
+        connectNotificationSocket();
+        pollHandle = window.setInterval(() => {
+            if (!notificationSocket || notificationSocket.readyState !== WebSocket.OPEN) {
+                loadNotifications();
+            }
+        }, ADMIN_NOTIFICATION_FALLBACK_POLL_MS);
         window.setInterval(updateMessageUnreadBadge, 10000);
     }
 
