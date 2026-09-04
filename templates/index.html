@@ -432,7 +432,18 @@
 
     function decodeJwtPayload(token) {
         try {
-            return JSON.parse(atob(token.split('.')[1]));
+            const encodedPayload = token.split('.')[1] || '';
+            const base64Payload = encodedPayload
+                .replace(/-/g, '+')
+                .replace(/_/g, '/')
+                .padEnd(Math.ceil(encodedPayload.length / 4) * 4, '=');
+            const decodedPayload = atob(base64Payload);
+            const jsonPayload = decodeURIComponent(
+                Array.from(decodedPayload)
+                    .map(char => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`)
+                    .join('')
+            );
+            return JSON.parse(jsonPayload);
         } catch (error) {
             return null;
         }
@@ -470,7 +481,8 @@
         // Keep the server-visible page session in sync with the bearer token.
         // The server also sets this cookie; this assignment repairs older
         // browser sessions that cached the pre-cookie login page.
-        document.cookie = `admin_access_token=${data.access_token}; max-age=900; path=/; SameSite=Lax`;
+        const secureCookie = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `admin_access_token=${data.access_token}; max-age=900; path=/; SameSite=Lax${secureCookie}`;
 
         if (payload.is_admin) {
             sessionStorage.setItem("admin_token", data.access_token);

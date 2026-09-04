@@ -41,13 +41,7 @@ jobs:
           docker build -t "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}" .
           docker push "$ACR_LOGIN_SERVER/$IMAGE_NAME:${{ github.sha }}"
 
-      - name: Enable persistent upload storage
-        env:
-          DB_SERVER: ${{ secrets.DB_SERVER }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      - name: Configure App Service runtime settings
         run: |
           az webapp config appsettings set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -57,15 +51,45 @@ jobs:
               WEBSITES_PORT=8000 \
               COOKIE_SECURE=true \
               UPLOAD_FOLDER=/home/data/uploads \
-              MATCHING_OBSERVATIONS_DATASET=/home/data/matching_observations.csv \
+              MATCHING_OBSERVATIONS_DATASET=/home/data/matching_observations.csv
+
+      - name: Configure database settings
+        env:
+          DB_SERVER: ${{ secrets.DB_SERVER }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          if [ -z "$DB_SERVER" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USERNAME" ] || [ -z "$DB_PASSWORD" ]; then
+            echo "Skipping database settings because one or more GitHub secrets are empty."
+            exit 0
+          fi
+
+          az webapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --settings \
               DB_DRIVER="ODBC Driver 17 for SQL Server" \
               DB_SERVER="$DB_SERVER" \
               DB_NAME="$DB_NAME" \
               DB_USERNAME="$DB_USERNAME" \
               DB_PASSWORD="$DB_PASSWORD" \
               DB_ENCRYPT=yes \
-              DB_TRUST_SERVER_CERTIFICATE=no \
-              SECRET_KEY="$SECRET_KEY"
+              DB_TRUST_SERVER_CERTIFICATE=no
+
+      - name: Configure app secret key
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        run: |
+          if [ -z "$SECRET_KEY" ]; then
+            echo "Skipping SECRET_KEY because the GitHub secret is empty."
+            exit 0
+          fi
+
+          az webapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --settings SECRET_KEY="$SECRET_KEY"
 
       - name: Update web app container
         run: |
