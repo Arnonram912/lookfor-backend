@@ -592,7 +592,7 @@ async def report_found_item(
     # 3. SAVE TO PENDING TABLE
     pending_item = models.PendingItem(
         item_name=item_name,    # Added
-        category=category,
+        category=resolved_category,
         brand=brand,            # NEW: Saved here
         color=color,            # NEW: Saved here
         description=description,
@@ -1109,8 +1109,8 @@ async def reanalyze_student_item_edit(
 async def edit_pending_found_item(
     item_id: int,
     item_name: str = Form(...),
-    category: str = Form(None),
-    category_id: int = Form(None),
+    category: str = Form(...),
+    category_id: int | None = Form(None),
     brand: str = Form(None),
     color: str = Form(None),
     description: str = Form(None),
@@ -1177,14 +1177,14 @@ async def edit_pending_found_item(
 async def submit_user_lost_report(
     item_name: str = Form(...),
     category: str = Form(...),
-    category_id: int = Form(...),
+    category_id: int | None = Form(None),
     location: str = Form(...),
     description: str = Form(None),
     brand: str = Form(None),
     color: str = Form(None),
     date: str = Form(None),
     time_found: str = Form(None),
-    image: UploadFile = File(None),
+    image: UploadFile = File(...),
     extra_image_1: UploadFile = File(None),
     extra_image_2: UploadFile = File(None),
     image_embedding: str = Form(None), # Embedding from frontend AI call
@@ -1198,6 +1198,19 @@ async def submit_user_lost_report(
         raise HTTPException(status_code=400, detail="Item name is required")
     if len(item_name) > 255:
         raise HTTPException(status_code=400, detail="Item name must be 255 characters or fewer")
+    try:
+        resolved_category = resolve_category_name(
+            db,
+            category_id=category_id,
+            category_name=category
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc)
+        )
+
+
 
     # 1. Handle the image upload using your save_file helper
     saved_path = None
@@ -1222,10 +1235,7 @@ async def submit_user_lost_report(
             except Exception as exc:
                 raise HTTPException(status_code=400, detail="Invalid primary image upload.") from exc
 
-        try:
-            resolved_category = resolve_category_name(db, category_id=category_id, category_name=category)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+        
 
         saved_path = save_file(image, resolved_category)
 
@@ -1262,7 +1272,7 @@ async def submit_user_lost_report(
         status="lost",
         item_name=item_name.strip(),
         category_id=category_id,
-        category=category,
+        category=resolved_category,
         brand=brand,
         color=color,
         description=description,
