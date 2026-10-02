@@ -1178,6 +1178,7 @@ async def submit_user_lost_report(
     item_name: str = Form(...),
     category: str = Form(...),
     category_id: int | None = Form(None),
+    custom_category: str | None = Form(None),
     location: str = Form(...),
     description: str = Form(None),
     brand: str = Form(None),
