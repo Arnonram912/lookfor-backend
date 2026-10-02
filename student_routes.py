@@ -552,7 +552,15 @@ async def report_found_item(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
-        resolved_category = resolve_category_name(db, category_id=category_id, category_name=category)
+        resolved_category = resolve_category_name(
+            db,
+            category_id=category_id,
+            category_name=(
+                custom_category.strip()
+                if custom_category and custom_category.strip()
+                else category
+    ),
+)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -1023,8 +1031,12 @@ async def apply_student_item_edit(
         resolved_category = resolve_category_name(
             db,
             category_id=category_id,
-            category_name=category,
-        )
+            category_name=(
+                custom_category.strip()
+                if custom_category and custom_category.strip()
+                else category
+    ),
+)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1202,8 +1214,12 @@ async def submit_user_lost_report(
         resolved_category = resolve_category_name(
             db,
             category_id=category_id,
-            category_name=category
-        )
+            category_name=(
+                custom_category.strip()
+                if custom_category and custom_category.strip()
+                else category
+    ),
+)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
