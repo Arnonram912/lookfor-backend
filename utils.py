@@ -43,20 +43,21 @@ def resolve_category_name(
     category_id: int | None = None,
     category_name: str | None = None
 ) -> str:
-    category = None
 
+    # Use category ID if supplied
     if category_id is not None:
-        category = db.query(models.Category).filter(models.Category.id == category_id).first()
-    elif category_name:
-        normalized_name = str(category_name).strip().lower()
         category = db.query(models.Category).filter(
-            func.lower(models.Category.name) == normalized_name
+            models.Category.id == category_id
         ).first()
 
-    if not category or not category.name or not str(category.name).strip():
-        raise ValueError("Selected category was not found in the categories table.")
+        if category and category.name:
+            return str(category.name).strip()
 
-    return str(category.name).strip()
+    # Accept manually typed category
+    if category_name and category_name.strip():
+        return category_name.strip()
+
+    raise ValueError("Category is required.")
 
 
 def save_file(file, category: str | None = None):
